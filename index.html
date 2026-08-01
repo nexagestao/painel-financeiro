@@ -2958,10 +2958,87 @@ async function loadUserProfile(user){
   showApp();
 }
 
-function showApp(){
+const AGIBENS_ID = 'afa74427-da67-4f1b-9789-bd8d7937284e';
+
+function parseYMD(s){
+  if(!s) return null;
+  const [y,m,day] = s.split('-').map(Number);
+  return new Date(y, m-1, day);
+}
+function compStr(dt){ return dt ? String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear() : ''; }
+
+async function hydrateAgibensReal(){
+  const [pagarRes, receberRes, contasRes, saldosRes] = await Promise.all([
+    sb.from('titulos_pagar').select('*').eq('empresa_id', AGIBENS_ID),
+    sb.from('titulos_receber').select('*').eq('empresa_id', AGIBENS_ID),
+    sb.from('contas_bancarias').select('*').eq('empresa_id', AGIBENS_ID).eq('ativa', true),
+    sb.from('saldos_bancarios').select('*').eq('empresa_id', AGIBENS_ID).order('data',{ascending:false})
+  ]);
+  if(pagarRes.error || receberRes.error) throw (pagarRes.error||receberRes.error);
+
+  const pagarRows = pagarRes.data || [];
+  const receberRows = (receberRes.data || []).filter(r=>r.status!=='Cancelado');
+  const contas = contasRes.data || [];
+  const saldosRows = saldosRes.data || [];
+
+  PAGAR.AGIBENS = pagarRows.map(r=>{
+    const venc = parseYMD(r.vencimento), pgto = parseYMD(r.pagamento);
+    let status = r.status;
+    if(status==='Em aberto' && venc && venc < HOJE) status='Vencido';
+    return {id:'CP-'+r.id.slice(0,8), forn:r.fornecedor, doc:'', desc:r.fornecedor,
+      conta:r.conta_codigo, centro:r.centro||'', banco:r.banco||'',
+      comp:compStr(venc), emissao:venc, venc, pgto,
+      vprev:Number(r.valor_previsto), vpago:Number(r.valor_pago||0), status};
+  });
+
+  RECEBER.AGIBENS = receberRows.map(r=>{
+    const venc = parseYMD(r.vencimento), rec = parseYMD(r.recebimento);
+    let status = r.status;
+    if(status==='Em aberto' && venc && venc < HOJE) status='Vencido';
+    return {id:'CR-'+(r.codigo||r.id.slice(0,8)), cli:r.cliente, doc:r.codigo||'',
+      desc:r.cliente, conta:r.conta_codigo, centro:'Receitas', banco:'',
+      comp:compStr(venc), emissao:venc, venc, rec,
+      vprev:Number(r.valor_previsto), vrec:Number(r.valor_recebido||0), status};
+  });
+
+  const newVal = {};
+  analiticas().forEach(a=>{ newVal[a.c] = {prev:Array(12).fill(0), real:Array(12).fill(0)}; });
+  PAGAR.AGIBENS.forEach(t=>{
+    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
+    if(t.pgto && t.pgto.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.pgto.getMonth()] += t.vpago;
+  });
+  RECEBER.AGIBENS.forEach(t=>{
+    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
+    if(t.rec && t.rec.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += t.vrec;
+  });
+  VAL.AGIBENS = newVal;
+
+  const saldoPorConta = {};
+  saldosRows.forEach(s=>{ if(!(s.conta_bancaria_id in saldoPorConta)) saldoPorConta[s.conta_bancaria_id]=Number(s.saldo); });
+  if(contas.length){
+    const totalFinal = contas.reduce((t,c)=>t+(saldoPorConta[c.id] ?? Number(c.saldo_inicial)),0);
+    BASES.AGIBENS.bancos = contas.map(c=>({nome:c.nome, banco:c.banco,
+      prop: totalFinal>0 ? (saldoPorConta[c.id] ?? Number(c.saldo_inicial))/totalFinal : 1/contas.length}));
+
+    let realFlowJanAteReal = 0;
+    for(let m=0;m<=REAL_M;m++){
+      const ent = analiticas().filter(a=>a.c.startsWith('1.')).reduce((t,a)=>t+newVal[a.c].real[m],0);
+      const sai = analiticas().filter(a=>a.c[0]==='2'||a.c[0]==='3').reduce((t,a)=>t+newVal[a.c].real[m],0);
+      realFlowJanAteReal += (ent-sai);
+    }
+    BASES.AGIBENS.saldoIni = totalFinal - realFlowJanAteReal;
+  }
+}
+
+async function showApp(){
   $('loginGate').style.display='none';
   $('app').classList.add('ready');
-  loadDash(); initTip(); applyBrand(); render();
+  loadDash(); initTip(); applyBrand();
+  if(state.empresa==='AGIBENS'){
+    try{ await hydrateAgibensReal(); }
+    catch(e){ console.error('Falha ao carregar dados reais da Agibens, mantendo demonstração:', e); }
+  }
+  render();
 }
 
 async function handleLogout(){
