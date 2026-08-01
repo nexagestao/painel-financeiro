@@ -316,7 +316,7 @@ const state = {
   empresa:'AGIBENS', view:'dashboard', adminPage:null,
   role:'Administrador', dark:false, compact:false, collapsed:false,
   accent:'#2563EB', appName:'Painel Executivo Financeiro',
-  regime:'proj', fluxoPeriodo:'mensal', periodoLabel:'Ano 2026',
+  regime:'proj', fluxoPeriodo:'mensal', periodoLabel:'Jun — Dez/2026',
   filtros:[{k:'Período',v:'Ano 2026'}],
   baseAtualizada:'31/07/2026 às 18:40',
   pagarModo:'lista', receberModo:'lista'
@@ -731,7 +731,7 @@ function drawerHead(title, sub){
 
 /* =========================== PERÍODO (estado central) =========================== */
 /* Meses selecionados são a fonte de verdade; todos os módulos recalculam a partir deles. */
-state.mesesSel = [0,1,2,3,4,5,6,7,8,9,10,11];
+state.mesesSel = [5,6,7,8,9,10,11];
 function MSEL(){ return [...state.mesesSel].sort((a,b)=>a-b); }
 function mesesPeriodo(){ const s=MSEL(); return [s[0], s[s.length-1]]; }
 function sumSel(fn){ let t=0; MSEL().forEach(m=>t+=fn(m)); return t; }
@@ -2404,14 +2404,14 @@ function ppShortcut(nome){
   per.shortcut=nome;
   const clamp=msg=>toast('A base demonstrativa contém apenas 2026 — período ajustado. '+(msg||''));
   let ms=null, lbl=nome;
-  if(nome==='Ano atual'){ ms=[0,11]; lbl='01/01/2026 &rarr; 31/12/2026'; }
-  else if(nome==='Ano atual (até hoje)'){ ms=[0,6]; lbl='01/01/2026 &rarr; 31/07/2026'; }
-  else if(nome==='Último ano'){ ms=[0,11]; lbl='Ano 2026'; clamp('(2025 sem dados)'); }
+  if(nome==='Ano atual'){ ms=[5,11]; lbl='01/06/2026 &rarr; 31/12/2026'; }
+  else if(nome==='Ano atual (até hoje)'){ ms=[5,6]; lbl='01/06/2026 &rarr; 31/07/2026'; }
+  else if(nome==='Último ano'){ ms=[5,11]; lbl='Jun — Dez/2026'; clamp('(2025 e Jan–Mai/2026 sem dados)'); }
   else if(nome==='Mês atual'){ ms=[6,6]; lbl='Julho/2026'; }
   else if(nome==='Último mês'){ ms=[5,5]; lbl='Junho/2026'; }
   else if(nome==='Últimos 3 meses'){ ms=[4,6]; lbl='Mai — Jul/2026'; }
   else if(nome==='Últimos 6 meses'){ ms=[1,6]; lbl='Fev — Jul/2026'; }
-  else if(nome==='Últimos 12 meses'){ ms=[0,6]; lbl='Jan — Jul/2026'; clamp('(meses de 2025 sem dados)'); }
+  else if(nome==='Últimos 12 meses'){ ms=[5,6]; lbl='Jun — Jul/2026'; clamp('(meses anteriores a junho/2026 sem dados)'); }
   else { renderPP(); return; }
   state.mesesSel=[]; for(let m=ms[0];m<=ms[1];m++)state.mesesSel.push(m);
   per.start=new Date(2026,ms[0],1); per.end=new Date(2026,ms[1]+1,0);
@@ -2434,8 +2434,8 @@ function ppToggleMes(m){
   renderPP(); render();
 }
 function ppTodosMeses(on){
-  state.mesesSel = on?[0,1,2,3,4,5,6,7,8,9,10,11]:[6];
-  aplicarLabel(on?'Ano 2026':'Julho/2026');
+  state.mesesSel = on?[5,6,7,8,9,10,11]:[6];
+  aplicarLabel(on?'Jun — Dez/2026':'Julho/2026');
   renderPP(); render();
 }
 function ppDay(y,m,d){
@@ -2466,8 +2466,8 @@ function ppAplicar(){
 }
 function ppLimpar(){
   per.start=null; per.end=null; per.shortcut='Ano atual';
-  state.mesesSel=[0,1,2,3,4,5,6,7,8,9,10,11];
-  aplicarLabel('Ano 2026');
+  state.mesesSel=[5,6,7,8,9,10,11];
+  aplicarLabel('Jun — Dez/2026');
   renderPP(); render();
 }
 function calMonthHtml(y,m){
