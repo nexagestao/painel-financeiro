@@ -1203,7 +1203,6 @@ function renderFluxo(){
   cols.forEach(c=>h+='<th class="num">'+c.label+'</th>');
   h+='<th class="num">Total</th></tr></thead><tbody>';
   h+='<tr class="row-total"><td>Saldo Inicial</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.ini)+'</td>').join('')+'<td class="num">'+moneyHtml(saldo0)+'</td></tr>';
-  h+='<tr><td style="color:var(--text2)">Transferências entre contas</td>'+cols.map(()=>'<td class="num" style="color:var(--text2)">—</td>').join('')+'<td class="num" style="color:var(--text2)">—</td></tr>';
 
   function rowFor(node, level){
     const a=node.code?acc(node.code):null;
