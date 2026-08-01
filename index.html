@@ -694,8 +694,10 @@ function lancamentos(code, m, total){
 const fmtBRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 const fmtBRL2 = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2});
 function money(x, dec){ return (dec?fmtBRL2:fmtBRL).format(x); }
-function moneyHtml(x, dec){
-  const cls = x<0 ? 'money neg' : 'money';
+function moneyHtml(x, dec, dir){
+  let cls = 'money';
+  if(x<0) cls += ' neg';
+  else if(dir==='in' && x>0) cls += ' pos';
   return '<span class="'+cls+'">'+money(x,dec)+'</span>';
 }
 function kfmt(x){
@@ -1137,11 +1139,11 @@ function colFluxo(col,reg){
   const sai=colVal('2',col,reg)+colVal('3',col,reg);
   return {ent,sai,ger:ent-sai};
 }
-function cellHtml(val, prevVal, clickCode, colIdx){
+function cellHtml(val, prevVal, clickCode, colIdx, dir){
   const showPxr = state.regime==='pxr' && prevVal!=null;
   const cls = 'num'+(clickCode?' clickv':'');
   const click = clickCode?' onclick="drillCol(\''+clickCode+'\','+colIdx+')"':'';
-  let inner = moneyHtml(val);
+  let inner = moneyHtml(val, null, dir);
   if(showPxr) inner += '<div style="font-size:10px;color:var(--text2)">P: '+kfmt(prevVal)+'</div>';
   return '<td class="'+cls+'"'+click+'>'+inner+'</td>';
 }
@@ -1210,19 +1212,19 @@ function renderFluxo(){
     const label=node.label||(a?a.n:id);
     const open=!!expandState.fluxo[id];
     const hasKids=node.kids&&node.kids.length;
-    let vals;
-    if(node.kind==='ent'){ vals=flx.map(f=>f.ent); }
+    let vals; let dir=null;
+    if(node.kind==='ent'){ vals=flx.map(f=>f.ent); dir='in'; }
     else if(node.kind==='sai'){ vals=flx.map(f=>f.sai); }
-    else { vals=cols.map(c=>colVal(node.code,c, state.regime==='pxr'?'proj':reg)); }
+    else { vals=cols.map(c=>colVal(node.code,c, state.regime==='pxr'?'proj':reg)); if(node.code&&node.code[0]==='1') dir='in'; }
     const total=vals.reduce((t,x)=>t+x,0);
     let hh='<tr class="lvl'+Math.min(level,3)+(level===0?' row-sub':'')+'"><td><span class="tree-lbl">'+
       (hasKids?'<button class="tree-toggle" onclick="toggleRow(\'fluxo\',\''+id+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
       esc(label)+'</span></td>';
     vals.forEach((vv,ci)=>{
       const pv = state.regime==='pxr' ? (node.code?colVal(node.code,cols[ci],'prev'):colFluxo(cols[ci],'prev')[node.kind==='ent'?'ent':'sai']) : null;
-      hh+=cellHtml(vv,pv,node.code||null,ci);
+      hh+=cellHtml(vv,pv,node.code||null,ci,dir);
     });
-    hh+='<td class="num" style="font-weight:600">'+moneyHtml(total)+'</td></tr>';
+    hh+='<td class="num" style="font-weight:600">'+moneyHtml(total,null,dir)+'</td></tr>';
     if(hasKids&&open) node.kids.forEach(k=>hh+=rowFor(k,level+1));
     return hh;
   }
@@ -1289,7 +1291,7 @@ function saldosProjetadosCard(){
     const k=d2.data.toISOString().slice(0,10);
     const open=!!expandState.sp[k];
     h+='<tr style="font-weight:600"><td><span class="tree-lbl"><button class="tree-toggle" onclick="spToggle(\''+k+'\')">'+(open?'&minus;':'+')+'</button>'+
-       d2.data.toLocaleDateString('pt-BR')+(d2.rolado?' <span class="status-badge st-pend" style="margin-left:6px">inclui vencidos</span>':'')+'</span></td>'+
+       d2.data.toLocaleDateString('pt-BR')+'</span></td>'+
        '<td class="num"><span class="money'+(d2.ent?' pos':'')+'">'+money(d2.ent)+'</span></td>'+
        '<td class="num"><span class="money'+(d2.sai?' neg':'')+'">'+(d2.sai?'-':'')+money(d2.sai)+'</span></td>'+
        '<td class="num">'+moneyHtml(d2.ger)+'</td>'+
@@ -1329,27 +1331,29 @@ function renderDre(){
     const a=acc(code); if(!a) return '';
     const kids=filhos(code);
     const open=!!expandState.dre[code];
+    const dir=code[0]==='1'?'in':null;
     let hh='<tr class="lvl'+Math.min(level,3)+'"><td><span class="tree-lbl">'+
       (kids.length?'<button class="tree-toggle" onclick="toggleRow(\'dre\',\''+code+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
       esc(a.n)+(a.red?' <span class="status-badge st-neutro" style="margin-left:6px">redutora</span>':'')+'</span></td>';
     let tot=0;
     meses.forEach(m=>{
       const vv=v(code,m,reg); tot+=vv;
-      hh+='<td class="num clickv" onclick="drill(\''+code+'\','+m+')">'+moneyHtml(vv)+'</td>';
+      hh+='<td class="num clickv" onclick="drill(\''+code+'\','+m+')">'+moneyHtml(vv,null,dir)+'</td>';
     });
-    hh+='<td class="num" style="font-weight:600">'+moneyHtml(tot)+'</td></tr>';
+    hh+='<td class="num" style="font-weight:600">'+moneyHtml(tot,null,dir)+'</td></tr>';
     if(kids.length&&open) kids.forEach(k=>hh+=contaRows(k.c,level+1));
     return hh;
   }
   cfg.forEach(l=>{
     if(l.tipo==='Grupo'){
       const open=!!expandState.dre[l.id];
+      const dirG=l.nome.indexOf('RECEITA')>=0?'in':null;
       let tot=0;
       let hh='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'dre\',\''+l.id+'\')">'+(open?'&minus;':'+')+'</button>'+
         '<span style="color:'+grpColor(l)+';font-weight:650">'+esc(l.nome)+'</span></span></td>';
       meses.forEach(m=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv;
-        hh+='<td class="num clickv" onclick="drill(\''+(l.ref||'1')+'\','+m+')">'+moneyHtml(vv)+'</td>'; });
-      hh+='<td class="num" style="font-weight:650">'+moneyHtml(tot)+'</td></tr>';
+        hh+='<td class="num clickv" onclick="drill(\''+(l.ref||'1')+'\','+m+')">'+moneyHtml(vv,null,dirG)+'</td>'; });
+      hh+='<td class="num" style="font-weight:650">'+moneyHtml(tot,null,dirG)+'</td></tr>';
       h+=hh;
       if(open){
         if(l.kids){ l.kids.forEach(([c])=>{ h+=contaRows(c,1); }); }
@@ -1444,7 +1448,7 @@ function renderTitulos(tipo){
   if(modo==='lista'){
     h+='<div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Vencimento</th><th>'+(pagar?'Fornecedor':'Cliente')+'</th><th>Documento</th><th>Conta</th><th>Centro</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>';
     [...lista].sort((a,b)=>a.venc-b.venc).forEach(t=>{
-      h+='<tr class="hoverable" onclick="detTitulo(\''+t.id+'\',\''+tipo+'\')"><td>'+fdate(t.venc)+'</td><td>'+esc(t.forn||t.cli)+'</td><td style="color:var(--text2)">'+t.doc+'</td><td style="color:var(--text2)">'+(acc(t.conta)?esc(acc(t.conta).n):t.conta)+'</td><td style="color:var(--text2)">'+t.centro+'</td><td class="num">'+moneyHtml(t.vprev)+'</td><td><span class="status-badge '+stClass(t.status)+'">'+t.status+'</span></td></tr>';
+      h+='<tr class="hoverable" onclick="detTitulo(\''+t.id+'\',\''+tipo+'\')"><td>'+fdate(t.venc)+'</td><td>'+esc(t.forn||t.cli)+'</td><td style="color:var(--text2)">'+t.doc+'</td><td style="color:var(--text2)">'+(acc(t.conta)?esc(acc(t.conta).n):t.conta)+'</td><td style="color:var(--text2)">'+t.centro+'</td><td class="num">'+moneyHtml(t.vprev,null,pagar?null:'in')+'</td><td><span class="status-badge '+stClass(t.status)+'">'+t.status+'</span></td></tr>';
     });
     h+='</tbody></table></div></div>';
   } else if(modo==='calendario'){
@@ -1473,7 +1477,7 @@ function renderTitulos(tipo){
     h+='<div style="display:flex;flex-direction:column;gap:12px">';
     Object.entries(grupos).sort((a,b)=>soma(b[1])-soma(a[1])).forEach(([g,items])=>{
       h+='<div class="card"><div class="card-head"><div class="card-title">'+esc(g)+'</div><div style="margin-left:auto;font-weight:650;font-size:13.5px">'+money(soma(items))+'</div></div><div class="tbl-wrap"><table class="tbl"><tbody>';
-      items.forEach(t=>{ h+='<tr class="hoverable" onclick="detTitulo(\''+t.id+'\',\''+tipo+'\')"><td style="width:110px">'+fdate(t.venc)+'</td><td>'+esc(t.desc)+'</td><td class="num" style="width:130px">'+moneyHtml(t.vprev)+'</td><td style="width:120px"><span class="status-badge '+stClass(t.status)+'">'+t.status+'</span></td></tr>'; });
+      items.forEach(t=>{ h+='<tr class="hoverable" onclick="detTitulo(\''+t.id+'\',\''+tipo+'\')"><td style="width:110px">'+fdate(t.venc)+'</td><td>'+esc(t.desc)+'</td><td class="num" style="width:130px">'+moneyHtml(t.vprev,null,pagar?null:'in')+'</td><td style="width:120px"><span class="status-badge '+stClass(t.status)+'">'+t.status+'</span></td></tr>'; });
       h+='</tbody></table></div></div>';
     });
     h+='</div>';
