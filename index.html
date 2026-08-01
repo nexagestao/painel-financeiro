@@ -1143,7 +1143,7 @@ function cellHtml(val, prevVal, clickCode, colIdx, dir){
   const showPxr = state.regime==='pxr' && prevVal!=null;
   const cls = 'num'+(clickCode?' clickv':'');
   const click = clickCode?' onclick="drillCol(\''+clickCode+'\','+colIdx+')"':'';
-  let inner = moneyHtml(val, null, dir);
+  let inner = moneyHtml(val, true, dir);
   if(showPxr) inner += '<div style="font-size:10px;color:var(--text2)">P: '+kfmt(prevVal)+'</div>';
   return '<td class="'+cls+'"'+click+'>'+inner+'</td>';
 }
@@ -1172,12 +1172,12 @@ function renderFluxo(){
 
   let h=pageHead('Fluxo de Caixa','');
   h+='<div class="kpi-grid">';
-  h+=kpi('Saldo Inicial',money(saldo0),null,'início do período');
-  h+=kpi('Entradas',money(totalEnt),null,'no período','pos');
-  h+=kpi('Saídas',money(totalSai),null,'no período');
-  h+=kpi('Geração de Caixa',money(totalEnt-totalSai),null,'entradas − saídas',totalEnt-totalSai<0?'neg':'pos');
-  h+=kpi('Saldo Final',money(saldosCol[saldosCol.length-1].fim),null,'fim do período',saldosCol[saldosCol.length-1].fim<0?'neg':'');
-  h+=kpi('Menor Saldo Projetado',money(ms.valor),null,'em '+ms.mes+'/2026',ms.valor<0?'neg':'');
+  h+=kpi('Saldo Inicial',money(saldo0,true),null,'início do período');
+  h+=kpi('Entradas',money(totalEnt,true),null,'no período','pos');
+  h+=kpi('Saídas',money(totalSai,true),null,'no período');
+  h+=kpi('Geração de Caixa',money(totalEnt-totalSai,true),null,'entradas − saídas',totalEnt-totalSai<0?'neg':'pos');
+  h+=kpi('Saldo Final',money(saldosCol[saldosCol.length-1].fim,true),null,'fim do período',saldosCol[saldosCol.length-1].fim<0?'neg':'');
+  h+=kpi('Menor Saldo Projetado',money(ms.valor,true),null,'em '+ms.mes+'/2026',ms.valor<0?'neg':'');
   h+='</div>';
 
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center">';
@@ -1204,7 +1204,7 @@ function renderFluxo(){
   h+='<div class="card" style="margin-top:16px"><div class="card-head"><div class="card-title">Demonstrativo do Fluxo</div></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th style="min-width:250px">Descrição</th>';
   cols.forEach(c=>h+='<th class="num">'+c.label+'</th>');
   h+='<th class="num">Total</th></tr></thead><tbody>';
-  h+='<tr class="row-total"><td>Saldo Inicial</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.ini)+'</td>').join('')+'<td class="num">'+moneyHtml(saldo0)+'</td></tr>';
+  h+='<tr class="row-total"><td>Saldo Inicial</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.ini,true)+'</td>').join('')+'<td class="num">'+moneyHtml(saldo0,true)+'</td></tr>';
 
   function rowFor(node, level){
     const a=node.code?acc(node.code):null;
@@ -1224,13 +1224,13 @@ function renderFluxo(){
       const pv = state.regime==='pxr' ? (node.code?colVal(node.code,cols[ci],'prev'):colFluxo(cols[ci],'prev')[node.kind==='ent'?'ent':'sai']) : null;
       hh+=cellHtml(vv,pv,node.code||null,ci,dir);
     });
-    hh+='<td class="num" style="font-weight:600">'+moneyHtml(total,null,dir)+'</td></tr>';
+    hh+='<td class="num" style="font-weight:600">'+moneyHtml(total,true,dir)+'</td></tr>';
     if(hasKids&&open) node.kids.forEach(k=>hh+=rowFor(k,level+1));
     return hh;
   }
   fluxoTreeDef().forEach(n=>h+=rowFor(n,0));
-  h+='<tr class="row-sub"><td>Geração de Caixa</td>'+flx.map(f=>'<td class="num">'+moneyHtml(f.ger)+'</td>').join('')+'<td class="num">'+moneyHtml(totalEnt-totalSai)+'</td></tr>';
-  h+='<tr class="row-total"><td>Saldo Final</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.fim)+'</td>').join('')+'<td class="num">'+moneyHtml(saldosCol[saldosCol.length-1].fim)+'</td></tr>';
+  h+='<tr class="row-sub"><td>Geração de Caixa</td>'+flx.map(f=>'<td class="num">'+moneyHtml(f.ger,true)+'</td>').join('')+'<td class="num">'+moneyHtml(totalEnt-totalSai,true)+'</td></tr>';
+  h+='<tr class="row-total"><td>Saldo Final</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.fim,true)+'</td>').join('')+'<td class="num">'+moneyHtml(saldosCol[saldosCol.length-1].fim,true)+'</td></tr>';
   h+='</tbody></table></div></div>';
   $('content').innerHTML=h;
 }
@@ -1292,17 +1292,17 @@ function saldosProjetadosCard(){
     const open=!!expandState.sp[k];
     h+='<tr style="font-weight:600"><td><span class="tree-lbl"><button class="tree-toggle" onclick="spToggle(\''+k+'\')">'+(open?'&minus;':'+')+'</button>'+
        d2.data.toLocaleDateString('pt-BR')+'</span></td>'+
-       '<td class="num"><span class="money'+(d2.ent?' pos':'')+'">'+money(d2.ent)+'</span></td>'+
-       '<td class="num"><span class="money'+(d2.sai?' neg':'')+'">'+(d2.sai?'-':'')+money(d2.sai)+'</span></td>'+
-       '<td class="num">'+moneyHtml(d2.ger)+'</td>'+
-       '<td class="num" style="font-weight:650;color:'+(d2.saldo<0?'var(--neg)':'var(--accent)')+'">'+money(d2.saldo)+'</td></tr>';
+       '<td class="num"><span class="money'+(d2.ent?' pos':'')+'">'+money(d2.ent,true)+'</span></td>'+
+       '<td class="num"><span class="money'+(d2.sai?' neg':'')+'">'+(d2.sai?'-':'')+money(d2.sai,true)+'</span></td>'+
+       '<td class="num">'+moneyHtml(d2.ger,true)+'</td>'+
+       '<td class="num" style="font-weight:650;color:'+(d2.saldo<0?'var(--neg)':'var(--accent)')+'">'+money(d2.saldo,true)+'</td></tr>';
     if(open){
       d2.itens.sort((a,b)=>a.valor-b.valor).forEach(it=>{
         h+='<tr class="hoverable lvl1" onclick="detTitulo(\''+it.t.id+'\',\''+it.tipo+'\')"><td style="font-weight:400"><span class="tree-lbl"><span style="width:26px;display:inline-block"></span>'+esc(it.nome)+
            (it.vencido?' <span class="status-badge st-vencido" style="margin-left:6px">vencido</span>':'')+'</span></td>'+
-           '<td class="num">'+(it.valor>0?'<span class="money pos">'+money(it.valor)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
-           '<td class="num">'+(it.valor<0?'<span class="money neg">-'+money(-it.valor)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
-           '<td class="num">'+moneyHtml(it.valor)+'</td>'+
+           '<td class="num">'+(it.valor>0?'<span class="money pos">'+money(it.valor,true)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
+           '<td class="num">'+(it.valor<0?'<span class="money neg">-'+money(-it.valor,true)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
+           '<td class="num">'+moneyHtml(it.valor,true)+'</td>'+
            '<td class="num" style="color:var(--text2)">—</td></tr>';
       });
     }
