@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 :root{
   --bg:#F6F7F9; --surface:#FFFFFF; --text:#101828; --text2:#667085; --border:#E4E7EC;
@@ -31,8 +32,22 @@ input,select,textarea{font-family:inherit;font-size:13px;color:var(--text)}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
 ::-webkit-scrollbar-track{background:transparent}
 
+/* ---------- Login ---------- */
+#loginGate{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg)}
+.login-card{width:340px;max-width:90vw;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-lg);padding:28px 26px}
+.login-card .brand-mark{width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.login-card h1{font-size:16px;font-weight:700;margin-bottom:4px}
+.login-card p{font-size:12.5px;color:var(--text2);margin-bottom:18px}
+.login-field{margin-bottom:12px}
+.login-field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px}
+.login-field input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-size:13.5px}
+.login-field input:focus{outline:none;border-color:var(--accent)}
+.login-card .btn.primary{width:100%;justify-content:center;padding:10px;margin-top:6px}
+.login-error{color:var(--neg);font-size:12.5px;margin-top:10px;min-height:16px}
+
 /* ---------- Shell ---------- */
-#app{display:flex;height:100vh;overflow:hidden}
+#app{display:none;height:100vh;overflow:hidden}
+#app.ready{display:flex}
 #sidebar{width:var(--side-w);min-width:var(--side-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:min-width .22s,width .22s;overflow:hidden}
 #app.collapsed #sidebar{width:64px;min-width:64px}
 .side-head{padding:18px 16px 12px;border-bottom:1px solid var(--border)}
@@ -221,6 +236,17 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
 </style>
 </head>
 <body>
+<div id="loginGate" style="display:none">
+  <form class="login-card" id="loginForm">
+    <div class="brand-mark">PE</div>
+    <h1>Painel Executivo Financeiro</h1>
+    <p>Entre com sua conta para acessar o painel.</p>
+    <div class="login-field"><label for="loginEmail">E-mail</label><input type="email" id="loginEmail" autocomplete="username" required></div>
+    <div class="login-field"><label for="loginPassword">Senha</label><input type="password" id="loginPassword" autocomplete="current-password" required></div>
+    <button type="submit" class="btn primary" id="loginBtn">Entrar</button>
+    <div class="login-error" id="loginError"></div>
+  </form>
+</div>
 <div id="app">
   <aside id="sidebar"></aside>
   <div id="main">
@@ -880,11 +906,13 @@ function renderSidebar(){
     });
   });
   h+='</nav>';
-  h+='<div class="side-foot"><div class="user-row"><div class="avatar">GL</div><div class="user-meta"><div class="nm">Gabriela Lima</div><div class="rl">'+state.role+'</div></div>'+
+  const uNome = (currentUser && currentUser.nome) || 'Gabriela Lima';
+  h+='<div class="side-foot"><div class="user-row"><div class="avatar">'+initials(uNome)+'</div><div class="user-meta"><div class="nm">'+esc(uNome)+'</div><div class="rl">'+state.role+'</div></div>'+
      '<button class="icon-btn" onclick="toggleSidebar()" title="Recolher menu">'+icon('panel',15)+'</button></div>'+
      '<select class="role-sel" onchange="setRole(this.value)" title="Simular perfil de acesso">'+
      Object.keys(PERFIS).map(p=>'<option'+(p===state.role?' selected':'')+'>'+p+'</option>').join('')+
-     '</select></div>';
+     '</select>'+
+     '<button class="btn sm" style="width:100%;margin-top:8px;justify-content:center" onclick="handleLogout()">'+icon('x',13)+' Sair</button></div>';
   $('sidebar').innerHTML=h;
 }
 function renderTopbar(){
@@ -898,7 +926,8 @@ function renderTopbar(){
   if(PERFIS[state.role].exportar)
     h+='<button class="btn sm ghost" onclick="openExport()">'+icon('download',14)+' Exportar</button>';
   h+='<button class="icon-btn" style="position:relative" onclick="openNotifs()" title="Notificações">'+icon('bell',16)+'<span class="badge-n"></span></button>';
-  h+='<div class="avatar" title="Gabriela Lima">GL</div>';
+  const uNome2 = (currentUser && currentUser.nome) || 'Gabriela Lima';
+  h+='<div class="avatar" title="'+esc(uNome2)+'">'+initials(uNome2)+'</div>';
   $('topbar').innerHTML=h;
 }
 function toggleSidebar(){ state.collapsed=!state.collapsed; $('app').classList.toggle('collapsed',state.collapsed); }
@@ -2908,10 +2937,57 @@ function render(){
     receber:()=>renderTitulos('receber'), admin:renderAdmin};
   (views[state.view]||renderDashboard)();
 }
-loadDash();
-initTip();
-applyBrand();
-render();
+</script>
+<script>
+/* =========================== AUTENTICAÇÃO (Supabase) =========================== */
+const SUPABASE_URL = 'https://vrmyhpnouuiskdwovdnc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybXlocG5vdXVpc2tkd292ZG5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NTE0NTQsImV4cCI6MjEwMTEyNzQ1NH0.teuD7j3-20c10IC7KV9EMpXGrYt4Dy5TSzvR4jmmEEw';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser = null;
+
+function initials(name){
+  return (name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+}
+
+async function loadUserProfile(user){
+  let nome = user.email, perfilNome = 'Administrador';
+  const { data } = await sb.from('usuarios').select('nome, perfis(nome)').eq('id', user.id).single();
+  if(data){ nome = data.nome; perfilNome = (data.perfis && data.perfis.nome) || perfilNome; }
+  currentUser = { id:user.id, email:user.email, nome, perfil:perfilNome };
+  if(PERFIS[perfilNome]) state.role = perfilNome;
+  showApp();
+}
+
+function showApp(){
+  $('loginGate').style.display='none';
+  $('app').classList.add('ready');
+  loadDash(); initTip(); applyBrand(); render();
+}
+
+async function handleLogout(){
+  await sb.auth.signOut();
+  currentUser=null;
+  location.reload();
+}
+
+document.getElementById('loginForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const email = $('loginEmail').value.trim();
+  const password = $('loginPassword').value;
+  const errEl = $('loginError'), btn = $('loginBtn');
+  errEl.textContent='';
+  btn.disabled=true; btn.textContent='Entrando...';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled=false; btn.textContent='Entrar';
+  if(error){ errEl.textContent='E-mail ou senha inválidos.'; return; }
+  await loadUserProfile(data.user);
+});
+
+(async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session) await loadUserProfile(session.user);
+  else $('loginGate').style.display='flex';
+})();
 </script>
 </body>
 </html>
