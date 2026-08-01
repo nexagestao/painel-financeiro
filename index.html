@@ -1069,8 +1069,9 @@ function alertasHtml(list){
 /* =========================== PAGE HEAD / KPI =========================== */
 function pageHead(title, sub, extra){
   const e=EMPRESAS[state.empresa];
+  const demoTag = state.empresa==='AGIBENS' ? '' : '<span class="demo-tag">'+icon('alert',12)+' Dados demonstrativos</span>';
   return '<div class="page-head"><div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="page-title">'+title+'</span>'+
-    '<span class="demo-tag">'+icon('alert',12)+' Dados demonstrativos</span></div>'+
+    demoTag+'</div>'+
     '<div class="page-sub">'+e.nome+' &middot; '+esc(state.periodoLabel)+'</div></div>'+
     '<div class="page-actions">'+(extra||'')+'</div></div>'+chipsHtml();
 }
@@ -1377,7 +1378,7 @@ function detTitulo(id, tipo){
   const t=lista.find(x=>x.id===id); if(!t)return;
   const li=(k,vv)=>'<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--text2)">'+k+'</span><span style="font-weight:500;text-align:right;max-width:60%">'+vv+'</span></div>';
   let h=drawerHead((tipo==='pagar'?'Conta a pagar ':'Conta a receber ')+t.id, esc(t.forn||t.cli));
-  h+='<div class="drawer-body"><div class="demo-tag" style="margin-bottom:14px">'+icon('alert',12)+' Dado demonstrativo</div>';
+  h+='<div class="drawer-body">'+(state.empresa==='AGIBENS'?'':'<div class="demo-tag" style="margin-bottom:14px">'+icon('alert',12)+' Dado demonstrativo</div>');
   h+=li('Status','<span class="status-badge '+stClass(t.status)+'">'+t.status+'</span>');
   h+=li('Competência',t.comp)+li('Emissão',fdate(t.emissao))+li('Vencimento',fdate(t.venc));
   h+=li(tipo==='pagar'?'Pagamento':'Recebimento',fdate(t.pgto||t.rec));
