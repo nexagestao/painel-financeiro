@@ -1105,7 +1105,7 @@ function assocCards(compact){
 </script>
 <script>
 /* =========================== FLUXO DE CAIXA =========================== */
-const expandState = {fluxo:{Entradas:true,'Saídas':true}, dre:{g1:true,g2:true,g3:true}, sp:{}};
+const expandState = {fluxo:{}, dre:{}, sp:{}};
 function toggleRow(scope,id){ expandState[scope][id]=!expandState[scope][id]; render(); }
 function mkNode(code){ const k=filhos(code); return k.length?{code,kids:k.map(f=>mkNode(f.c))}:{code}; }
 function fluxoTreeDef(){
@@ -3008,15 +3008,20 @@ async function hydrateAgibensReal(){
       vprev:Number(r.valor_previsto), vrec:Number(r.valor_recebido||0), status};
   });
 
+  // O acompanhamento da Agibens começa em junho/2026 (mês 5) — o saldo inicial
+  // já reflete tudo o que veio antes. Lançamentos com data anterior a junho
+  // (ex.: recebíveis de maio ainda na base) não entram na simulação de novo,
+  // senão o efeito deles seria contado duas vezes.
+  const INICIO_ANO = 5;
   const newVal = {};
   analiticas().forEach(a=>{ newVal[a.c] = {prev:Array(12).fill(0), real:Array(12).fill(0)}; });
   PAGAR.AGIBENS.forEach(t=>{
-    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
-    if(t.pgto && t.pgto.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.pgto.getMonth()] += t.vpago;
+    if(t.venc && t.venc.getFullYear()===ANO && t.venc.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
+    if(t.pgto && t.pgto.getFullYear()===ANO && t.pgto.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].real[t.pgto.getMonth()] += t.vpago;
   });
   RECEBER.AGIBENS.forEach(t=>{
-    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
-    if(t.rec && t.rec.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += t.vrec;
+    if(t.venc && t.venc.getFullYear()===ANO && t.venc.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
+    if(t.rec && t.rec.getFullYear()===ANO && t.rec.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += t.vrec;
   });
   VAL.AGIBENS = newVal;
 
@@ -3026,14 +3031,9 @@ async function hydrateAgibensReal(){
     const totalFinal = contas.reduce((t,c)=>t+(saldoPorConta[c.id] ?? Number(c.saldo_inicial)),0);
     BASES.AGIBENS.bancos = contas.map(c=>({nome:c.nome, banco:c.banco,
       prop: totalFinal>0 ? (saldoPorConta[c.id] ?? Number(c.saldo_inicial))/totalFinal : 1/contas.length}));
-
-    let realFlowJanAteReal = 0;
-    for(let m=0;m<=REAL_M;m++){
-      const ent = analiticas().filter(a=>a.c.startsWith('1.')).reduce((t,a)=>t+newVal[a.c].real[m],0);
-      const sai = analiticas().filter(a=>a.c[0]==='2'||a.c[0]==='3').reduce((t,a)=>t+newVal[a.c].real[m],0);
-      realFlowJanAteReal += (ent-sai);
-    }
-    BASES.AGIBENS.saldoIni = totalFinal - realFlowJanAteReal;
+    // saldoIni é o saldo de 1º de junho (real, das contas bancárias) — como
+    // jan–mai não entram na simulação, ele já "chega" em junho sem alteração.
+    BASES.AGIBENS.saldoIni = contas.reduce((t,c)=>t+Number(c.saldo_inicial),0);
   }
 }
 
