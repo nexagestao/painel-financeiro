@@ -1257,8 +1257,11 @@ function spLinhas(){
   const dias=Object.values(byDay).sort((a,b)=>a.data-b.data);
   let saldo=saldoAtual();
   dias.forEach(dObj=>{
-    dObj.ent=dObj.itens.filter(i=>i.valor>0).reduce((t,i)=>t+i.valor,0);
-    dObj.sai=dObj.itens.filter(i=>i.valor<0).reduce((t,i)=>t-i.valor,0);
+    // Recebíveis vencidos ficam listados (para visibilidade), mas não entram na
+    // soma do dia nem no saldo projetado — o recebimento não é garantido.
+    const contaveis=dObj.itens.filter(i=>!(i.tipo==='receber'&&i.vencido));
+    dObj.ent=contaveis.filter(i=>i.valor>0).reduce((t,i)=>t+i.valor,0);
+    dObj.sai=contaveis.filter(i=>i.valor<0).reduce((t,i)=>t-i.valor,0);
     dObj.ger=dObj.ent-dObj.sai;
     saldo+=dObj.ger;
     dObj.saldo=saldo;
