@@ -10,9 +10,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 :root{
-  --bg:#F6F7F9; --surface:#FFFFFF; --text:#101828; --text2:#667085; --border:#E4E7EC;
-  --accent:#2563EB; --accent-soft:#EFF4FF; --pos:#16A34A; --pos-soft:#F0FDF4;
-  --neg:#DC2626; --neg-soft:#FEF2F2; --warn:#D97706; --warn-soft:#FFFBEB;
+  --bg:#F5F7F8; --surface:#FFFFFF; --text:#101828; --text2:#667085; --border:#E4E7EC;
+  --accent:#0E5C6E; --accent-soft:#E8F2F3; --navy:#1B2E4B; --navy-soft:#EBEEF4;
+  --pos:#16A34A; --pos-soft:#F0FDF4;
+  --neg:#DC2626; --neg-soft:#FEF2F2; --warn:#B91C1C; --warn-soft:#FDECEC;
   --r:12px; --r-sm:10px; --shadow:0 1px 2px rgba(16,24,40,.05);
   --shadow-lg:0 8px 24px rgba(16,24,40,.10);
   --side-w:240px; --pad:24px; --row-h:38px;
@@ -21,7 +22,7 @@
 }
 body.dark{
   --bg:#0D1117; --surface:#161B22; --text:#E6EAF2; --text2:#8B95A7; --border:#262D38;
-  --accent-soft:#16233F; --pos-soft:#0E2318; --neg-soft:#2A1414; --warn-soft:#271D0A;
+  --accent-soft:#123138; --navy-soft:#1C2740; --pos-soft:#0E2318; --neg-soft:#2A1414; --warn-soft:#2A1414;
   --shadow:0 1px 2px rgba(0,0,0,.3); --shadow-lg:0 8px 24px rgba(0,0,0,.45);
 }
 body.compact{ --pad:16px; --row-h:31px; }
@@ -121,8 +122,8 @@ input,select,textarea{font-family:inherit;font-size:13px;color:var(--text)}
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px;margin-bottom:18px}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px 17px;box-shadow:var(--shadow)}
 .kpi .lb{font-size:12px;font-weight:500;color:var(--text2);display:flex;align-items:center;gap:6px}
-.kpi .vl{font-family:var(--font-mono);font-size:23px;font-weight:650;letter-spacing:-.02em;margin:7px 0 5px;font-variant-numeric:tabular-nums}
-.kpi .vl.pos{color:var(--pos)} .kpi .vl.neg{color:var(--neg)}
+.kpi .vl{font-family:var(--font-mono);font-size:23px;font-weight:650;letter-spacing:-.02em;margin:7px 0 5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .vl.pos{color:var(--pos)} .kpi .vl.neg{color:var(--neg)} .kpi .vl.navy{color:var(--navy)}
 .kpi .dl{font-size:11.5px;color:var(--text2);display:flex;align-items:center;gap:5px}
 .delta{display:inline-flex;align-items:center;gap:3px;font-family:var(--font-mono);font-weight:600;font-size:11.5px;padding:1px 7px;border-radius:999px}
 .delta.up{color:var(--pos);background:var(--pos-soft)}
@@ -143,6 +144,7 @@ input,select,textarea{font-family:inherit;font-size:13px;color:var(--text)}
 .money{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .money.neg{color:var(--neg)}
 .money.pos{color:var(--pos)}
+.money.navy{color:var(--navy)}
 .tbl-wrap{overflow:auto;border-radius:0 0 var(--r) var(--r)}
 
 /* hierarchical tree table */
@@ -317,7 +319,7 @@ const ANO = 2026;
 const state = {
   empresa:'AGIBENS', view:'dashboard', adminPage:null,
   role:'Administrador', dark:false, compact:false, collapsed:false,
-  accent:'#2563EB', appName:'Painel Executivo Financeiro',
+  accent:'#0E5C6E', appName:'Painel Executivo Financeiro',
   regime:'proj', fluxoPeriodo:'mensal', periodoLabel:'Jun — Dez/2026',
   filtros:[{k:'Período',v:'Ano 2026'}],
   baseAtualizada:'31/07/2026 às 18:40',
@@ -427,7 +429,6 @@ const PLANO = [
   {c:'3.4.03',  n:'Juros Passivos',              t:'A', pai:'3.4',   cls:'Despesa Financeira'},
   {c:'3.4.04',  n:'Multas Contratuais/Financeiras', t:'A', pai:'3.4', cls:'Despesa Financeira'},
   {c:'3.4.05',  n:'Descontos Concedidos',        t:'A', pai:'3.4',   cls:'Despesa Financeira'},
-  {c:'3.4.06',  n:'Tarifas de Emissão de Boletos', t:'A', pai:'3.4', cls:'Despesa Financeira'},
   {c:'3.4.07',  n:'Serviços de Negativação (SPC/Serasa)', t:'A', pai:'3.4', cls:'Despesa Financeira'},
   {c:'3.4.08',  n:'Juros sobre Empréstimos e Financiamentos', t:'A', pai:'3.4', cls:'Despesa Financeira'},
   {c:'4',       n:'CONTAS PATRIMONIAIS',         t:'S', pai:null,    cls:'Patrimonial'},
@@ -435,7 +436,15 @@ const PLANO = [
   {c:'4.1.01',  n:'Fundo de Reserva Técnica',    t:'A', pai:'4.1',   cls:'Patrimonial'},
   {c:'4.2',     n:'Passivo',                     t:'S', pai:'4',     cls:'Patrimonial'},
   {c:'4.2.01',  n:'Sinistros a Pagar (provisionados)', t:'A', pai:'4.2', cls:'Patrimonial'},
-  {c:'4.2.02',  n:'Empréstimos',                 t:'A', pai:'4.2',   cls:'Patrimonial'}
+  {c:'4.2.02',  n:'Empréstimos',                 t:'A', pai:'4.2',   cls:'Patrimonial'},
+  {c:'5',       n:'DEDUÇÕES DA RECEITA',         t:'S', pai:null,    cls:'Dedução'},
+  {c:'5.01',    n:'Estornos e Devoluções',       t:'A', pai:'5',     cls:'Dedução'},
+  {c:'5.02',    n:'Cancelamentos',               t:'A', pai:'5',     cls:'Dedução'},
+  {c:'5.03',    n:'Tarifas de Emissão de Boletos', t:'A', pai:'5',   cls:'Dedução', obs:'Retida pelo banco antes do valor cair na conta — sai de Despesas Financeiras (era 3.4.06)'},
+  {c:'5.04',    n:'Outras Deduções',             t:'A', pai:'5',     cls:'Dedução'},
+  {c:'6',       n:'IRPJ E CSLL',                 t:'S', pai:null,    cls:'Tributo'},
+  {c:'6.01',    n:'IRPJ',                        t:'A', pai:'6',     cls:'Tributo'},
+  {c:'6.02',    n:'CSLL',                        t:'A', pai:'6',     cls:'Tributo'}
 ];
 const acc = c => PLANO.find(p=>p.c===c);
 const filhos = c => PLANO.filter(p=>p.pai===c);
@@ -461,7 +470,7 @@ const BASES = {
     '3.3.6.01':[380,.005,61],'3.3.6.02':[290,.005,62],'3.3.6.03':[340,.005,63],'3.3.6.04':[190,.004,64],
     '3.3.7.01':[240,0,65],'3.3.7.02':[170,0,66],
     '3.3.8.01':[210,.004,67],'3.3.8.02':[90,.004,68],'3.3.8.03':[60,0,69],
-    '3.4.01':[135,0,70],'3.4.02':[45,.004,71],'3.4.03':[380,.006,72],'3.4.04':[60,.004,73],'3.4.05':[420,.006,74],'3.4.06':[890,.008,75],'3.4.07':[180,.004,76],'3.4.08':[850,0,77],
+    '3.4.01':[135,0,70],'3.4.02':[45,.004,71],'3.4.03':[380,.006,72],'3.4.04':[60,.004,73],'3.4.05':[420,.006,74],'3.4.07':[180,.004,76],'3.4.08':[850,0,77],
     saldoIni:38000,
     bancos:[{nome:'Conta Movimento',banco:'Itaú',prop:.78},{nome:'Reserva Técnica',banco:'Sicoob',prop:.22}]
   }
@@ -520,7 +529,7 @@ function vRange(code, m0, m1, reg){ let t=0; for(let m=m0;m<=m1;m++) t+=v(code,m
    Contas patrimoniais (4) não transitam pelo resultado. */
 function fluxoMes(m, reg){
   const ent = v('1',m,reg);
-  const sai = v('2',m,reg)+v('3',m,reg);
+  const sai = v('2',m,reg)+v('3',m,reg)+v('5',m,reg)+v('6',m,reg);
   return {ent, sai, ger:ent-sai};
 }
 function saldos(reg){
@@ -542,17 +551,23 @@ function menorSaldoProj(){
 
 /* ---------- Configuração da DRE (estrutura padrão baseada no plano real) ----------
    Receitas Financeiras (1.2.01) e Despesas Financeiras (3.4) ficam fora do
-   resultado operacional e compõem o Resultado Financeiro. */
+   resultado operacional e compõem o Resultado Financeiro. Deduções da Receita (5)
+   — inclui a Tarifa de Emissão de Boletos, retida antes do valor cair na conta —
+   e IRPJ/CSLL (6) são apurados à parte, antes e depois do resultado financeiro. */
 function defaultDreCfg(){
   return [
     {id:'g1', tipo:'Grupo',     nome:'RECEITAS OPERACIONAIS',  ref:'1',   kids:[['1.1',1],['1.2.02',1]], ativa:true},
     {id:'f1', tipo:'Resultado', nome:'RECEITA BRUTA',          expr:[['1.1',1],['1.2.02',1]], ativa:true},
-    {id:'g2', tipo:'Grupo',     nome:'CUSTOS',                 ref:'2',   sinal:-1, ativa:true},
-    {id:'f2', tipo:'Resultado', nome:'LUCRO BRUTO',            expr:[['1.1',1],['1.2.02',1],['2',-1]], ativa:true},
-    {id:'g3', tipo:'Grupo',     nome:'DESPESAS OPERACIONAIS',  ref:'3',   kids:[['3.1',1],['3.2',1],['3.3',1]], ativa:true},
-    {id:'f3', tipo:'Resultado', nome:'EBITDA',                 expr:[['1.1',1],['1.2.02',1],['2',-1],['3.1',-1],['3.2',-1],['3.3',-1]], ativa:true},
-    {id:'g4', tipo:'Grupo',     nome:'RESULTADO FINANCEIRO',   ref:'3.4', kids:[['1.2.01',1],['3.4',-1]], ativa:true},
-    {id:'f4', tipo:'Resultado', nome:'RESULTADO LÍQUIDO',      expr:[['1.1',1],['1.2.02',1],['2',-1],['3.1',-1],['3.2',-1],['3.3',-1],['1.2.01',1],['3.4',-1]], ativa:true}
+    {id:'g2', tipo:'Grupo',     nome:'DEDUÇÕES DA RECEITA',    ref:'5',   sinal:-1, ativa:true},
+    {id:'f2', tipo:'Resultado', nome:'RECEITA LÍQUIDA',        expr:[['1.1',1],['1.2.02',1],['5',-1]], ativa:true},
+    {id:'g3', tipo:'Grupo',     nome:'CUSTOS',                 ref:'2',   sinal:-1, ativa:true},
+    {id:'f3', tipo:'Resultado', nome:'LUCRO BRUTO',            expr:[['1.1',1],['1.2.02',1],['5',-1],['2',-1]], ativa:true},
+    {id:'g4', tipo:'Grupo',     nome:'DESPESAS OPERACIONAIS',  ref:'3',   kids:[['3.1',1],['3.2',1],['3.3',1]], ativa:true},
+    {id:'f4', tipo:'Resultado', nome:'EBITDA',                 expr:[['1.1',1],['1.2.02',1],['5',-1],['2',-1],['3.1',-1],['3.2',-1],['3.3',-1]], ativa:true},
+    {id:'g5', tipo:'Grupo',     nome:'RESULTADO FINANCEIRO',   ref:'3.4', kids:[['1.2.01',1],['3.4',-1]], ativa:true},
+    {id:'f5', tipo:'Resultado', nome:'RESULTADO ANTES DOS TRIBUTOS', expr:[['1.1',1],['1.2.02',1],['5',-1],['2',-1],['3.1',-1],['3.2',-1],['3.3',-1],['1.2.01',1],['3.4',-1]], ativa:true},
+    {id:'g6', tipo:'Grupo',     nome:'IRPJ E CSLL',            ref:'6',   sinal:-1, ativa:true},
+    {id:'f6', tipo:'Resultado', nome:'RESULTADO LÍQUIDO',      expr:[['1.1',1],['1.2.02',1],['5',-1],['2',-1],['3.1',-1],['3.2',-1],['3.3',-1],['1.2.01',1],['3.4',-1],['6',-1]], ativa:true}
   ];
 }
 const DRE_CFG = { AGIBENS:defaultDreCfg(), DUNORTE:defaultDreCfg() };
@@ -672,24 +687,49 @@ const LOGS = [
   {data:'18/07/2026 16:47', usuario:'Gabriela Lima', acao:'Permissões alteradas', detalhe:'Perfil Cliente — módulo Fluxo de Caixa removido'}
 ];
 
-/* ---------- Lançamentos sintéticos para drill-down (demonstrativos) ---------- */
-const FORN_DRILL = ['Assist-Me','Itracker','USE Rastreamentos','Pillar Contabilidade','Dra. Maira','Débora','Hinova','Oficina Silva','AutoPeças Norte','Carteira de Associados','Seguradora Aliança','Claro / Vivo'];
-function lancamentos(code, m, total){
-  const n = 3 + (Math.abs(code.length*7+m*3) % 3);
-  const rows=[]; let rest = total;
-  for(let i=0;i<n;i++){
-    const val = i===n-1 ? rest : Math.round(total*(0.15+0.2*Math.abs(Math.sin(m*3+i*5+code.length))));
-    rest -= val;
-    rows.push({
-      data: (3+i*6)+'/'+String(m+1).padStart(2,'0')+'/2026',
-      parte: FORN_DRILL[(m+i*3+code.length)%FORN_DRILL.length],
-      doc:'DOC-'+(1000+m*37+i*11), valor:val,
-      conta: acc(code)? acc(code).n : code,
-      centro: code.startsWith('2.1')?'Sinistros':code.startsWith('2.2')?'Assistência':code.startsWith('2.3')?'Rastreamento':code.startsWith('3.1')?'Comercial':code.startsWith('3.2')?'Pessoal':code.startsWith('3.4')?'Financeiro':code.startsWith('3')?'Administrativo':'Receitas',
-      status: m<=REAL_M?'Realizado':'Previsto', origem:'Importação '+(m+1<8?'31/07/2026':'planejada')
-    });
+/* ---------- Composição real do detalhamento (drill-down da DRE) ----------
+   Nada aqui é sintético: as linhas exibidas no drawer são os próprios
+   títulos de PAGAR/RECEBER que alimentam v()/VAL para a mesma empresa,
+   mês e regime — a soma bate exatamente com a célula clicada. */
+function descendantAnaliticas(code){
+  const a=acc(code); if(!a) return [];
+  if(a.t==='A') return [code];
+  return filhos(code).flatMap(f=>descendantAnaliticas(f.c));
+}
+function tituloInfoMes(t, tipo, m, regEff){
+  const useReal = regEff==='real' || (regEff!=='prev' && m<=REAL_M);
+  if(useReal){
+    const dt = tipo==='pagar'?t.pgto:t.rec;
+    if(!dt || dt.getFullYear()!==ANO || dt.getMonth()!==m) return null;
+    const valor = tipo==='pagar'?t.vpago:t.vrec;
+    if(!valor) return null;
+    return {valor, status:'Realizado', data:dt};
   }
-  return rows;
+  if(!t.venc || t.venc.getFullYear()!==ANO || t.venc.getMonth()!==m) return null;
+  if(!t.vprev) return null;
+  return {valor:t.vprev, status:'Previsto', data:t.venc};
+}
+function composicaoLinha(pairs, m, regEff){
+  const emp = state.empresa;
+  const out=[];
+  pairs.forEach(([code,sign])=>{
+    descendantAnaliticas(code).forEach(ac=>{
+      (PAGAR[emp]||[]).forEach(t=>{
+        if(t.conta!==ac) return;
+        const info=tituloInfoMes(t,'pagar',m,regEff); if(!info) return;
+        out.push({id:t.id, tipo:'pagar', parte:t.forn, doc:t.doc||'', desc:t.desc||'',
+          centro:t.centro||'', conta:ac, data:info.data, status:info.status, valor:sign*info.valor});
+      });
+      (RECEBER[emp]||[]).forEach(t=>{
+        if(t.conta!==ac) return;
+        const info=tituloInfoMes(t,'receber',m,regEff); if(!info) return;
+        out.push({id:t.id, tipo:'receber', parte:t.cli, doc:t.doc||'', desc:t.desc||'',
+          centro:t.centro||'', conta:ac, data:info.data, status:info.status, valor:sign*info.valor});
+      });
+    });
+  });
+  out.sort((a,b)=>a.data-b.data);
+  return out;
 }
 
 /* ---------- Formatação ---------- */
@@ -960,7 +1000,7 @@ function openFiltros(){
   let h=drawerHead('Filtros','Aplicados a todos os módulos da empresa selecionada');
   h+='<div class="drawer-body">';
   if(show('regime')) h+='<div class="field"><label>Regime</label><div class="seg">'+
-     [['prev','Previsto'],['real','Realizado'],['pxr','Previsto x Realizado'],['proj','Projetado']].map(r=>
+     [['proj','Previsto'],['real','Realizado'],['pxr','Previsto x Realizado']].map(r=>
      '<button class="'+(state.regime===r[0]?'on':'')+'" onclick="setRegime(\''+r[0]+'\')">'+r[1]+'</button>').join('')+'</div></div>';
   if(show('periodo')) h+='<div class="field"><label>Período</label><button class="btn" style="width:100%;justify-content:flex-start" onclick="closeDrawer();openPeriodo()">'+icon('calendar',14)+' '+esc(state.periodoLabel)+'</button></div>';
   h+=f('empresa','Empresa',[EMPRESAS.AGIBENS.curto,EMPRESAS.DUNORTE.curto]);
@@ -994,35 +1034,58 @@ function chipsHtml(){
   return '<div class="chips">'+state.filtros.map((f,i)=>
     '<span class="chip">'+f.k+': '+esc(f.v)+(f.k==='Período'?'':'<button onclick="rmFiltro('+i+')">&times;</button>')+'</span>').join('')+'</div>';
 }
-const REGIME_LBL={prev:'Previsto',real:'Realizado',pxr:'Previsto x Realizado',proj:'Projetado'};
+const REGIME_LBL={proj:'Previsto',real:'Realizado',pxr:'Previsto x Realizado'};
 
 /* =========================== DRILL-DOWN =========================== */
-function drill(code, m, reg){
+let DRILL_ROWS=[], DRILL_TITLE='';
+function drillLinha(lineId, m, reg){
+  const l=DRE_CFG[state.empresa].find(x=>x.id===lineId);
+  if(!l) return;
+  drill(l.kids||[[l.ref,1]], m, reg, l.nome);
+}
+function drill(codes, m, reg, title){
   reg=reg||state.regime;
-  const a=acc(code), total=v(code,m,reg==='pxr'?'proj':reg);
-  const rows=lancamentos(code,m,total);
-  let h=drawerHead(a?a.n:code, MESES[m]+'/2026 — '+(REGIME_LBL[reg]||'')+' — total '+money(total));
-  h+='<div class="drawer-body"><div class="demo-tag" style="margin-bottom:14px">'+icon('alert',12)+' Lançamentos demonstrativos</div>';
-  h+='<table class="tbl"><thead><tr><th>Data</th><th>Fornecedor / Cliente</th><th>Documento</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>';
-  rows.forEach(r=>{
-    h+='<tr class="hoverable" onclick="drillLanc(\''+esc(r.parte)+'\',\''+r.doc+'\','+r.valor+',\''+r.conta.replace(/'/g,'')+'\',\''+r.centro+'\',\''+r.status+'\',\''+r.data+'\')">'+
-       '<td>'+r.data+'</td><td>'+esc(r.parte)+'</td><td style="color:var(--text2)">'+r.doc+'</td>'+
-       '<td class="num">'+moneyHtml(r.valor)+'</td>'+
-       '<td><span class="status-badge '+(r.status==='Realizado'?'st-ok':'st-aberto')+'">'+r.status+'</span></td></tr>';
-  });
-  h+='</tbody></table></div>';
-  h+='<div class="drawer-foot"><button class="btn" onclick="toast(\'Exportação demonstrativa — CSV gerado\')">'+icon('download',14)+' Exportar CSV</button></div>';
+  const regEff = reg==='pxr'?'proj':reg;
+  const pairs = Array.isArray(codes) ? codes : [[codes,1]];
+  const total = pairs.reduce((t,[c,s])=>t+s*v(c,m,regEff),0);
+  const label = title || (pairs.length===1 ? (acc(pairs[0][0])?acc(pairs[0][0]).n:pairs[0][0]) : 'Detalhamento');
+  const temBaseReal = state.empresa==='AGIBENS' && AGIBENS_HYDRATED;
+  const rows = temBaseReal ? composicaoLinha(pairs,m,regEff) : [];
+  DRILL_ROWS=rows; DRILL_TITLE=label+' — '+MESES[m]+'/2026';
+
+  let h=drawerHead(label, MESES[m]+'/2026 — '+(REGIME_LBL[reg]||'')+' — total '+money(total));
+  h+='<div class="drawer-body">';
+  if(!rows.length){
+    h+='<div class="empty" style="padding:26px"><div class="t1">Não há lançamentos detalhados disponíveis para este valor.</div>'+
+       (state.empresa!=='AGIBENS'?'<div class="t2">'+esc(EMPRESAS[state.empresa].curto)+' ainda não possui base de títulos importada — os valores desta DRE são demonstrativos.</div>':
+        (!AGIBENS_HYDRATED?'<div class="t2">Não foi possível carregar a base real de títulos.</div>':'')) +'</div>';
+  } else {
+    h+='<table class="tbl"><thead><tr><th>Data</th><th>Conta</th><th>Fornecedor / Cliente</th><th>Documento</th><th>Centro</th><th>Status</th><th class="num">Valor</th></tr></thead><tbody>';
+    rows.forEach(r=>{
+      h+='<tr class="hoverable" onclick="detTitulo(\''+r.id+'\',\''+r.tipo+'\')">'+
+         '<td>'+fdate(r.data)+'</td><td style="color:var(--text2)">'+esc(r.conta)+'</td><td>'+esc(r.parte||'—')+'</td>'+
+         '<td style="color:var(--text2)">'+esc(r.doc||'—')+'</td><td style="color:var(--text2)">'+esc(r.centro||'—')+'</td>'+
+         '<td><span class="status-badge '+(r.status==='Realizado'?'st-ok':'st-aberto')+'">'+r.status+'</span></td>'+
+         '<td class="num">'+moneyHtml(r.valor)+'</td></tr>';
+    });
+    const somaRows = rows.reduce((t,r)=>t+r.valor,0);
+    h+='</tbody><tfoot><tr class="row-total"><td colspan="6">Soma do detalhamento</td><td class="num">'+moneyHtml(somaRows)+'</td></tr></tfoot></table>';
+  }
+  h+='</div>';
+  h+='<div class="drawer-foot"><button class="btn" '+(rows.length?'onclick="exportDrillCsv()"':'disabled')+'>'+icon('download',14)+' Exportar CSV</button></div>';
   openDrawer(h);
 }
-function drillLanc(parte,doc,valor,conta,centro,status,data){
-  let h=drawerHead('Lançamento '+doc, parte);
-  const li=(k,vv)=>'<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--text2)">'+k+'</span><span style="font-weight:500">'+vv+'</span></div>';
-  h+='<div class="drawer-body"><div class="demo-tag" style="margin-bottom:14px">'+icon('alert',12)+' Dado demonstrativo</div>';
-  h+=li('Data',data)+li('Fornecedor / Cliente',esc(parte))+li('Documento',doc)+li('Descrição','Lançamento vinculado à conta analítica')+
-     li('Valor',money(valor,true))+li('Conta analítica',esc(conta))+li('Centro de resultado',centro)+
-     li('Status',status)+li('Origem','Importação de planilha')+li('Observação','—');
-  h+='</div><div class="drawer-foot"><button class="btn" onclick="closeDrawer()">Fechar</button></div>';
-  openDrawer(h);
+function exportDrillCsv(){
+  if(!DRILL_ROWS.length) return;
+  const head=['Data','Conta','Fornecedor/Cliente','Documento','Centro','Status','Valor'];
+  const lines=[head.join(';')].concat(DRILL_ROWS.map(r=>[
+    fdate(r.data), r.conta, (r.parte||'').replace(/;/g,','), (r.doc||'').replace(/;/g,','),
+    (r.centro||'').replace(/;/g,','), r.status, String(r.valor).replace('.',',')
+  ].join(';')));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=DRILL_TITLE.replace(/[\\/:*?"<>|]/g,'_')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 /* =========================== EXPORTAÇÃO / NOTIFICAÇÕES =========================== */
@@ -1113,7 +1176,7 @@ function mkNode(code){ const k=filhos(code); return k.length?{code,kids:k.map(f=
 function fluxoTreeDef(){
   return [
     {id:'Entradas', label:'Entradas', kind:'ent', kids:filhos('1').map(f=>mkNode(f.c))},
-    {id:'Saídas',  label:'Saídas',  kind:'sai', kids:[mkNode('2'), mkNode('3')]}
+    {id:'Saídas',  label:'Saídas',  kind:'sai', kids:[mkNode('2'), mkNode('3'), mkNode('5'), mkNode('6')]}
   ];
 }
 function fluxoColunas(){
@@ -1139,7 +1202,7 @@ function colVal(code,col,reg){
 }
 function colFluxo(col,reg){
   const ent=colVal('1',col,reg);
-  const sai=colVal('2',col,reg)+colVal('3',col,reg);
+  const sai=colVal('2',col,reg)+colVal('3',col,reg)+colVal('5',col,reg)+colVal('6',col,reg);
   return {ent,sai,ger:ent-sai};
 }
 function cellHtml(val, prevVal, clickCode, colIdx, dir){
@@ -1170,21 +1233,19 @@ function renderFluxo(){
   });
   const saldo0=saldosCol[0].ini;
   const totalEnt=flx.reduce((t,f)=>t+f.ent,0), totalSai=flx.reduce((t,f)=>t+f.sai,0);
-  const ms=menorSaldoProj();
-  const maiorSai=Math.max(...flx.map(f=>f.sai)), maiorEnt=Math.max(...flx.map(f=>f.ent));
+  const sp=spTotais();
+  const sAtual=saldoAtual();
 
   let h=pageHead('Fluxo de Caixa','');
   h+='<div class="kpi-grid">';
-  h+=kpi('Saldo Inicial',money(saldo0,true),null,'início do período');
-  h+=kpi('Entradas',money(totalEnt,true),null,'no período','pos');
-  h+=kpi('Saídas',money(totalSai,true),null,'no período');
-  h+=kpi('Geração de Caixa',money(totalEnt-totalSai,true),null,'entradas − saídas',totalEnt-totalSai<0?'neg':'pos');
-  h+=kpi('Saldo Final',money(saldosCol[saldosCol.length-1].fim,true),null,'fim do período',saldosCol[saldosCol.length-1].fim<0?'neg':'');
-  h+=kpi('Menor Saldo Projetado',money(ms.valor,true),null,'em '+ms.mes+'/2026',ms.valor<0?'neg':'');
+  h+=kpi('Saldo Atual',money(sAtual,true),null,'consolidado bancário',sAtual<0?'neg':'navy');
+  h+=kpi('Entradas Previstas',money(sp.ent,true),null,'títulos em aberto a partir de hoje','pos');
+  h+=kpi('Saídas Previstas',money(sp.sai,true),null,'títulos em aberto a partir de hoje','neg');
+  h+=kpi('Saldo Final Previsto',money(sp.saldoFinal,true),null,'até '+esc(state.periodoLabel),sp.saldoFinal<0?'neg':'navy');
   h+='</div>';
 
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center">';
-  h+='<div class="seg">'+[['prev','Previsto'],['real','Realizado'],['pxr','Previsto x Realizado'],['proj','Projetado']].map(r=>
+  h+='<div class="seg">'+[['proj','Previsto'],['real','Realizado'],['pxr','Previsto x Realizado']].map(r=>
      '<button class="'+(state.regime===r[0]?'on':'')+'" onclick="state.regime=\''+r[0]+'\';render()">'+r[1]+'</button>').join('')+'</div>';
   h+='<div class="seg">'+[['diario','Diário'],['semanal','Semanal'],['mensal','Mensal'],['trimestral','Trimestral'],['anual','Anual']].map(p=>
      '<button class="'+(state.fluxoPeriodo===p[0]?'on':'')+'" onclick="state.fluxoPeriodo=\''+p[0]+'\';render()">'+p[1]+'</button>').join('')+'</div>';
@@ -1192,17 +1253,19 @@ function renderFluxo(){
 
   const lbls=cols.map(c=>c.label.replace(/<br>.*/,''));
   const prevGer=cols.map(c=>colFluxo(c,'prev').ger);
+  const splitAt = state.fluxoPeriodo==='mensal' ? cols.findIndex(c=>c.m===REAL_M) : -1;
   h+=chartCard({
-    id:'evolucao', title:'Evolução do Saldo',
+    id:'evolucao', title:'Fluxo de Caixa — Entradas, Saídas e Saldo',
     trend: pctChange(totalEnt-totalSai, prevGer.reduce((t,x)=>t+x,0)),
-    body: pcLineArea('flx', lbls, [
-      {name:'Saldo final', values:saldosCol.map(x=>x.fim), kind:'main', area:true, dots:true},
-      {name:'Entradas', values:flx.map(f=>f.ent), kind:'ghost'},
-      {name:'Saídas', values:flx.map(f=>f.sai), kind:'ghost2'}
-    ], {h:300, click:'fluxoChartDrill'})
+    body: pcComboBarLine('flx', lbls,
+      [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--pos)'},
+       {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--neg)'}],
+      {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
+      {h:300, click:'fluxoChartDrill'})
+      + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo final ('+(splitAt>=0?'contínuo = realizado, tracejado = previsto':'previsto')+')'}])
   });
 
-  h+=saldosProjetadosCard();
+  h+=saldosProjetadosCard(sp);
 
   h+='<div class="card" style="margin-top:16px"><div class="card-head"><div class="card-title">Demonstrativo do Fluxo</div></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th style="min-width:250px">Descrição</th>';
   cols.forEach(c=>h+='<th class="num">'+c.label+'</th>');
@@ -1239,13 +1302,20 @@ function renderFluxo(){
 }
 function fluxoChartDrill(i){ const c=FLUXO_COLS[i]; if(c) drill('1', c.m!=null?c.m:c.m0); }
 
-/* ---------- Saldos Projetados por vencimento (fluxo previsto diário) ---------- */
-state.spDias = state.spDias||30;
+/* ---------- Saldo previsto por vencimento (previsão diária de caixa) ----------
+   Sempre começa em HOJE (31/07/2026), não importa o filtro de período — o
+   período selecionado só define até onde a previsão é exibida (fim do último
+   mês selecionado). Cards do topo de renderFluxo() usam spTotais(), a mesma
+   função usada aqui, garantindo que cards e tabela nunca divirjam. */
 state.spStatus = state.spStatus||'Todos';
 function spToggle(k){ expandState.sp[k]=!expandState.sp[k]; render(); }
+function spFimPeriodo(){
+  const sel=MSEL(); const m1=sel[sel.length-1];
+  return new Date(ANO, m1+1, 0);
+}
 function spLinhas(){
-  const ini = state.spIni ? new Date(state.spIni+'T00:00:00') : new Date(2026,7,1);
-  const fim = state.spFim ? new Date(state.spFim+'T00:00:00') : new Date(ini.getTime()+(state.spDias||30)*86400000);
+  const ini = HOJE;
+  const fim = spFimPeriodo()<ini ? ini : spFimPeriodo();
   const items=[];
   PAGAR[state.empresa].filter(t=>t.status!=='Pago').forEach(t=>items.push({t, tipo:'pagar', nome:t.forn, valor:-t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
   RECEBER[state.empresa].filter(t=>t.status!=='Recebido').forEach(t=>items.push({t, tipo:'receber', nome:t.cli, valor:t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
@@ -1272,24 +1342,39 @@ function spLinhas(){
   });
   return dias;
 }
-function saldosProjetadosCard(){
+function spTotais(){
   const dias=spLinhas();
-  const gerTot=dias.reduce((t,d2)=>t+d2.ger,0);
-  const saldoFinal=dias.length?dias[dias.length-1].saldo:saldoAtual();
-  let h='<div class="card" style="margin-top:16px"><div class="pc-head"><div style="flex:1;min-width:220px"><div class="pc-title">Saldos Projetados</div></div>'+
+  return {
+    ent: dias.reduce((t,d2)=>t+d2.ent,0),
+    sai: dias.reduce((t,d2)=>t+d2.sai,0),
+    saldoFinal: dias.length ? dias[dias.length-1].saldo : saldoAtual(),
+    dias
+  };
+}
+function exportSpCsv(){
+  const dias=spLinhas();
+  if(!dias.length) return;
+  const head=['Data','Título','Fornecedor/Cliente','Status','Valor'];
+  const lines=[head.join(';')];
+  dias.forEach(d2=>d2.itens.forEach(it=>lines.push([
+    it.venc.toLocaleDateString('pt-BR'), it.t.id, (it.nome||'').replace(/;/g,','),
+    it.vencido?'Vencido':'Em aberto', String(it.valor).replace('.',',')
+  ].join(';'))));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='previsao_diaria_caixa.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function saldosProjetadosCard(sp){
+  const dias=sp.dias;
+  let h='<div class="card" style="margin-top:16px"><div class="pc-head"><div style="flex:1;min-width:220px"><div class="pc-title">Previsão diária de caixa</div>'+
+    '<div class="page-sub" style="margin-top:2px">De hoje ('+HOJE.toLocaleDateString('pt-BR')+') até '+spFimPeriodo().toLocaleDateString('pt-BR')+'</div></div>'+
     '<div class="pc-actions">'+
-    '<span style="font-size:12px;font-weight:600;color:var(--text2)">De</span>'+
-    '<input type="date" class="select" value="'+(state.spIni||'2026-08-01')+'" onchange="state.spIni=this.value;render()">'+
-    '<span style="font-size:12px;font-weight:600;color:var(--text2)">Até</span>'+
-    '<input type="date" class="select" value="'+(state.spFim||'')+'" onchange="state.spFim=this.value;state.spDias=null;render()">'+
-    '<span style="font-size:12px;font-weight:600;color:var(--text2)">Dias</span>'+
-    '<select class="select" onchange="state.spDias=parseInt(this.value,10);state.spFim=null;render()"><option value=""'+(state.spDias?'':' selected')+'></option>'+[30,60,90].map(d2=>'<option value="'+d2+'"'+(state.spDias===d2?' selected':'')+'>'+d2+' dias</option>').join('')+'</select>'+
-    '<span style="font-size:12px;font-weight:600;color:var(--text2)">Base</span><select class="select" disabled><option>Vencimento</option></select>'+
     '<span style="font-size:12px;font-weight:600;color:var(--text2)">Status</span>'+
     '<select class="select" onchange="state.spStatus=this.value;render()">'+['Todos','Em aberto','Vencidos'].map(s=>'<option'+(state.spStatus===s?' selected':'')+'>'+s+'</option>').join('')+'</select>'+
-    '<button class="icon-btn" style="width:28px;height:28px" title="Exportar" onclick="toast(\'Exportação demonstrativa — Saldos Projetados (Excel/CSV)\')">'+icon('download',13)+'</button></div></div>';
-  h+='<div class="tbl-wrap"><table class="tbl"><thead><tr><th style="min-width:200px">Data Vencimento</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Geração de Caixa</th><th class="num">Saldo Projetado</th></tr></thead><tbody>';
-  if(!dias.length) h+='<tr><td colspan="5"><div class="empty" style="padding:26px"><div class="t1">Nenhum título no período</div><div class="t2">Não há vencimentos em aberto nos próximos '+state.spDias+' dias para o filtro selecionado.</div></div></td></tr>';
+    '<button class="icon-btn" style="width:28px;height:28px" title="Exportar CSV" '+(dias.length?'onclick="exportSpCsv()"':'disabled')+'>'+icon('download',13)+'</button></div></div>';
+  h+='<div class="tbl-wrap"><table class="tbl"><thead><tr><th style="min-width:200px">Data Vencimento</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Geração de Caixa</th><th class="num">Saldo Previsto</th></tr></thead><tbody>';
+  if(!dias.length) h+='<tr><td colspan="5"><div class="empty" style="padding:26px"><div class="t1">Nenhum título no período</div><div class="t2">Não há vencimentos em aberto entre hoje e o fim do período selecionado.</div></div></td></tr>';
   dias.forEach(d2=>{
     const k=d2.data.toISOString().slice(0,10);
     const open=!!expandState.sp[k];
@@ -1298,7 +1383,7 @@ function saldosProjetadosCard(){
        '<td class="num"><span class="money'+(d2.ent?' pos':'')+'">'+money(d2.ent,true)+'</span></td>'+
        '<td class="num"><span class="money'+(d2.sai?' neg':'')+'">'+(d2.sai?'-':'')+money(d2.sai,true)+'</span></td>'+
        '<td class="num">'+moneyHtml(d2.ger,true)+'</td>'+
-       '<td class="num" style="font-weight:650;color:'+(d2.saldo<0?'var(--neg)':'var(--accent)')+'">'+money(d2.saldo,true)+'</td></tr>';
+       '<td class="num" style="font-weight:650;color:'+(d2.saldo<0?'var(--neg)':'var(--navy)')+'">'+money(d2.saldo,true)+'</td></tr>';
     if(open){
       d2.itens.sort((a,b)=>a.valor-b.valor).forEach(it=>{
         h+='<tr class="hoverable lvl1" onclick="detTitulo(\''+it.t.id+'\',\''+it.tipo+'\')"><td style="font-weight:400"><span class="tree-lbl"><span style="width:26px;display:inline-block"></span>'+esc(it.nome)+
@@ -1326,8 +1411,8 @@ function renderDre(){
   h+='<th class="num">Total</th></tr></thead><tbody>';
 
   function grpColor(l){
+    if(['CUSTOS','DESPESAS OPERACIONAIS','DESPESAS','DEDUÇÕES DA RECEITA','IRPJ E CSLL'].includes(l.nome)) return 'var(--neg)';
     if(l.nome.indexOf('RECEITA')>=0) return 'var(--pos)';
-    if(['CUSTOS','DESPESAS OPERACIONAIS','DESPESAS'].includes(l.nome)) return 'var(--neg)';
     return 'inherit';
   }
   function contaRows(code, level){
@@ -1355,7 +1440,7 @@ function renderDre(){
       let hh='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'dre\',\''+l.id+'\')">'+(open?'&minus;':'+')+'</button>'+
         '<span style="color:'+grpColor(l)+';font-weight:650">'+esc(l.nome)+'</span></span></td>';
       meses.forEach(m=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv;
-        hh+='<td class="num clickv" onclick="drill(\''+(l.ref||'1')+'\','+m+')">'+moneyHtml(vv,null,dirG)+'</td>'; });
+        hh+='<td class="num clickv" onclick="drillLinha(\''+l.id+'\','+m+')">'+moneyHtml(vv,null,dirG)+'</td>'; });
       hh+='<td class="num" style="font-weight:650">'+moneyHtml(tot,null,dirG)+'</td></tr>';
       h+=hh;
       if(open){
@@ -1434,7 +1519,7 @@ function renderTitulos(tipo){
 
   if(!pagar){
     const buckets=agingBuckets();
-    const cores=['var(--pos)','#98A2B3','var(--warn)','#F97316','var(--neg)','#B91C1C','#7F1D1D'];
+    const cores=['var(--pos)','var(--navy)','#F1948A','#E57373','var(--neg)','#B91C1C','#7F1D1D'];
     const vals=buckets.map(b=>soma(aberto.filter(b[1])));
     const tot=vals.reduce((t,x)=>t+x,0)||1;
     h+='<div class="card" style="margin-bottom:16px"><div class="card-head"><div class="card-title">Aging da Carteira</div></div><div class="card-body">';
@@ -1519,11 +1604,11 @@ function renderIndicadores(){
   }
   h+=grupo('Caixa',[
     ['Saldo Atual',money(sAtual),'consolidado bancário'],
-    ['Saldo Projetado (Dez)',money(sProj),'com títulos em aberto',sProj<0?'neg':''],
+    ['Saldo Previsto (Dez)',money(sProj),'com títulos em aberto',sProj<0?'neg':''],
     ['Geração de Caixa',money(ger),'no período',ger<0?'neg':'pos'],
     ['Cobertura de Caixa',(sAtual/mediaSaidas).toLocaleString('pt-BR',{maximumFractionDigits:1})+' meses','saldo / média de saídas'],
     ['Capital de Giro',money(cg),'caixa + a receber − a pagar',cg<0?'neg':''],
-    ['Menor Saldo Projetado',money(ms.valor),'em '+ms.mes+'/2026',ms.valor<0?'neg':'']
+    ['Menor Saldo Previsto',money(ms.valor),'em '+ms.mes+'/2026',ms.valor<0?'neg':'']
   ]);
   h+=grupo('Resultado',[
     ['Receita Bruta',money(rb)],['Receita Líquida',money(rl),'sem deduções cadastradas'],
@@ -2103,7 +2188,7 @@ body.dark{--bg:#0C1015;--border:#232A35}
 .kpi{padding:16px 18px;transition:box-shadow .18s,transform .18s}
 .kpi:hover{box-shadow:0 6px 20px -8px rgba(16,24,40,.14)}
 .kpi .lb{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:650;color:var(--text2)}
-.kpi .vl{font-family:var(--font-mono);font-size:24px;font-weight:700;margin:9px 0 4px;letter-spacing:-.025em}
+.kpi .vl{font-family:var(--font-mono);font-size:24px;font-weight:700;margin:9px 0 4px;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi .dl{min-height:0}
 .card{transition:border-color .18s}
 .card:hover{border-color:#D9DFE8}
@@ -2127,8 +2212,8 @@ body.dark .card:hover{border-color:#2D3644}
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
 const BRAND = {
-  AGIBENS:{cor:'#2563EB', nome:'Painel Executivo Financeiro', logo:'AG'},
-  DUNORTE:{cor:'#0F766E', nome:'Painel Executivo Financeiro', logo:'DN'}
+  AGIBENS:{cor:'#0E5C6E', nome:'Painel Executivo Financeiro', logo:'AG'},
+  DUNORTE:{cor:'#0E5C6E', nome:'Painel Executivo Financeiro', logo:'DN'}
 };
 function applyBrand(){
   const b=BRAND[state.empresa];
@@ -2191,20 +2276,30 @@ function pcLineArea(cid, labels, series, opts){
   }
   if(min<0) out+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="var(--neg)" stroke-width="1" stroke-dasharray="4 3" opacity=".5"/>';
   labels.forEach((lb,i)=>{ if(n<=13||i%2===0) out+='<text class="axis-lbl" x="'+X(i)+'" y="'+(H-9)+'" text-anchor="middle">'+lb+'</text>'; });
-  const TONE={main:['var(--accent)',2.4], ghost:[NEUT1,1.4], ghost2:[NEUT2,1.4], prev:[NEUT1,1.6]};
+  const TONE={main:['var(--navy)',2.4], ghost:[NEUT1,1.4], ghost2:[NEUT2,1.4], prev:[NEUT1,1.6]};
   series.forEach(s=>{
     const [color,w]=TONE[s.kind]||TONE.main;
-    const pts=s.values.map((vv,i)=>vv==null?null:[X(i),Y(vv)]).filter(Boolean);
-    if(!pts.length)return;
+    const idxPts=s.values.map((vv,i)=>vv==null?null:{i,x:X(i),y:Y(vv)}).filter(Boolean);
+    if(!idxPts.length)return;
+    const pts=idxPts.map(p=>[p.x,p.y]);
     const path=smoothPath(pts);
     if(s.kind==='main'&&s.area!==false){
       out+='<path class="pc-fade" d="'+path+' L'+pts[pts.length-1][0]+' '+Y(Math.max(min,0))+' L'+pts[0][0]+' '+Y(Math.max(min,0))+' Z" fill="url(#'+gid+')"/>';
     }
-    out+='<path class="pc-line" d="'+path+'" fill="none" stroke="'+color+'" stroke-width="'+w+'"'+(s.kind!=='main'?' stroke-dasharray="5 4"':'')+' stroke-linecap="round"/>';
+    // Realizado = linha contínua; Previsto = linha tracejada (a partir do mês corrente).
+    const splitAt = s.kind==='main' ? opts.splitAt : null;
+    if(splitAt!=null && splitAt>idxPts[0].i && splitAt<idxPts[idxPts.length-1].i){
+      const realPts=idxPts.filter(p=>p.i<=splitAt).map(p=>[p.x,p.y]);
+      const fcPts=idxPts.filter(p=>p.i>=splitAt).map(p=>[p.x,p.y]);
+      out+='<path class="pc-line" d="'+smoothPath(realPts)+'" fill="none" stroke="'+color+'" stroke-width="'+w+'" stroke-linecap="round"/>';
+      out+='<path class="pc-line" d="'+smoothPath(fcPts)+'" fill="none" stroke="'+color+'" stroke-width="'+w+'" stroke-dasharray="6 5" stroke-linecap="round"/>';
+    } else {
+      out+='<path class="pc-line" d="'+path+'" fill="none" stroke="'+color+'" stroke-width="'+w+'"'+(s.kind!=='main'?' stroke-dasharray="5 4"':'')+' stroke-linecap="round"/>';
+    }
     if(s.kind==='main'){
       s.values.forEach((vv,i)=>{ if(vv==null)return;
         const last=i===s.values.length-1, negv=vv<0;
-        if(negv||last||n<=14) out+='<circle class="pc-fade" cx="'+X(i)+'" cy="'+Y(vv)+'" r="'+(last?4.5:negv?4:2.8)+'" fill="'+(negv?'var(--neg)':'var(--accent)')+'" stroke="var(--surface)" stroke-width="1.5"/>';
+        if(negv||last||n<=14) out+='<circle class="pc-fade" cx="'+X(i)+'" cy="'+Y(vv)+'" r="'+(last?4.5:negv?4:2.8)+'" fill="'+(negv?'var(--neg)':'var(--navy)')+'" stroke="var(--surface)" stroke-width="1.5"/>';
       });
     }
   });
@@ -2241,6 +2336,50 @@ function pcBars(cid, labels, groups, opts){
     });
     const rows=groups.map(g=>[(g.values[i]<0&&g.negAuto)?'var(--neg)':(TONE[g.tone]||TONE.accent), g.name, F(g.values[i])]);
     if(opts.extra) rows.push(['var(--text2)', opts.extra.name, F(opts.extra.values[i])]);
+    out+='<rect x="'+(L+slot*i)+'" y="0" width="'+slot+'" height="'+H+'" fill="transparent"'+tip(tipRows(lb,rows))+(opts.click?' style="cursor:pointer" onclick="'+opts.click+'('+i+')"':'')+'/>';
+  });
+  return out+'</svg>';
+}
+/* Fluxo de caixa: barras para entradas/saídas + linha para saldo (navy, tracejada
+   a partir do mês corrente quando splitAt é informado). */
+function pcComboBarLine(cid, labels, bars, line, opts){
+  opts=opts||{};
+  const H=opts.h||300, W=760, L=58, R=18, T=18, B=30;
+  const F=fmtOf(opts);
+  const allBar=bars.flatMap(b=>b.values);
+  const allLine=line.values.filter(x=>x!=null);
+  let {min,max}=yScaleInfo(Math.min(0,...allBar,...allLine), Math.max(0,...allBar,...allLine));
+  const n=labels.length, slot=(W-L-R)/n, bw=Math.min(20,(slot-14)/bars.length);
+  const X=i=>L+slot*i+slot/2, Y=vv=>T+(H-T-B)*(1-(vv-min)/(max-min));
+  let out='<svg class="chart-box" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:'+H+'px">';
+  for(let g=0;g<=4;g++){
+    const val=min+(max-min)*g/4, y=Y(val);
+    out+='<line class="grid-line" x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'"/>';
+    out+='<text class="axis-lbl" x="'+(L-8)+'" y="'+(y+3)+'" text-anchor="end">'+kfmt(val)+'</text>';
+  }
+  if(min<0) out+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="var(--text2)" stroke-width="1" opacity=".4"/>';
+  labels.forEach((lb,i)=>{
+    out+='<text class="axis-lbl" x="'+X(i)+'" y="'+(H-9)+'" text-anchor="middle">'+lb+'</text>';
+    bars.forEach((b,j)=>{
+      const vv=b.values[i], y=Y(Math.max(vv,0)), hh=Math.abs(Y(vv)-Y(0));
+      const x=X(i)-(bw*bars.length+3*(bars.length-1))/2+j*(bw+3);
+      out+='<rect class="pc-bar" style="animation-delay:'+(i*35)+'ms" x="'+x+'" y="'+y+'" width="'+bw+'" height="'+Math.max(hh,1.5)+'" rx="3.5" fill="'+(b.tone||'var(--accent)')+'"/>';
+    });
+  });
+  const idxPts=line.values.map((vv,i)=>vv==null?null:{i,x:X(i),y:Y(vv)}).filter(Boolean);
+  if(idxPts.length){
+    const splitAt=line.splitAt;
+    if(splitAt!=null && splitAt>idxPts[0].i && splitAt<idxPts[idxPts.length-1].i){
+      out+='<path class="pc-line" d="'+smoothPath(idxPts.filter(p=>p.i<=splitAt).map(p=>[p.x,p.y]))+'" fill="none" stroke="var(--navy)" stroke-width="2.4" stroke-linecap="round"/>';
+      out+='<path class="pc-line" d="'+smoothPath(idxPts.filter(p=>p.i>=splitAt).map(p=>[p.x,p.y]))+'" fill="none" stroke="var(--navy)" stroke-width="2.4" stroke-dasharray="6 5" stroke-linecap="round"/>';
+    } else {
+      out+='<path class="pc-line" d="'+smoothPath(idxPts.map(p=>[p.x,p.y]))+'" fill="none" stroke="var(--navy)" stroke-width="2.4" stroke-linecap="round"/>';
+    }
+    idxPts.forEach(p=>out+='<circle class="pc-fade" cx="'+p.x+'" cy="'+p.y+'" r="3.4" fill="var(--navy)" stroke="var(--surface)" stroke-width="1.5"/>');
+  }
+  labels.forEach((lb,i)=>{
+    const rows=bars.map(b=>[b.tone||'var(--accent)', b.name, F(b.values[i])]);
+    if(line.values[i]!=null) rows.push(['var(--navy)', line.name, F(line.values[i])]);
     out+='<rect x="'+(L+slot*i)+'" y="0" width="'+slot+'" height="'+H+'" fill="transparent"'+tip(tipRows(lb,rows))+(opts.click?' style="cursor:pointer" onclick="'+opts.click+'('+i+')"':'')+'/>';
   });
   return out+'</svg>';
@@ -2627,7 +2766,7 @@ const CHART_DEFS={
 
 const CARD_DEFS={
   saldo_atual:{t:'Saldo Atual', fmt:'m', calc:c=>({v:c.saldoA, leg:'consolidado bancário em 31/07', cor:c.saldoA<0?'neg':''})},
-  saldo_proj:{t:'Saldo Projetado', fmt:'m', calc:c=>({v:c.saldoP, leg:'projeção até Dez/2026', cor:c.saldoP<0?'neg':''})},
+  saldo_proj:{t:'Saldo Previsto', fmt:'m', calc:c=>({v:c.saldoP, leg:'projeção até Dez/2026', cor:c.saldoP<0?'neg':''})},
   entradas:{t:'Entradas', fmt:'m', calc:c=>({v:c.ent, delta:c.entD, leg:'no período'})},
   saidas:{t:'Saídas', fmt:'m', calc:c=>({v:c.sai, delta:c.saiD, leg:'no período'})},
   geracao:{t:'Geração de Caixa', fmt:'m', calc:c=>({v:c.ent-c.sai, leg:'entradas − saídas', cor:c.ent-c.sai<0?'neg':'pos'})},
@@ -2643,7 +2782,7 @@ const CARD_DEFS={
   total_receber:{t:'Total a Receber', fmt:'m', calc:c=>({v:c.totReceber, leg:c.nReceber+' título(s) em aberto'})},
   vencidas:{t:'Contas Vencidas', fmt:'m', calc:c=>({v:c.vencidas, leg:'pagar + receber em atraso', cor:c.vencidas>0?'neg':''})},
   prox_venc:{t:'Próximos Vencimentos', fmt:'m', calc:c=>({v:c.prox7, leg:'a pagar nos próximos 7 dias'})},
-  menor_saldo:{t:'Menor Saldo Projetado', fmt:'m', calc:c=>({v:c.menor.valor, leg:'em '+c.menor.mes+'/2026', cor:c.menor.valor<0?'neg':''})}
+  menor_saldo:{t:'Menor Saldo Previsto', fmt:'m', calc:c=>({v:c.menor.valor, leg:'em '+c.menor.mes+'/2026', cor:c.menor.valor<0?'neg':''})}
 };
 
 function defaultDash(perfil){
@@ -2953,6 +3092,7 @@ const SUPABASE_URL = 'https://vrmyhpnouuiskdwovdnc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybXlocG5vdXVpc2tkd292ZG5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NTE0NTQsImV4cCI6MjEwMTEyNzQ1NH0.teuD7j3-20c10IC7KV9EMpXGrYt4Dy5TSzvR4jmmEEw';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
+let AGIBENS_HYDRATED = false;
 
 function initials(name){
   return (name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
@@ -3010,11 +3150,11 @@ async function hydrateAgibensReal(){
       vprev:Number(r.valor_previsto), vrec:Number(r.valor_recebido||0), status};
   });
 
-  // O acompanhamento da Agibens começa em junho/2026 (mês 5) — o saldo inicial
-  // já reflete tudo o que veio antes. Lançamentos com data anterior a junho
-  // (ex.: recebíveis de maio ainda na base) não entram na simulação de novo,
-  // senão o efeito deles seria contado duas vezes.
-  const INICIO_ANO = 5;
+  // O acompanhamento da Agibens começa em agosto/2026 (mês 7) — o saldo inicial
+  // é o saldo real das contas em 31/07/2026, então já reflete tudo o que veio
+  // antes (inclusive jun/jul). Lançamentos com data anterior a agosto não
+  // entram na simulação de novo, senão o efeito deles seria contado duas vezes.
+  const INICIO_ANO = 7;
   const newVal = {};
   analiticas().forEach(a=>{ newVal[a.c] = {prev:Array(12).fill(0), real:Array(12).fill(0)}; });
   PAGAR.AGIBENS.forEach(t=>{
@@ -3033,10 +3173,18 @@ async function hydrateAgibensReal(){
     const totalFinal = contas.reduce((t,c)=>t+(saldoPorConta[c.id] ?? Number(c.saldo_inicial)),0);
     BASES.AGIBENS.bancos = contas.map(c=>({nome:c.nome, banco:c.banco,
       prop: totalFinal>0 ? (saldoPorConta[c.id] ?? Number(c.saldo_inicial))/totalFinal : 1/contas.length}));
-    // saldoIni é o saldo de 1º de junho (real, das contas bancárias) — como
-    // jan–mai não entram na simulação, ele já "chega" em junho sem alteração.
-    BASES.AGIBENS.saldoIni = contas.reduce((t,c)=>t+Number(c.saldo_inicial),0);
+
+    // saldoIni é o saldo real de cada conta em 31/07/2026 (fim de julho),
+    // não o saldo_inicial cadastrado — como jun/jul não entram mais na
+    // simulação (ver INICIO_ANO acima), ele já "chega" em agosto sem alteração.
+    const FIM_JULHO = '2026-07-31';
+    const saldoJulhoPorConta = {};
+    saldosRows.filter(s=>s.data<=FIM_JULHO).forEach(s=>{
+      if(!(s.conta_bancaria_id in saldoJulhoPorConta)) saldoJulhoPorConta[s.conta_bancaria_id]=Number(s.saldo);
+    });
+    BASES.AGIBENS.saldoIni = contas.reduce((t,c)=>t+(saldoJulhoPorConta[c.id] ?? Number(c.saldo_inicial)),0);
   }
+  AGIBENS_HYDRATED = true;
 }
 
 async function showApp(){
