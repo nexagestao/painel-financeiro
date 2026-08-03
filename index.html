@@ -916,6 +916,20 @@ function closeDrawer(){ $('drawer').classList.remove('on'); $('overlay').classLi
 function openModal(html){ $('modalCard').classList.remove('wide'); $('modalCard').innerHTML=html; $('modal').classList.add('on'); $('overlay').classList.add('on'); }
 function closeModal(){ $('modal').classList.remove('on'); if(!$('drawer').classList.contains('on'))$('overlay').classList.remove('on'); }
 function closeAllPanels(){ closeDrawer(); $('modal').classList.remove('on'); $('overlay').classList.remove('on'); closePeriodo && closePeriodo(); }
+function confirmDialog(opts){
+  const danger = opts.danger!==false;
+  const html = '<div class="modal-head"><div class="drawer-title">'+esc(opts.title)+'</div></div>'+
+    '<div class="modal-body"><p style="font-size:13px;color:var(--text2);line-height:1.5">'+esc(opts.msg)+'</p></div>'+
+    '<div class="modal-foot"><button class="btn sm ghost" onclick="closeModal()">Cancelar</button>'+
+    '<button class="btn sm" id="confirmDialogBtn" style="background:'+(danger?'var(--neg)':'var(--accent)')+';color:#fff;border-color:'+(danger?'var(--neg)':'var(--accent)')+'">'+esc(opts.confirmLabel||'Confirmar')+'</button></div>';
+  openModal(html);
+  $('confirmDialogBtn').onclick = async function(){
+    const btn=this, orig=btn.textContent;
+    btn.disabled=true; btn.textContent='Aguarde...';
+    try{ await opts.onConfirm(); closeModal(); }
+    catch(err){ console.error(err); btn.disabled=false; btn.textContent=orig; }
+  };
+}
 function drawerHead(title, sub){
   return '<div class="drawer-head"><div style="flex:1"><div class="drawer-title">'+title+'</div>'+
     (sub?'<div class="drawer-sub">'+sub+'</div>':'')+'</div>'+
@@ -1109,9 +1123,10 @@ function renderSidebar(){
   const uNome = (currentUser && currentUser.nome) || 'Gabriela Lima';
   h+='<div class="side-foot"><div class="user-row"><div class="avatar">'+initials(uNome)+'</div><div class="user-meta"><div class="nm">'+esc(uNome)+'</div><div class="rl">'+state.role+'</div></div>'+
      '<button class="icon-btn" onclick="toggleSidebar()" title="Recolher menu">'+icon('panel',15)+'</button></div>'+
-     '<select class="role-sel" onchange="setRole(this.value)" title="Simular perfil de acesso">'+
-     Object.keys(PERFIS).map(p=>'<option'+(p===state.role?' selected':'')+'>'+p+'</option>').join('')+
-     '</select>'+
+     (currentUser && currentUser.perfil==='Administrador'?
+       '<select class="role-sel" onchange="setRole(this.value)" title="Simular perfil de acesso (somente administradores)">'+
+       Object.keys(PERFIS).map(p=>'<option'+(p===state.role?' selected':'')+'>'+p+'</option>').join('')+
+       '</select>' : '')+
      '<button class="btn sm" style="width:100%;margin-top:8px;justify-content:center" onclick="handleLogout()">'+icon('x',13)+' Sair</button></div>';
   $('sidebar').innerHTML=h;
 }
@@ -1141,12 +1156,15 @@ async function setEmpresa(e){
   state.empresa=e; render(); // troca imediata com o que já está em cache; recarrega o plano de contas real em seguida
   try{ await loadPlanoContas(e); }catch(err){ console.error('Falha ao recarregar plano de contas:', err); }
   try{ await loadCentrosResultado(e); }catch(err){ console.error('Falha ao recarregar centros de resultado:', err); }
+  try{ await loadDreConfig(e); }catch(err){ console.error('Falha ao recarregar configuração da DRE:', err); }
   if(e==='AGIBENS' && !AGIBENS_HYDRATED){
     try{ await hydrateAgibensReal(); }catch(err){ console.error('Falha ao carregar dados reais da Agibens:', err); }
   }
   if(state.empresa===e){ toast('Empresa alterada para '+EMPRESAS[e].curto+' — todos os módulos foram recalculados'); render(); }
 }
 function setRole(r){
+  if(!currentUser || currentUser.perfil!=='Administrador'){ toast('Apenas administradores podem simular outros perfis'); return; }
+  if(!PERFIS[r]) return;
   state.role=r;
   if(!podeVer(state.view)){ state.view='dashboard'; state.adminPage=null; }
   toast('Visualizando como perfil: '+r);
@@ -2563,14 +2581,23 @@ function renderDreConfig(){
   return adminShell('Configuração da DRE',EMPRESAS[state.empresa].nome+' — cada empresa possui sua própria estrutura',
     '<div class="dre-cfg">'+left+right+'</div>');
 }
-function dreMove(i,dir){
+async function dreMove(i,dir){
   const cfg=DRE_CFG[state.empresa], j=i+dir;
   if(j<0||j>=cfg.length)return;
   [cfg[i],cfg[j]]=[cfg[j],cfg[i]];
   render();
+  await persistDreConfig();
 }
-function dreToggleAtiva(i){ const l=DRE_CFG[state.empresa][i]; l.ativa=!l.ativa; toast('Linha "'+l.nome+'" '+(l.ativa?'ativada':'desativada')+' — DRE recalculada'); render(); }
-function dreSinal(i,val){ DRE_CFG[state.empresa][i].sinal=parseInt(val,10); toast('Sinal atualizado — DRE recalculada'); }
+async function dreToggleAtiva(i){
+  const l=DRE_CFG[state.empresa][i]; l.ativa=!l.ativa;
+  toast('Linha "'+l.nome+'" '+(l.ativa?'ativada':'desativada')+' — DRE recalculada'); render();
+  await persistDreConfig();
+}
+async function dreSinal(i,val){
+  DRE_CFG[state.empresa][i].sinal=parseInt(val,10);
+  toast('Sinal atualizado — DRE recalculada');
+  await persistDreConfig();
+}
 function drePreview(i){
   const l=DRE_CFG[state.empresa][i];
   let t=0; for(let m=0;m<12;m++)t+=dreLinhaVal(l,m,'proj');
@@ -2582,10 +2609,11 @@ function classificarLote(){
   toast(marc.length+' conta(s) classificada(s) como "'+$('loteCls').value+'" (simulação)');
   marc.forEach(c=>c.checked=false);
 }
-function addSubtotal(){
+async function addSubtotal(){
   DRE_CFG[state.empresa].push({id:'st'+Date.now(), tipo:'Resultado', nome:'NOVO SUBTOTAL', expr:[['1',1]], ativa:true});
   toast('Subtotal adicionado — defina a fórmula');
   render();
+  await persistDreConfig();
 }
 const GRUPOS_FORMULA=[['1','Receitas (total)'],['1.1','Receitas de Associados'],['1.2.01','Receitas Financeiras'],['1.2.02','Receitas Diversas'],['2','Custos'],['2.1','Sinistro'],['2.2','Assistência'],['2.3','Rastreador'],['3','Despesas (total)'],['3.1','Comercial'],['3.2','Pessoal'],['3.3','Administrativa'],['3.4','Despesas Financeiras']];
 let fmIdx=null;
@@ -2619,9 +2647,10 @@ function fmTest(){
   let t=0; for(let m=0;m<12;m++)t+=dreLinhaVal(l,m,'proj');
   toast('Prévia (2026, projetado): '+money(t));
 }
-function fmSave(){
+async function fmSave(){
   DRE_CFG[state.empresa][fmIdx].nome=$('fmNome').value||DRE_CFG[state.empresa][fmIdx].nome;
   closeModal(); toast('Fórmula salva — DRE recalculada automaticamente'); render();
+  await persistDreConfig();
 }
 
 /* =========================== PERFIS E PERMISSÕES =========================== */
@@ -2709,7 +2738,15 @@ function saveCentro(i){
   if(i>=0)cs[i]=c; else cs.push(c);
   closeDrawer(); toast('Centro salvo'); render();
 }
-function delCentro(i){ CENTROS[state.empresa].splice(i,1); toast('Centro removido'); render(); }
+function delCentro(i){
+  const c = CENTROS[state.empresa][i];
+  confirmDialog({
+    title:'Remover centro de resultado',
+    msg:'Tem certeza que deseja remover "'+(c?c.n:'')+'"? Esta ação não pode ser desfeita.',
+    confirmLabel:'Remover',
+    onConfirm: async function(){ CENTROS[state.empresa].splice(i,1); toast('Centro removido'); render(); }
+  });
+}
 function editEmpresa(k){
   const e=EMPRESAS[k];
   openDrawer(drawerHead('Editar empresa',k)+'<div class="drawer-body">'+
@@ -2811,7 +2848,7 @@ function editConta(code){
       '<div class="field"><label>Observação</label><textarea id="cpObs" rows="2" style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface);font-family:inherit">'+esc(a.obs||'')+'</textarea></div>'+
       '</div><div class="drawer-foot" style="flex-wrap:wrap">'+
       '<button class="btn" style="color:var(--warn)" onclick="pcInativar(\''+code+'\')">Inativar</button>'+
-      '<button class="btn" style="color:var(--neg)" onclick="pcExcluir(\''+code+'\')">Excluir</button>'+
+      '<button class="btn" style="color:var(--neg)" onclick="confirmarExclusaoConta(\''+code+'\')">Excluir</button>'+
       '<button class="btn" onclick="closeDrawer()">Cancelar</button>'+
       '<button class="btn primary" onclick="saveConta(\''+code+'\')">Salvar</button></div>');
   } else {
@@ -2881,6 +2918,19 @@ async function pcInativar(code){
   if(error){ toast('Falha ao inativar — tente novamente'); console.error(error); return; }
   await sb.from('logs').insert({empresa_id:empId, acao:'Conta inativada', detalhe:code, usuario_id:uid});
   closeDrawer(); toast('Conta inativada'); await loadPlanoContas(state.empresa); render();
+}
+async function confirmarExclusaoConta(code){
+  const n=await pcTemMovimentacao(code);
+  if(n>0){ toast('Não é possível excluir: '+n+' lançamento(s) vinculado(s). Use "Inativar".'); return; }
+  const kids=filhos(code);
+  if(kids.length){ toast('Não é possível excluir: existem '+kids.length+' conta(s) filha(s). Remova-as primeiro.'); return; }
+  const a=acc(code);
+  confirmDialog({
+    title:'Excluir conta do plano',
+    msg:'Tem certeza que deseja excluir "'+code+' — '+(a?a.n:'')+'"? Esta ação não pode ser desfeita.',
+    confirmLabel:'Excluir',
+    onConfirm: function(){ return pcExcluir(code); }
+  });
 }
 async function pcExcluir(code){
   const n=await pcTemMovimentacao(code);
@@ -3969,11 +4019,12 @@ function initials(name){
 }
 
 async function loadUserProfile(user){
-  let nome = user.email, perfilNome = 'Administrador';
+  let nome = user.email, perfilNome = 'Visualização';
   const { data } = await sb.from('usuarios').select('nome, perfis(nome)').eq('id', user.id).single();
-  if(data){ nome = data.nome; perfilNome = (data.perfis && data.perfis.nome) || perfilNome; }
+  if(data && data.perfis && data.perfis.nome){ nome = data.nome; perfilNome = data.perfis.nome; }
+  else if(data){ nome = data.nome; }
   currentUser = { id:user.id, email:user.email, nome, perfil:perfilNome };
-  if(PERFIS[perfilNome]) state.role = perfilNome;
+  state.role = PERFIS[perfilNome] ? perfilNome : 'Visualização';
   showApp();
 }
 
@@ -3997,6 +4048,42 @@ async function loadPlanoContas(emp){
     centroId:r.centro_resultado_id, obs:r.observacao||''
   }));
   PLANO_CARREGADO=true;
+}
+/* Configuração da DRE: carregada da tabela dre_config (Supabase) e substitui
+   DRE_CFG[emp] em memória. Mantém defaultDreCfg() como fallback caso a
+   consulta falhe ou a empresa ainda não tenha configuração salva. Qualquer
+   edição feita em Admin > Configuração da DRE é persistida via persistDreConfig(). */
+async function loadDreConfig(emp){
+  const empId = EMPRESA_IDS[emp];
+  if(!empId) return;
+  const { data, error } = await sb.from('dre_config').select('*').eq('empresa_id', empId).order('ordem');
+  if(error){ console.error('Falha ao carregar configuração da DRE, mantendo estrutura padrão:', error); return; }
+  if(!data || !data.length) return;
+  DRE_CFG[emp] = data.map(r=>{
+    const l = { id:r.chave, tipo:r.tipo_linha, nome:r.nome_exibido, ativa:r.ativa, sinal:r.sinal };
+    if(r.conta_codigo) l.ref = r.conta_codigo;
+    if(r.filhos) l.kids = r.filhos;
+    if(r.formula) l.expr = r.formula;
+    return l;
+  });
+}
+async function persistDreConfig(){
+  const empId = EMPRESA_IDS[state.empresa];
+  const cfg = DRE_CFG[state.empresa];
+  if(!empId) return false;
+  const rows = cfg.map((l,i)=>({
+    empresa_id:empId, chave:l.id, nome_exibido:l.nome, tipo_linha:l.tipo,
+    conta_codigo:l.ref||null, filhos:l.kids||null, formula:l.expr||null,
+    sinal:l.sinal||1, ordem:i, ativa:!!l.ativa
+  }));
+  const { data:existing } = await sb.from('dre_config').select('chave').eq('empresa_id', empId);
+  const currentKeys = new Set(cfg.map(l=>l.id));
+  const toDelete = (existing||[]).map(r=>r.chave).filter(k=>!currentKeys.has(k));
+  if(toDelete.length) await sb.from('dre_config').delete().eq('empresa_id', empId).in('chave', toDelete);
+  const { error } = await sb.from('dre_config').upsert(rows, {onConflict:'empresa_id,chave'});
+  if(error){ toast('Falha ao salvar configuração da DRE — alteração não persistida'); console.error(error); return false; }
+  await sb.from('logs').insert({empresa_id:empId, acao:'Configuração da DRE alterada', detalhe:cfg.length+' linha(s) na estrutura', usuario_id:currentUser?currentUser.id:null});
+  return true;
 }
 function parseYMD(s){
   if(!s) return null;
@@ -4105,6 +4192,7 @@ async function showApp(){
   loadDash(); initTip(); applyBrand();
   try{ await loadPlanoContas(state.empresa); } catch(e){ console.error('Falha ao carregar plano de contas real:', e); }
   try{ await loadCentrosResultado(state.empresa); } catch(e){ console.error('Falha ao carregar centros de resultado:', e); }
+  try{ await loadDreConfig(state.empresa); } catch(e){ console.error('Falha ao carregar configuração da DRE:', e); }
   if(state.empresa==='AGIBENS'){
     try{ await hydrateAgibensReal(); }
     catch(e){ console.error('Falha ao carregar dados reais da Agibens, mantendo demonstração:', e); }
