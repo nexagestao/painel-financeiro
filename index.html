@@ -1152,6 +1152,7 @@ async function setEmpresa(e){
   try{ await loadPlanoContas(e); }catch(err){ console.error('Falha ao recarregar plano de contas:', err); }
   try{ await loadCentrosResultado(e); }catch(err){ console.error('Falha ao recarregar centros de resultado:', err); }
   try{ await loadDreConfig(e); }catch(err){ console.error('Falha ao recarregar configuração da DRE:', err); }
+  try{ await loadDashLayouts(e); }catch(err){ console.error('Falha ao recarregar layout do dashboard:', err); }
   if(e==='AGIBENS' && !AGIBENS_HYDRATED){
     try{ await hydrateAgibensReal(); }catch(err){ console.error('Falha ao carregar dados reais da Agibens:', err); }
   }
@@ -3759,13 +3760,43 @@ function dashCfg(emp,perfil){
   if(!DASH_STORE[k]) DASH_STORE[k]=defaultDash(perfil||state.role);
   return DASH_STORE[k];
 }
+const PERFIL_ID_MAP={'Administrador':'admin','Financeiro':'financeiro','Diretoria':'diretoria','Cliente':'cliente','Visualização':'visual'};
 function saveDash(){
+  const perfilEditado = state.dcfgPerfil||state.role;
   try{
-    const k=dashKey(state.empresa, state.dcfgPerfil||state.role);
+    const k=dashKey(state.empresa, perfilEditado);
     const cfg=DASH_STORE[k];
-    if(cfg){ cfg.atualizado=new Date().toLocaleString('pt-BR'); cfg.por='Gabriela Lima'; }
+    if(cfg){ cfg.atualizado=new Date().toLocaleString('pt-BR'); cfg.por=(currentUser&&currentUser.nome)||'—'; }
     localStorage.setItem('pef_v3', JSON.stringify({dash:DASH_STORE, brand:BRAND}));
   }catch(e){}
+  persistDashLayout(state.empresa, perfilEditado);
+}
+/* O layout do dashboard é por perfil (não por usuário individual): o que o
+   administrador configura para "Diretoria" fica salvo no Supabase e vale
+   para todo usuário com esse perfil, em qualquer computador — o localStorage
+   acima é só um cache local, não a fonte da verdade entre dispositivos. */
+async function persistDashLayout(emp, perfilNome){
+  const empId=EMPRESA_IDS[emp], perfilId=PERFIL_ID_MAP[perfilNome];
+  const cfg=DASH_STORE[dashKey(emp,perfilNome)];
+  if(!empId||!perfilId||!cfg) return;
+  const uid=currentUser?currentUser.id:null;
+  const { data:existing } = await sb.from('dashboard_layouts').select('id,versao').eq('empresa_id',empId).eq('perfil_id',perfilId).is('usuario_id',null).maybeSingle();
+  let error;
+  if(existing){
+    ({error} = await sb.from('dashboard_layouts').update({config:cfg, versao:(existing.versao||1)+1, atualizado_por:uid, atualizado_em:new Date().toISOString()}).eq('id',existing.id));
+  } else {
+    ({error} = await sb.from('dashboard_layouts').insert({empresa_id:empId, perfil_id:perfilId, usuario_id:null, config:cfg, versao:1, atualizado_por:uid}));
+  }
+  if(error){ console.error('Falha ao sincronizar layout do dashboard:', error); return; }
+  await sb.from('logs').insert({empresa_id:empId, acao:'Layout do dashboard alterado', detalhe:'Perfil '+perfilNome, usuario_id:uid});
+}
+async function loadDashLayouts(emp){
+  const empId=EMPRESA_IDS[emp];
+  if(!empId) return;
+  const { data, error } = await sb.from('dashboard_layouts').select('perfil_id,config').eq('empresa_id',empId).is('usuario_id',null);
+  if(error || !data) return;
+  const idToPerfil={}; Object.keys(PERFIL_ID_MAP).forEach(k=>idToPerfil[PERFIL_ID_MAP[k]]=k);
+  data.forEach(r=>{ const perfilNome=idToPerfil[r.perfil_id]; if(perfilNome && r.config) DASH_STORE[dashKey(emp,perfilNome)]=r.config; });
 }
 function loadDash(){
   try{
@@ -4253,6 +4284,7 @@ async function showApp(){
   try{ await loadPlanoContas(state.empresa); } catch(e){ console.error('Falha ao carregar plano de contas real:', e); }
   try{ await loadCentrosResultado(state.empresa); } catch(e){ console.error('Falha ao carregar centros de resultado:', e); }
   try{ await loadDreConfig(state.empresa); } catch(e){ console.error('Falha ao carregar configuração da DRE:', e); }
+  try{ await loadDashLayouts(state.empresa); } catch(e){ console.error('Falha ao carregar layout do dashboard:', e); }
   if(state.empresa==='AGIBENS'){
     try{ await hydrateAgibensReal(); }
     catch(e){ console.error('Falha ao carregar dados reais da Agibens, mantendo demonstração:', e); }
