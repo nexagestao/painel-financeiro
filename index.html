@@ -533,17 +533,31 @@ function fluxoMes(m, reg){
   return {ent, sai, ger:ent-sai};
 }
 function saldos(reg){
-  // A partir de anchorM (mês do saldo real usado como saldoIni), os fluxos
-  // entram na trajetória de caixa normalmente. Antes disso, ent/sai/ger de
-  // cada mês continuam reais (para DRE e Demonstrativo do Fluxo), mas não são
-  // somados ao saldo — já estão embutidos no saldoIni, evitando dupla contagem.
-  const anchor = BASES[state.empresa].anchorM || 0;
-  const out=[]; let s = BASES[state.empresa].saldoIni;
+  // Meses encerrados com saldo bancário real (saldosMensais) usam esse saldo
+  // diretamente como fim — não são recalculados a partir de entradas/saídas.
+  // O saldo inicial de cada mês é sempre o final do mês anterior (nunca
+  // repete um único saldo em vários meses). "conciliacao" expõe a diferença
+  // entre o que o banco mostra e o que os títulos explicam, em vez de forçar
+  // o fechamento. A partir de anchorM (1º mês sem saldo real ainda), o saldo
+  // passa a ser projetado por entradas − saídas.
+  const emp = state.empresa;
+  const reais = BASES[emp].saldosMensais || {};
+  const anchor = BASES[emp].anchorM!=null ? BASES[emp].anchorM : 0;
+  const out=[]; let s = null;
   for(let m=0;m<12;m++){
     const f = fluxoMes(m,reg);
-    const ger = m>=anchor ? f.ger : 0;
-    out.push({ini:s, ...f, fim:s+ger});
-    s += ger;
+    let ini, fim, conciliacao=0;
+    if(reais[m]){
+      ini = reais[m].ini; fim = reais[m].fim;
+      conciliacao = (fim-ini) - f.ger;
+      s = fim;
+    } else if(m<anchor){
+      ini = s!=null ? s : 0; fim = ini; s = fim;
+    } else {
+      ini = s!=null ? s : BASES[emp].saldoIni;
+      fim = ini + f.ger; s = fim;
+    }
+    out.push({ini, ...f, fim, conciliacao});
   }
   return out;
 }
@@ -1231,11 +1245,11 @@ function renderFluxo(){
   const flx = cols.map(c=>colFluxo(c,reg));
   const saldosCol=[]; let chainS=null;
   cols.forEach((c,i)=>{
-    let ini,fim;
+    let ini,fim,conc=0;
     if(c.frac!=null){ if(i===0) chainS=salAll[c.m].ini; ini=chainS; fim=ini+flx[i].ger; chainS=fim; }
-    else if(c.m!=null){ ini=salAll[c.m].ini; fim=salAll[c.m].fim; }
-    else { ini=salAll[c.m0].ini; fim=salAll[c.m1].fim; }
-    saldosCol.push({ini,fim});
+    else if(c.m!=null){ ini=salAll[c.m].ini; fim=salAll[c.m].fim; conc=salAll[c.m].conciliacao||0; }
+    else { ini=salAll[c.m0].ini; fim=salAll[c.m1].fim; for(let mm=c.m0;mm<=c.m1;mm++) conc+=salAll[mm].conciliacao||0; }
+    saldosCol.push({ini,fim,conc});
   });
   const saldo0=saldosCol[0].ini;
   const totalEnt=flx.reduce((t,f)=>t+f.ent,0), totalSai=flx.reduce((t,f)=>t+f.sai,0);
@@ -1302,6 +1316,11 @@ function renderFluxo(){
   }
   fluxoTreeDef().forEach(n=>h+=rowFor(n,0));
   h+='<tr class="row-sub"><td>Geração de Caixa</td>'+flx.map(f=>'<td class="num">'+moneyHtml(f.ger,true)+'</td>').join('')+'<td class="num">'+moneyHtml(totalEnt-totalSai,true)+'</td></tr>';
+  const totalConc=saldosCol.reduce((t,x)=>t+x.conc,0);
+  if(saldosCol.some(x=>Math.abs(x.conc)>=0.01)){
+    h+='<tr class="row-sub" style="color:var(--warn)" title="Diferença entre o saldo bancário real e o que os títulos lançados explicam nesse mês">'+
+      '<td>Diferença de conciliação</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.conc,true)+'</td>').join('')+'<td class="num">'+moneyHtml(totalConc,true)+'</td></tr>';
+  }
   h+='<tr class="row-total"><td>Saldo Final</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.fim,true)+'</td>').join('')+'<td class="num">'+moneyHtml(saldosCol[saldosCol.length-1].fim,true)+'</td></tr>';
   h+='</tbody></table></div></div>';
   $('content').innerHTML=h;
@@ -2933,7 +2952,6 @@ function renderDashboard(){
   let extra = PERFIS[state.role].configurar ? '<button class="btn sm ghost" onclick="goAdmin(\'dashboard\')">'+icon('sliders',14)+' Configurar dashboard</button>' : '';
   let h=pageHead('Dashboard','', extra);
   h+=renderDashboardInto(cfg,false);
-  h+=assocCards(true);
   $('content').innerHTML=h;
 }
 
@@ -3181,17 +3199,32 @@ async function hydrateAgibensReal(){
     BASES.AGIBENS.bancos = contas.map(c=>({nome:c.nome, banco:c.banco,
       prop: totalFinal>0 ? (saldoPorConta[c.id] ?? Number(c.saldo_inicial))/totalFinal : 1/contas.length}));
 
-    // saldoIni é o saldo real de cada conta em 31/07/2026 (fim de julho), não
-    // o saldo_inicial cadastrado. anchorM (agosto, mês 7) diz a saldos() para
-    // só somar fluxos ao caixa a partir daí — jun/jul já estão embutidos no
-    // saldoIni e continuam aparecendo normalmente na DRE e no Demonstrativo.
-    const FIM_JULHO = '2026-07-31';
-    const saldoJulhoPorConta = {};
-    saldosRows.filter(s=>s.data<=FIM_JULHO).forEach(s=>{
-      if(!(s.conta_bancaria_id in saldoJulhoPorConta)) saldoJulhoPorConta[s.conta_bancaria_id]=Number(s.saldo);
+    // Saldo bancário real por mês: agrupa os snapshots de saldos_bancarios por
+    // mês/ano e soma entre contas. Cada mês encerrado usa o saldo REAL do
+    // banco (não o calculado por títulos); o saldo inicial de cada mês é
+    // sempre o saldo final do mês anterior — nunca replica um único saldo em
+    // vários meses (era o bug: só existia o snapshot de 31/07 e ele "vazava"
+    // para junho também).
+    const porMes = {};
+    saldosRows.forEach(s=>{
+      const dt = parseYMD(s.data);
+      if(!dt || dt.getFullYear()!==ANO) return;
+      const m = dt.getMonth();
+      (porMes[m]=porMes[m]||{});
+      if(!(s.conta_bancaria_id in porMes[m])) porMes[m][s.conta_bancaria_id]=Number(s.saldo);
     });
-    BASES.AGIBENS.saldoIni = contas.reduce((t,c)=>t+(saldoJulhoPorConta[c.id] ?? Number(c.saldo_inicial)),0);
-    BASES.AGIBENS.anchorM = 7;
+    const mesesReais = Object.keys(porMes).map(Number).sort((a,b)=>a-b);
+    const somaMes = m => contas.reduce((t,c)=>t+(porMes[m][c.id] ?? 0),0);
+    const saldosMensais = {};
+    let prevFim = contas.reduce((t,c)=>t+Number(c.saldo_inicial),0);
+    mesesReais.forEach(m=>{
+      const fim = somaMes(m);
+      saldosMensais[m] = {ini:prevFim, fim};
+      prevFim = fim;
+    });
+    BASES.AGIBENS.saldosMensais = saldosMensais;
+    BASES.AGIBENS.saldoIni = prevFim;
+    BASES.AGIBENS.anchorM = mesesReais.length ? mesesReais[mesesReais.length-1]+1 : 0;
   }
   AGIBENS_HYDRATED = true;
 }
