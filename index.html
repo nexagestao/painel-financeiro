@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#F5F7F8; --surface:#FFFFFF; --text:#101828; --text2:#667085; --border:#E4E7EC;
@@ -1129,18 +1132,247 @@ function exportDrillCsv(){
 }
 
 /* =========================== EXPORTAÇÃO / NOTIFICAÇÕES =========================== */
+const EXPORT_AREAS=[['Dashboard','dashboard'],['Fluxo de Caixa','fluxo'],['DRE','dre'],['Contas a Pagar','pagar'],['Contas a Receber','receber'],['Indicadores','indicadores'],['Pendências de Importação','pendencias']];
 function openExport(){
-  const areas=['Dashboard','Fluxo de Caixa','DRE','Contas a Pagar','Contas a Receber','Indicadores','Pendências de importação'];
-  let h=drawerHead('Exportar','Gera arquivos com identidade institucional');
+  let h=drawerHead('Exportar','Gera arquivos com os dados reais exibidos na tela, para a empresa e o período selecionados');
   h+='<div class="drawer-body">';
-  areas.forEach(a=>{
+  EXPORT_AREAS.forEach(([label,key])=>{
     h+='<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)">'+
-       '<span style="flex:1;font-size:13px;font-weight:500">'+a+'</span>'+
-       ['PDF','Excel','CSV'].map(fmt=>'<button class="btn sm" onclick="toast(\'Exportação demonstrativa — '+a+' ('+fmt+')\')">'+fmt+'</button>').join('')+'</div>';
+       '<span style="flex:1;font-size:13px;font-weight:500">'+label+'</span>'+
+       ['pdf','xlsx','csv'].map(fmt=>'<button class="btn sm" id="exp_'+key+'_'+fmt+'" onclick="runExport(\''+key+'\',\''+fmt+'\')">'+fmt.toUpperCase()+'</button>').join('')+'</div>';
   });
   h+='</div>';
   openDrawer(h);
 }
+async function runExport(areaKey, fmt){
+  if(!PERFIS[state.role].exportar){ toast('Seu perfil não tem permissão para exportar'); return; }
+  const btn=$('exp_'+areaKey+'_'+fmt);
+  const orig=btn?btn.textContent:null;
+  if(btn){ btn.disabled=true; btn.textContent='...'; }
+  try{
+    const rep=await buildReport(areaKey);
+    if(!rep || !rep.sections.some(s=>s.rows.length)){ toast('Nada para exportar — sem dados no período/filtro atual'); return; }
+    if(fmt==='csv') exportCSV(rep);
+    else if(fmt==='xlsx') exportXLSX(rep);
+    else await exportPDF(rep);
+    toast('Arquivo gerado: '+rep.filename+'.'+fmt);
+  }catch(e){
+    console.error('Falha ao exportar', areaKey, fmt, e);
+    toast('Falha ao gerar o arquivo — tente novamente');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=orig; }
+  }
+}
+
+/* ---------- Construção dos dados reais de cada relatório ---------- */
+function reportFilename(area){
+  const emp = EMPRESAS[state.empresa].curto.replace(/\s+/g,'');
+  return emp+'_'+area+'_'+new Date().toISOString().slice(0,10);
+}
+async function buildReport(areaKey){
+  const builders = {
+    dashboard: buildReportDashboard, fluxo: buildReportFluxo, dre: buildReportDre,
+    pagar: ()=>buildReportTitulos('pagar'), receber: ()=>buildReportTitulos('receber'),
+    indicadores: buildReportIndicadores, pendencias: buildReportPendencias
+  };
+  const fn = builders[areaKey];
+  return fn ? await fn() : null;
+}
+function buildReportDre(){
+  const reg = state.regime==='pxr'?'proj':state.regime;
+  const meses = MSEL();
+  const cfg = DRE_CFG[state.empresa].filter(l=>l.ativa);
+  const cols = ['Linha'].concat(meses.map(m=>MESES[m])).concat(['Total']);
+  const rows = [];
+  const addRow = (nome, vals, tot) => rows.push([nome].concat(vals.map(x=>Math.round(x))).concat([Math.round(tot)]));
+  function contaRow(code, level){
+    const a=acc(code); if(!a) return;
+    const vals = meses.map(m=>v(code,m,reg));
+    addRow((level>0?'— '.repeat(level):'')+a.n, vals, vals.reduce((t,x)=>t+x,0));
+    filhos(code).forEach(f=>contaRow(f.c, level+1));
+  }
+  cfg.forEach(l=>{
+    const vals = meses.map(m=>dreLinhaVal(l,m,reg));
+    addRow(l.nome, vals, vals.reduce((t,x)=>t+x,0));
+    if(l.tipo==='Grupo'){
+      if(l.kids) l.kids.forEach(([c])=>contaRow(c,1));
+      else filhos(l.ref).forEach(f=>contaRow(f.c,1));
+    }
+  });
+  return { filename: reportFilename('DRE'), title:'DRE Gerencial',
+    sections:[{ heading:'DRE Gerencial — '+(REGIME_LBL[reg]||''), cols, moneyCols:cols.slice(1).map((c,i)=>i+1), rows }] };
+}
+function buildReportFluxo(){
+  const reg = state.regime==='pxr'?'proj':state.regime;
+  const cols = fluxoColunas();
+  const sal = saldos(reg);
+  const flx = cols.map(c=>colFluxo(c,reg));
+  const labels = cols.map(c=>c.label.replace(/<br>.*/,''));
+  const saldosCol=[]; let chainS=null;
+  cols.forEach((c,i)=>{
+    let ini,fim;
+    if(c.frac!=null){ if(i===0) chainS=sal[c.m].ini; ini=chainS; fim=ini+flx[i].ger; chainS=fim; }
+    else if(c.m!=null){ ini=sal[c.m].ini; fim=sal[c.m].fim; }
+    else { ini=sal[c.m0].ini; fim=sal[c.m1].fim; }
+    saldosCol.push({ini,fim});
+  });
+  const cHead=['Descrição'].concat(labels).concat(['Total']);
+  const rows=[
+    ['Saldo Inicial'].concat(saldosCol.map(x=>Math.round(x.ini))).concat([Math.round(saldosCol[0].ini)]),
+    ['Entradas'].concat(flx.map(f=>Math.round(f.ent))).concat([Math.round(flx.reduce((t,f)=>t+f.ent,0))]),
+    ['Saídas'].concat(flx.map(f=>Math.round(f.sai))).concat([Math.round(flx.reduce((t,f)=>t+f.sai,0))]),
+    ['Geração de Caixa'].concat(flx.map(f=>Math.round(f.ger))).concat([Math.round(flx.reduce((t,f)=>t+f.ger,0))]),
+    ['Saldo Final'].concat(saldosCol.map(x=>Math.round(x.fim))).concat([Math.round(saldosCol[saldosCol.length-1].fim)])
+  ];
+  return { filename: reportFilename('Fluxo_Caixa'), title:'Fluxo de Caixa',
+    sections:[{ heading:'Demonstrativo do Fluxo — '+(REGIME_LBL[reg]||''), cols:cHead, moneyCols:cHead.slice(1).map((c,i)=>i+1), rows }] };
+}
+function buildReportTitulos(tipo){
+  const lista = (tipo==='pagar'?pagarSel():receberSel()).slice().sort((a,b)=>a.venc-b.venc);
+  const cols = tipo==='pagar'
+    ? ['Vencimento','Fornecedor','Documento','Conta','Centro','Status','Valor Previsto','Valor Pago']
+    : ['Vencimento','Cliente','Documento','Conta','Centro','Status','Valor Previsto','Valor Recebido'];
+  const rows = lista.map(t=>{
+    const contaNome = acc(t.conta)?acc(t.conta).n:(t.conta||'');
+    const nomeParte = tipo==='pagar'?t.forn:t.cli;
+    const valorRealizado = tipo==='pagar'?(t.vpago||0):(t.vrec||0);
+    return [fdate(t.venc), nomeParte||'', t.doc||'', contaNome, t.centro||'', t.status, Number((t.vprev||0).toFixed(2)), Number(valorRealizado.toFixed(2))];
+  });
+  return { filename: reportFilename(tipo==='pagar'?'Contas_a_Pagar':'Contas_a_Receber'),
+    title: tipo==='pagar'?'Contas a Pagar':'Contas a Receber',
+    sections:[{ heading:(tipo==='pagar'?'Contas a Pagar':'Contas a Receber')+' — '+state.periodoLabel, cols, moneyCols:[6,7], rows }] };
+}
+function buildReportDashboard(){
+  const cfg = dashCfg(state.empresa, state.role);
+  const ctx = dashCtx();
+  const cardsOn = cfg.cards.filter(c=>c.on);
+  const UNI={m:'R$',p:'%',q:'qtd'};
+  const rows = cardsOn.map(c=>{
+    const def = CARD_DEFS[c.id]; if(!def) return null;
+    const r = def.calc(ctx);
+    const fmt = c.fmt==='auto'?def.fmt:c.fmt;
+    return [def.t, Number((r.v||0).toFixed(2)), UNI[fmt]||'', r.leg||''];
+  }).filter(Boolean);
+  return { filename: reportFilename('Dashboard'), title:'Dashboard',
+    sections:[{ heading:'Indicadores do período — '+state.periodoLabel, cols:['Indicador','Valor','Unidade','Observação'], moneyCols:[], rows }] };
+}
+function buildReportIndicadores(){
+  const reg=state.regime==='pxr'?'proj':state.regime;
+  const sel=MSEL(), nMeses=sel.length;
+  const sumSel_=fn=>sel.reduce((t,m)=>t+fn(m),0);
+  const cfg=DRE_CFG[state.empresa];
+  const lineOr=(n,fb)=>cfg.find(l=>l.nome===n&&l.ativa)||fb||{tipo:'Resultado',expr:[]};
+  const sum=l=>sumSel_(m=>dreLinhaVal(l,m,reg));
+  const lRB=lineOr('RECEITA BRUTA');
+  const rb=sum(lRB), rl=sum(lineOr('RECEITA LÍQUIDA',lRB)), lb=sum(lineOr('LUCRO BRUTO')),
+        eb=sum(lineOr('EBITDA')), res=sum(lineOr('RESULTADO LÍQUIDO'));
+  const custos=sumSel_(m=>v('2',m,reg)), despesas=sumSel_(m=>v('3',m,reg));
+  const sAtual=saldoAtual(), sProj=saldos('proj')[11].fim, ms=menorSaldoProj();
+  const abertoP=pagarSel().filter(t=>t.status!=='Pago');
+  const abertoR=receberSel().filter(t=>t.status!=='Recebido');
+  const somaT=a=>a.reduce((t,x)=>t+x.vprev,0);
+  const vencR=receberSel().filter(t=>t.status==='Vencido');
+  const inad=somaT(vencR)/(somaT(receberSel())||1)*100;
+  const rows=[
+    ['Saldo Atual', Number(sAtual.toFixed(2))],
+    ['Saldo Previsto (Dez)', Number(sProj.toFixed(2))],
+    ['Menor Saldo Previsto ('+ms.mes+')', Number(ms.valor.toFixed(2))],
+    ['Receita Bruta', Number(rb.toFixed(2))],
+    ['Receita Líquida', Number(rl.toFixed(2))],
+    ['Custos', Number(custos.toFixed(2))],
+    ['Despesas', Number(despesas.toFixed(2))],
+    ['Lucro Bruto', Number(lb.toFixed(2))],
+    ['EBITDA', Number(eb.toFixed(2))],
+    ['Resultado Líquido', Number(res.toFixed(2))],
+    ['Total a Pagar (em aberto)', Number(somaT(abertoP).toFixed(2))],
+    ['Total a Receber (em aberto)', Number(somaT(abertoR).toFixed(2))],
+    ['Inadimplência (%)', Number(inad.toFixed(1))]
+  ];
+  return { filename: reportFilename('Indicadores'), title:'Indicadores',
+    sections:[{ heading:'Indicadores — '+state.periodoLabel, cols:['Indicador','Valor'], moneyCols:[1], rows }] };
+}
+async function buildReportPendencias(){
+  const empId = EMPRESA_IDS[state.empresa];
+  let rows = [];
+  if(empId){
+    const { data, error } = await sb.from('importacao_pendencias').select('*').eq('empresa_id', empId).order('created_at',{ascending:false});
+    if(!error && data) rows = data.map(p=>[p.tipo||'', p.titulo||'', p.detalhe||'', p.resolvida?'Resolvida':'Pendente', new Date(p.created_at).toLocaleDateString('pt-BR')]);
+  }
+  return { filename: reportFilename('Pendencias_Importacao'), title:'Pendências de Importação',
+    sections:[{ heading:'Pendências de importação', cols:['Tipo','Título','Detalhe','Status','Data'], moneyCols:[], rows }] };
+}
+
+/* ---------- Geradores de arquivo ---------- */
+function downloadBlob(blob, filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function exportCSV(rep){
+  const lines=[];
+  rep.sections.forEach(sec=>{
+    lines.push(sec.heading);
+    lines.push(sec.cols.join(';'));
+    sec.rows.forEach(r=>lines.push(r.map(cell=>{
+      if(typeof cell==='number') return String(cell).replace('.',',');
+      return '"'+String(cell==null?'':cell).replace(/"/g,'""')+'"';
+    }).join(';')));
+    lines.push('');
+  });
+  downloadBlob(new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}), rep.filename+'.csv');
+}
+function exportXLSX(rep){
+  const wb=XLSX.utils.book_new();
+  rep.sections.forEach((sec,i)=>{
+    const aoa=[[rep.title],[EMPRESAS[state.empresa].nome+' — '+state.periodoLabel],[],sec.cols].concat(sec.rows);
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    let name=(sec.heading||('Aba'+(i+1))).replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31).trim()||('Aba'+(i+1));
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+  XLSX.writeFile(wb, rep.filename+'.xlsx');
+}
+async function imgUrlToDataURL(url){
+  const res=await fetch(url,{mode:'cors'});
+  const blob=await res.blob();
+  return await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function exportPDF(rep){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const emp = EMPRESAS[state.empresa];
+  const logo = BRAND[state.empresa].logoUrl;
+  let hasLogo=false;
+  if(logo){
+    try{ const dataUrl=await imgUrlToDataURL(logo); doc.addImage(dataUrl,'PNG',40,22,32,32); hasLogo=true; }
+    catch(e){ console.error('Logo não pôde ser embutida no PDF:', e); }
+  }
+  const xText = hasLogo?84:40;
+  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(20);
+  doc.text(rep.title, xText, 38);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(100);
+  doc.text(emp.nome+'  ·  '+state.periodoLabel+'  ·  Emitido em '+new Date().toLocaleString('pt-BR'), xText, 54);
+  let y=76;
+  rep.sections.forEach(sec=>{
+    doc.setFontSize(10.5); doc.setTextColor(20); doc.setFont('helvetica','bold');
+    doc.text(sec.heading, 40, y); y+=8;
+    const body=sec.rows.map(r=>r.map((c,i)=>{
+      if(typeof c==='number') return (sec.moneyCols&&sec.moneyCols.includes(i))?money(c,true):String(c);
+      return String(c==null?'':c);
+    }));
+    doc.autoTable({ startY:y, head:[sec.cols], body, styles:{fontSize:8,cellPadding:3,font:'helvetica'},
+      headStyles:{fillColor:[14,92,110],textColor:255}, margin:{left:40,right:40} });
+    y = doc.lastAutoTable.finalY + 22;
+    if(y>760){ doc.addPage(); y=40; }
+  });
+  doc.save(rep.filename+'.pdf');
+}
+
 function alertas(){
   const out=[];
   const venc=PAGAR[state.empresa].filter(p=>p.status==='Vencido');
