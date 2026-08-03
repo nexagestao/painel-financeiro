@@ -323,6 +323,7 @@ function icon(name, size){
 
 /* ---------- Constantes ---------- */
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const MESES_LONG = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const REAL_M = 6;                 // realizado até Julho (índice 6)
 const HOJE = new Date(2026,6,31); // 31/07/2026 — data-base simulada do restante da plataforma (realizado até jul/2026)
 const ANO = 2026;
@@ -1382,6 +1383,61 @@ async function exportPDF(rep){
   doc.save(rep.filename+'.pdf');
 }
 
+/* ---------- Alertas de conciliação bancária (só Administrador) ----------
+   A diferença calculada em saldos() (banco real vs. o que os títulos
+   explicam) nunca aparece em relatório/gráfico/exportação — só vira alerta
+   para o administrador, com detalhe e opção de marcar como resolvido. */
+state.conciliacaoResolvidas = state.conciliacaoResolvidas || {};
+function conciliacaoAlertas(){
+  const out=[]; const origEmp=state.empresa;
+  Object.keys(EMPRESAS).forEach(emp=>{
+    if(!BASES[emp].saldosMensais) return;
+    state.empresa=emp;
+    const s=saldos('proj');
+    Object.keys(BASES[emp].saldosMensais).forEach(mStr=>{
+      const m=Number(mStr), val=s[m].conciliacao||0;
+      if(Math.abs(val)>=0.01) out.push({empresa:emp, mes:m, valor:val, key:emp+'-'+ANO+'-'+m});
+    });
+  });
+  state.empresa=origEmp;
+  return out;
+}
+async function loadConciliacaoResolvidas(){
+  try{
+    const { data, error } = await sb.from('logs').select('detalhe').eq('acao','Conciliação resolvida');
+    if(!error && data) data.forEach(r=>{ if(r.detalhe) state.conciliacaoResolvidas[r.detalhe]=true; });
+  }catch(e){ console.error('Falha ao carregar conciliações resolvidas:', e); }
+}
+async function resolverConciliacao(key){
+  state.conciliacaoResolvidas[key]=true;
+  const [emp] = key.split('-');
+  try{
+    await sb.from('logs').insert({empresa_id:EMPRESA_IDS[emp]||null, acao:'Conciliação resolvida', detalhe:key,
+      usuario_id: currentUser?currentUser.id:null});
+  }catch(e){ console.error('Falha ao registrar resolução:', e); }
+  toast('Alerta marcado como resolvido');
+  closeDrawer(); render();
+}
+function abrirConciliacaoDetalhe(key){
+  const [emp,, mStr] = key.split('-'); const m=Number(mStr);
+  const item = conciliacaoAlertas().find(c=>c.key===key);
+  const resolvida = !!state.conciliacaoResolvidas[key];
+  let h=drawerHead('Diferença de conciliação', EMPRESAS[emp].curto+' — '+MESES_LONG[m]+'/'+ANO);
+  h+='<div class="drawer-body">';
+  if(!item){
+    h+='<div class="empty"><div class="t1">Esta diferença não está mais em aberto.</div></div>';
+  } else {
+    const li=(k,vv)=>'<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--text2)">'+k+'</span><span style="font-weight:500">'+vv+'</span></div>';
+    h+=li('Empresa', esc(EMPRESAS[emp].curto))+li('Mês', MESES_LONG[m]+'/'+ANO)+
+       li('Diferença', '<span style="color:'+(item.valor<0?'var(--neg)':'var(--pos)')+';font-weight:650">'+money(item.valor,true)+'</span>')+
+       li('O que significa', 'Diferença entre a variação real do saldo bancário no mês e o que os títulos lançados (contas a pagar/receber) explicam.')+
+       li('Status', resolvida?'Marcada como resolvida':'Em aberto');
+    h+='<div style="font-size:12px;color:var(--text2);margin-top:14px">Confira se falta lançar algum título (ex.: tarifas, PIX, estornos) referente a este mês, ou se algum lançamento está com valor ou data divergente do extrato bancário.</div>';
+  }
+  h+='</div><div class="drawer-foot">'+(item&&!resolvida?'<button class="btn primary" onclick="resolverConciliacao(\''+key+'\')">Marcar como resolvido</button>':'')+
+     '<button class="btn" onclick="closeDrawer()">Fechar</button></div>';
+  openDrawer(h);
+}
 function alertas(){
   const out=[];
   const venc=PAGAR[state.empresa].filter(p=>p.status==='Vencido');
@@ -1395,6 +1451,17 @@ function alertas(){
   if(!negMeses.length) out.push({tipo:'ok', t:'Caixa projetado positivo até Dez/2026', d:'Menor saldo projetado: '+money(ms.valor)+' em '+ms.mes+'.'});
   const a=ASSOC[state.empresa];
   if(a && a.inadimplencia>13) out.push({tipo:'warn', t:'Inadimplência de associados em '+pct(a.inadimplencia), d:'Acima do limite de referência de 13%. Reforçar recuperação de boletos vencidos.'});
+  // Diferença de conciliação bancária — só visível para Administrador
+  // (Diretoria/Visualização/outros perfis não veem este alerta nem o valor).
+  if(state.role==='Administrador'){
+    conciliacaoAlertas().forEach(c=>{
+      if(state.conciliacaoResolvidas[c.key]) return;
+      out.push({tipo:'warn',
+        t:'Diferença de conciliação identificada em '+MESES_LONG[c.mes]+'/'+ANO+': '+money(c.valor,true),
+        d:EMPRESAS[c.empresa].curto+' — clique para ver os detalhes e marcar como resolvido.',
+        click:"abrirConciliacaoDetalhe('"+c.key+"')"});
+    });
+  }
   return out;
 }
 function openNotifs(){
@@ -1407,7 +1474,7 @@ function alertasHtml(list){
   return list.map(a=>{
     const cor=a.tipo==='neg'?'var(--neg)':a.tipo==='warn'?'var(--warn)':'var(--pos)';
     const bg=a.tipo==='neg'?'var(--neg-soft)':a.tipo==='warn'?'var(--warn-soft)':'var(--pos-soft)';
-    return '<div class="alert-item"><div class="alert-ic" style="background:'+bg+';color:'+cor+'">'+icon(a.tipo==='ok'?'check':'alert',15)+'</div>'+
+    return '<div class="alert-item"'+(a.click?' style="cursor:pointer" onclick="closeDrawer();'+a.click+'"':'')+'><div class="alert-ic" style="background:'+bg+';color:'+cor+'">'+icon(a.tipo==='ok'?'check':'alert',15)+'</div>'+
       '<div><div class="alert-t">'+a.t+'</div><div class="alert-d">'+a.d+'</div></div></div>';
   }).join('');
 }
@@ -1559,11 +1626,9 @@ function renderFluxo(){
   }
   fluxoTreeDef().forEach(n=>h+=rowFor(n,0));
   h+='<tr class="row-sub"><td>Geração de Caixa</td>'+flx.map(f=>'<td class="num">'+moneyHtml(f.ger,true)+'</td>').join('')+'<td class="num">'+moneyHtml(totalEnt-totalSai,true)+'</td></tr>';
-  const totalConc=saldosCol.reduce((t,x)=>t+x.conc,0);
-  if(saldosCol.some(x=>Math.abs(x.conc)>=0.01)){
-    h+='<tr class="row-sub" style="color:var(--warn)" title="Diferença entre o saldo bancário real e o que os títulos lançados explicam nesse mês">'+
-      '<td>Diferença de conciliação</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.conc,true)+'</td>').join('')+'<td class="num">'+moneyHtml(totalConc,true)+'</td></tr>';
-  }
+  // A diferença de conciliação (saldosCol[i].conc) continua calculada em
+  // saldos() para checagem do saldo bancário, mas não vira linha no relatório
+  // — só gera alerta para Administrador (ver conciliacaoAlertas()).
   h+='<tr class="row-total"><td>Saldo Final</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.fim,true)+'</td>').join('')+'<td class="num">'+moneyHtml(saldosCol[saldosCol.length-1].fim,true)+'</td></tr>';
   h+='</tbody></table></div></div>';
   $('content').innerHTML=h;
@@ -1998,7 +2063,8 @@ const ADMIN_CARDS=[
   {id:'aparencia',   ic:'sun',     t:'Aparência',          d:'Cor institucional, logo, modo escuro e densidade.'},
   {id:'historico',   ic:'history', t:'Histórico',          d:'Linha do tempo de importações e alterações.'},
   {id:'logs',        ic:'list',    t:'Logs',               d:'Registro de ações de usuários no sistema.'},
-  {id:'backup',      ic:'db',      t:'Backup',             d:'Cópias de segurança da base de dados.'}
+  {id:'backup',      ic:'db',      t:'Backup',             d:'Cópias de segurança da base de dados.'},
+  {id:'conciliacao', ic:'alert',   t:'Conciliação Bancária', d:'Diferenças entre o saldo real do banco e os títulos lançados.'}
 ];
 function adminShell(title, sub, inner){
   return '<div class="page-head"><div><div style="display:flex;align-items:center;gap:10px"><button class="icon-btn" onclick="goAdmin(null)" title="Voltar">'+icon('chevL',16)+'</button><span class="page-title">'+title+'</span></div>'+
@@ -2096,6 +2162,23 @@ function renderAdminPage(p){
       tbl([['Data'],['Tipo'],['Tamanho'],['Status']],
         [['31/07/2026 19:00','Automático diário','48 MB'],['30/07/2026 19:00','Automático diário','47 MB'],['27/07/2026 12:14','Manual','47 MB']].map(b=>'<tr><td>'+b[0]+'</td><td>'+b[1]+'</td><td>'+b[2]+'</td><td><span class="status-badge st-ok">Concluído</span></td></tr>').join(''))+
       '<div style="margin-top:14px"><button class="btn" onclick="toast(\'Backup demonstrativo iniciado\')">'+icon('db',15)+' Gerar backup agora</button></div>');
+  }
+  else if(p==='conciliacao'){
+    const abertas=conciliacaoAlertas().filter(c=>!state.conciliacaoResolvidas[c.key]);
+    const resolvidas=conciliacaoAlertas().filter(c=>state.conciliacaoResolvidas[c.key]);
+    const row=c=>'<tr class="hoverable" onclick="abrirConciliacaoDetalhe(\''+c.key+'\')"><td>'+esc(EMPRESAS[c.empresa].curto)+'</td><td>'+MESES_LONG[c.mes]+'/'+ANO+'</td>'+
+      '<td class="num" style="color:'+(c.valor<0?'var(--neg)':'var(--pos)')+';font-weight:600">'+money(c.valor,true)+'</td>'+
+      '<td><span class="status-badge '+(state.conciliacaoResolvidas[c.key]?'st-ok':'st-pend')+'">'+(state.conciliacaoResolvidas[c.key]?'Resolvida':'Em aberto')+'</span></td></tr>';
+    h='<div class="card" style="margin-bottom:16px"><div class="card-head"><div class="card-title">Em aberto ('+abertas.length+')</div></div>'+
+      (abertas.length
+        ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Empresa</th><th>Mês</th><th class="num">Diferença</th><th>Status</th></tr></thead><tbody>'+abertas.map(row).join('')+'</tbody></table></div>'
+        : '<div class="empty" style="padding:26px"><div class="t1">Nenhuma diferença em aberto.</div><div class="t2">O saldo bancário real bate com o que os títulos lançados explicam.</div></div>')+
+      '</div>';
+    if(resolvidas.length){
+      h+='<div class="card"><div class="card-head"><div class="card-title">Resolvidas ('+resolvidas.length+')</div></div>'+
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Empresa</th><th>Mês</th><th class="num">Diferença</th><th>Status</th></tr></thead><tbody>'+resolvidas.map(row).join('')+'</tbody></table></div></div>';
+    }
+    h=adminShell('Conciliação Bancária','Diferenças entre o saldo real do banco e o que os títulos (contas a pagar/receber) explicam — visível apenas para Administrador', h);
   }
   $('content').innerHTML=h;
 }
@@ -3597,6 +3680,7 @@ async function showApp(){
     catch(e){ console.error('Falha ao carregar dados reais da Agibens, mantendo demonstração:', e); }
   }
   try{ await loadBrandLogos(); } catch(e){ console.error('Falha ao carregar logos das empresas:', e); }
+  try{ await loadConciliacaoResolvidas(); } catch(e){ console.error('Falha ao carregar conciliações resolvidas:', e); }
   render();
 }
 
