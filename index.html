@@ -1912,15 +1912,15 @@ function dreChartsHtml(reg, meses, cfg){
     '</div>';
 }
 /* ---------- Ponto de Equilíbrio ----------
-   Exige que cada conta de Custo/Despesa Operacional tenha a.natureza =
-   'variavel'|'fixa' no PLANO (campo local, não existe no Supabase hoje).
+   Exige que cada conta de Custo/Despesa Operacional tenha a.custoNatureza =
+   'variavel'|'fixa' (mapeado de plano_contas.custo_natureza no Supabase).
    Enquanto nenhuma conta estiver classificada, não estimamos nada — só
    avisamos quais contas precisam da classificação. */
 function pontoEquilibrioHtml(reg, meses){
   const contasCusto=analiticas().filter(a=>a.c.startsWith('2.'));
   const contasDespOp=analiticas().filter(a=>a.c.startsWith('3.1.')||a.c.startsWith('3.2.')||a.c.startsWith('3.3.'));
   const relevantes=contasCusto.concat(contasDespOp);
-  const semClassificacao=relevantes.filter(a=>a.natureza!=='variavel'&&a.natureza!=='fixa');
+  const semClassificacao=relevantes.filter(a=>a.custoNatureza!=='variavel'&&a.custoNatureza!=='fixa');
   let h='<div class="card" style="margin-bottom:16px"><div class="card-head"><div style="flex:1"><div class="card-title">Ponto de Equilíbrio</div><div class="card-sub">Margem de contribuição × despesas fixas — só valores realizados no período</div></div></div><div class="card-body">';
   if(semClassificacao.length){
     h+='<div class="empty" style="padding:18px 4px;text-align:left">'+
@@ -1935,8 +1935,8 @@ function pontoEquilibrioHtml(reg, meses){
   const cfgAtivo=DRE_CFG[state.empresa].filter(l=>l.ativa);
   const rlLine=cfgAtivo.find(l=>l.nome==='RECEITA LÍQUIDA');
   const receitaLiquida=mesesReal.reduce((t,m)=>t+(rlLine?dreLinhaVal(rlLine,m,'real'):0),0);
-  const custosVar=somaContas(relevantes.filter(a=>a.natureza==='variavel'),'real');
-  const despesasFixas=somaContas(relevantes.filter(a=>a.natureza==='fixa'),'real');
+  const custosVar=somaContas(relevantes.filter(a=>a.custoNatureza==='variavel'),'real');
+  const despesasFixas=somaContas(relevantes.filter(a=>a.custoNatureza==='fixa'),'real');
   const margemContrib=Math.abs(receitaLiquida)>=0.005?(receitaLiquida-custosVar)/receitaLiquida:null;
   const pe=(margemContrib&&margemContrib>0.0001)?despesasFixas/margemContrib:null;
   if(pe==null){
