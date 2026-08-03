@@ -324,8 +324,17 @@ function icon(name, size){
 /* ---------- Constantes ---------- */
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const REAL_M = 6;                 // realizado até Julho (índice 6)
-const HOJE = new Date(2026,6,31); // 31/07/2026
+const HOJE = new Date(2026,6,31); // 31/07/2026 — data-base simulada do restante da plataforma (realizado até jul/2026)
 const ANO = 2026;
+// Data real de hoje no fuso America/Sao_Paulo (independe do relógio local do
+// navegador) — usada só pela Previsão diária de caixa, que precisa começar
+// no dia real do calendário, não na data-base simulada acima.
+function hojeReal(){
+  const p = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const [y,m,d] = p.split('-').map(Number);
+  return new Date(y,m-1,d);
+}
+function isoDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 /* ---------- Estado global ---------- */
 const state = {
@@ -1562,11 +1571,14 @@ function renderFluxo(){
 function fluxoChartDrill(i){ const c=FLUXO_COLS[i]; if(c) drill('1', c.m!=null?c.m:c.m0); }
 
 /* ---------- Saldo previsto por vencimento (previsão diária de caixa) ----------
-   Sempre começa em HOJE (31/07/2026), não importa o filtro de período — o
-   período selecionado só define até onde a previsão é exibida (fim do último
-   mês selecionado). Cards do topo de renderFluxo() usam spTotais(), a mesma
-   função usada aqui, garantindo que cards e tabela nunca divirjam. */
+   Sempre começa na data real de hoje (hojeReal(), fuso America/Sao_Paulo) —
+   não no HOJE simulado (31/07) usado pelo resto da plataforma, nem na data do
+   último saldo bancário. O saldo de 31/07 (saldoAtual()) é só o ponto de
+   partida do acúmulo; não vira uma linha de previsão. Cards do topo de
+   renderFluxo() usam spTotais(), a mesma função usada aqui, garantindo que
+   cards e tabela nunca divirjam. */
 state.spStatus = state.spStatus||'Todos';
+state.spQuick = state.spQuick||'30'; // '30' | '60' | '90' | 'custom'
 function spToggle(k){ expandState.sp[k]=!expandState.sp[k]; render(); }
 function spDrillAssoc(dataISO){
   const d2 = spLinhas().find(d=>d.data.toISOString().slice(0,10)===dataISO);
@@ -1589,13 +1601,22 @@ function spDrillAssoc(dataISO){
   h+='</div><div class="drawer-foot"><button class="btn" onclick="closeDrawer()">Fechar</button></div>';
   openDrawer(h);
 }
-function spFimPeriodo(){
-  const sel=MSEL(); const m1=sel[sel.length-1];
-  return new Date(ANO, m1+1, 0);
+function spIniEfetiva(){
+  if(state.spQuick==='custom' && state.spIniCustom) return new Date(state.spIniCustom+'T00:00:00');
+  return hojeReal();
+}
+function spFimEfetiva(){
+  const ini = spIniEfetiva();
+  if(state.spQuick==='custom'){
+    if(state.spFimCustom){ const f=new Date(state.spFimCustom+'T00:00:00'); return f<ini?ini:f; }
+    const d=new Date(ini); d.setDate(d.getDate()+30); return d;
+  }
+  const dias = parseInt(state.spQuick,10)||30;
+  const d=new Date(ini); d.setDate(d.getDate()+dias); return d;
 }
 function spLinhas(){
-  const ini = HOJE;
-  const fim = spFimPeriodo()<ini ? ini : spFimPeriodo();
+  const ini = spIniEfetiva();
+  const fim = spFimEfetiva();
   const items=[];
   PAGAR[state.empresa].filter(t=>t.status!=='Pago').forEach(t=>items.push({t, tipo:'pagar', nome:t.forn, valor:-t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
   RECEBER[state.empresa].filter(t=>t.status!=='Recebido').forEach(t=>items.push({t, tipo:'receber', nome:t.cli, valor:t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
@@ -1647,9 +1668,18 @@ function exportSpCsv(){
 }
 function saldosProjetadosCard(sp){
   const dias=sp.dias;
+  const hj=hojeReal(), fimEf=spFimEfetiva();
   let h='<div class="card" style="margin-top:16px"><div class="pc-head"><div style="flex:1;min-width:220px"><div class="pc-title">Previsão diária de caixa</div>'+
-    '<div class="page-sub" style="margin-top:2px">De hoje ('+HOJE.toLocaleDateString('pt-BR')+') até '+spFimPeriodo().toLocaleDateString('pt-BR')+'</div></div>'+
+    '<div class="page-sub" style="margin-top:2px">De hoje ('+hj.toLocaleDateString('pt-BR')+') até '+fimEf.toLocaleDateString('pt-BR')+'</div></div>'+
     '<div class="pc-actions">'+
+    '<div class="seg">'+[['30','30 dias'],['60','60 dias'],['90','90 dias'],['custom','Personalizado']].map(q=>
+      '<button class="'+(state.spQuick===q[0]?'on':'')+'" onclick="state.spQuick=\''+q[0]+'\';render()">'+q[1]+'</button>').join('')+'</div>'+
+    (state.spQuick==='custom' ?
+      '<span style="font-size:12px;font-weight:600;color:var(--text2)">De</span>'+
+      '<input type="date" class="select" value="'+(state.spIniCustom||isoDate(hj))+'" onchange="state.spIniCustom=this.value;render()">'+
+      '<span style="font-size:12px;font-weight:600;color:var(--text2)">Até</span>'+
+      '<input type="date" class="select" value="'+(state.spFimCustom||isoDate(fimEf))+'" onchange="state.spFimCustom=this.value;render()">'
+      : '')+
     '<span style="font-size:12px;font-weight:600;color:var(--text2)">Status</span>'+
     '<select class="select" onchange="state.spStatus=this.value;render()">'+['Todos','Em aberto','Vencidos'].map(s=>'<option'+(state.spStatus===s?' selected':'')+'>'+s+'</option>').join('')+'</select>'+
     '<button class="icon-btn" style="width:28px;height:28px" title="Exportar CSV" '+(dias.length?'onclick="exportSpCsv()"':'disabled')+'>'+icon('download',13)+'</button></div></div>';
