@@ -156,7 +156,12 @@ tr.lvl1>td:first-child{padding-left:30px;font-weight:600}
 tr.lvl2>td:first-child{padding-left:52px}
 tr.lvl3>td:first-child{padding-left:74px}
 tr.row-total td{font-weight:650;background:var(--bg)}
-tr.row-result td{font-weight:650;background:var(--accent-soft)}
+tr.row-result td{font-weight:650;background:#E8F1F3;color:#083A47}
+tr.row-result td:first-child{border-left:3px solid #0F4C5C}
+tr.row-result.final td{background:#CFE4E8;font-weight:800}
+body.dark tr.row-result td{background:#123138;color:#BFDCE3}
+body.dark tr.row-result.final td{background:#173F47}
+.money.zero{color:var(--text2)}
 tr.row-sub td{font-weight:600;background:var(--bg)}
 td.clickv{cursor:pointer;border-radius:6px}
 td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
@@ -172,7 +177,7 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
 .chart-box{width:100%;overflow:hidden}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);padding:0 18px 4px}
 .legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:6px}
-.axis-lbl{font-family:var(--font-mono);font-size:10px;fill:var(--text2)}
+.axis-lbl{font-family:'Inter',sans-serif;font-size:12.5px;font-weight:500;letter-spacing:normal;fill:var(--text2)}
 .grid-line{stroke:var(--border);stroke-width:1;stroke-dasharray:2 3}
 
 /* ---------- Drawer / Modal ---------- */
@@ -762,11 +767,15 @@ function moneyHtml(x, dec, dir){
   else if(dir==='in' && x>0) cls += ' pos';
   return '<span class="'+cls+'">'+money(x,dec)+'</span>';
 }
+function resultMoney(x){
+  const cls = x>0?'pos':x<0?'neg':'zero';
+  return '<span class="money '+cls+'">'+money(x)+'</span>';
+}
 function kfmt(x){
-  const a = Math.abs(x);
-  if(a>=1e6) return (x/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mi';
-  if(a>=1e3) return Math.round(x/1e3)+' mil';
-  return String(Math.round(x));
+  const a = Math.abs(x), sign = x<0?'-':'';
+  if(a>=1e6) return sign+'R$ '+(a/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mi';
+  if(a>=1e3) return sign+'R$ '+Math.round(a/1e3)+' mil';
+  return sign+'R$ '+Math.round(a);
 }
 function pct(x,dec){ return x.toLocaleString('pt-BR',{maximumFractionDigits:dec==null?1:dec})+'%'; }
 function fdate(dt){ return dt ? dt.toLocaleDateString('pt-BR') : '—'; }
@@ -940,7 +949,12 @@ function chartRanking(items, fmt){
     '<span style="width:98px;text-align:right;font-size:12.5px;font-weight:600" class="money">'+(fmt?fmt(i.value):money(i.value))+'</span></div>').join('');
 }
 function legend(items){
-  return '<div class="legend">'+items.map(i=>'<span><i style="background:'+i.color+'"></i>'+i.name+'</span>').join('')+'</div>';
+  return '<div class="legend">'+items.map(i=>{
+    const swatch = i.dash
+      ? '<i style="background:none;border-top:2px dashed '+i.color+';width:11px;height:0;margin-right:6px;display:inline-block;vertical-align:middle"></i>'
+      : '<i style="background:'+i.color+'"></i>';
+    return '<span>'+swatch+i.name+'</span>';
+  }).join('')+'</div>';
 }
 
 /* =========================== SHELL: SIDEBAR / TOPBAR =========================== */
@@ -1169,24 +1183,6 @@ function kpi(lb, val, delta, legenda, colorClass){
   return '<div class="kpi"><div class="lb">'+lb+'</div><div class="vl '+(colorClass||'')+'">'+val+'</div>'+
     (dhtml?'<div class="dl">'+dhtml+'</div>':'')+'</div>';
 }
-function assocCards(compact){
-  if(typeof CFG_IND!=='undefined' && !CFG_IND[state.empresa].assoc) return '';
-  const a=ASSOC[state.empresa];
-  const items=[
-    ['Associados Ativos', a.ativos!=null?a.ativos.toLocaleString('pt-BR'):null,'de '+(a.associados!=null?a.associados.toLocaleString('pt-BR'):'—')+' cadastrados'],
-    ['Novos no mês', a.novos!=null?'+'+a.novos:null,'Julho/2026'],
-    ['Churn', a.churn!=null?pct(a.churn):null,'cancelamentos / base ativa'],
-    ['Ticket Médio', a.ticketMedio!=null?money(a.ticketMedio,true):null,'receita média por associado'],
-    ['Índice de Sinistralidade', a.sinistralidade!=null?pct(a.sinistralidade):null,'custo de sinistros / receita'],
-    ['Inadimplência', a.inadimplencia!=null?pct(a.inadimplencia):null,'boletos vencidos / emitidos']
-  ].filter(i=>i[1]!=null);
-  let h='<div class="card"><div class="card-head"><div style="flex:1"><div class="card-title">Indicadores da Associação</div></div>'+
-    '<button class="btn sm ghost" onclick="go(\'indicadores\')">Ver todos '+icon('chevR',13)+'</button></div><div class="card-body">';
-  h+='<div class="kpi-grid" style="margin-bottom:0">';
-  items.slice(0,compact?6:items.length).forEach(i=>{ h+=kpi(i[0], i[1], null, i[2]); });
-  h+='</div>';
-  return h+'</div></div>';
-}
 </script>
 <script>
 /* =========================== FLUXO DE CAIXA =========================== */
@@ -1282,7 +1278,7 @@ function renderFluxo(){
        {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--neg)'}],
       {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
       {h:300, click:'fluxoChartDrill'})
-      + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo final ('+(splitAt>=0?'contínuo = realizado, tracejado = previsto':'previsto')+')'}])
+      + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}])
   });
 
   h+=saldosProjetadosCard(sp);
@@ -1474,9 +1470,10 @@ function renderDre(){
       }
     } else {
       let tot=0;
-      let hh='<tr class="row-result"><td>'+esc(l.nome)+'</td>';
-      meses.forEach(m=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+='<td class="num">'+moneyHtml(vv)+'</td>'; });
-      hh+='<td class="num">'+moneyHtml(tot)+'</td></tr>';
+      const isFinal = l.nome==='RESULTADO LÍQUIDO';
+      let hh='<tr class="row-result'+(isFinal?' final':'')+'"><td>'+esc(l.nome)+'</td>';
+      meses.forEach(m=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+='<td class="num">'+resultMoney(vv)+'</td>'; });
+      hh+='<td class="num">'+resultMoney(tot)+'</td></tr>';
       h+=hh;
     }
   });
@@ -2285,7 +2282,7 @@ function smoothPath(pts){
 function fmtOf(o){ return o&&o.fmt==='pct' ? (x=>pct(x)) : (x=>money(x)); }
 function pcLineArea(cid, labels, series, opts){
   opts=opts||{};
-  const H=opts.h||300, W=760, L=58, R=18, T=18, B=30;
+  const H=opts.h||300, W=760, L=64, R=16, T=18, B=28;
   const F=fmtOf(opts);
   const all=series.flatMap(s=>s.values.filter(x=>x!=null));
   let {min,max}=yScaleInfo(Math.min(...all,0),Math.max(...all));
@@ -2337,7 +2334,7 @@ function pcLineArea(cid, labels, series, opts){
 }
 function pcBars(cid, labels, groups, opts){
   opts=opts||{};
-  const H=opts.h||280, W=760, L=58, R=18, T=16, B=30;
+  const H=opts.h||280, W=760, L=64, R=16, T=16, B=28;
   const F=fmtOf(opts);
   const all=groups.flatMap(g=>g.values);
   let {min,max}=yScaleInfo(Math.min(0,...all),Math.max(...all,0));
@@ -2369,7 +2366,7 @@ function pcBars(cid, labels, groups, opts){
    a partir do mês corrente quando splitAt é informado). */
 function pcComboBarLine(cid, labels, bars, line, opts){
   opts=opts||{};
-  const H=opts.h||300, W=760, L=58, R=18, T=18, B=30;
+  const H=opts.h||300, W=760, L=64, R=16, T=18, B=28;
   const F=fmtOf(opts);
   const allBar=bars.flatMap(b=>b.values);
   const allLine=line.values.filter(x=>x!=null);
@@ -2715,7 +2712,8 @@ const CHART_DEFS={
           {name:'Saldo final', values:wm.map(m=>sal[m].fim), kind:'main', area:(ui.tipo||'area')!=='linha', dots:true},
           {name:'Entradas', values:wm.map(m=>sal[m].ent), kind:'ghost'},
           {name:'Saídas', values:wm.map(m=>sal[m].sai), kind:'ghost2'}
-        ], {h:o&&o.h||320, click:'dd_evolucao', splitAt:splitIdx>=0?splitIdx:null}),
+        ], {h:o&&o.h||320, click:'dd_evolucao', splitAt:splitIdx>=0?splitIdx:null})
+        + legend([{color:NEUT1,name:'Entradas'},{color:NEUT2,name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]),
         trend: trendFor(m=>fluxoMes(m,reg).ger, wm) }; }},
   fluxo_es:{t:'Fluxo de Caixa', d:'Entradas, saídas e saldo mensais em regime de caixa', tipos:['barras'], size:3,
     render(ui,o){ const wm=winMonths('fluxo_es'); const reg=state.regime==='pxr'?'proj':state.regime;
@@ -2724,7 +2722,8 @@ const CHART_DEFS={
       const body=pcComboBarLine('fes', wm.map(m=>MESES[m]),
         [{name:'Entradas',values:ent,tone:'var(--pos)'},{name:'Saídas',values:sai,tone:'var(--neg)'}],
         {name:'Saldo final',values:wm.map(m=>sal[m].fim),splitAt:splitIdx>=0?splitIdx:null},
-        {h:o&&o.h||280,click:'dd_fluxoes'});
+        {h:o&&o.h||280,click:'dd_fluxoes'})
+        + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]);
       return { body, trend: trendFor(m=>fluxoMes(m,reg).ent, wm) }; }},
   rcd:{t:'Receita x Custos x Despesas', d:'Competência — base da DRE gerencial', tipos:['colunas','empilhadas'], size:3,
     render(ui,o){ const wm=winMonths('rcd'); const reg=state.regime==='pxr'?'proj':state.regime;
