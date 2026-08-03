@@ -42,7 +42,8 @@ input,select,textarea{font-family:inherit;font-size:13px;color:var(--text)}
 ::-webkit-scrollbar-track{background:transparent}
 
 /* ---------- Login ---------- */
-#loginGate{--ln-navy:#0F172A;--ln-blue:#2563EB;--ln-gray:#CBD5E1;display:flex;height:100vh;background:#fff}
+#loginGate,#accessBlocked{--ln-navy:#0F172A;--ln-blue:#2563EB;--ln-gray:#CBD5E1;background:#fff}
+#loginGate{display:flex;height:100vh}
 .login-wrap{display:flex;width:100%;height:100%}
 .login-visual{flex:0 0 50%;position:relative;overflow:hidden;background:linear-gradient(155deg,#0B1220 0%,#1E293B 55%,#0F172A 100%)}
 .login-visual::before{content:'';position:absolute;inset:-10%;background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.05) 0 1px,transparent 1px 90px),repeating-linear-gradient(25deg,rgba(255,255,255,.04) 0 1px,transparent 1px 130px)}
@@ -365,6 +366,16 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
         <div class="login-error" id="recoverMsg"></div>
       </form>
       <p class="login-footer">Ambiente protegido conforme a LGPD.</p>
+    </div>
+  </div>
+</div>
+<div id="accessBlocked" style="display:none">
+  <div class="login-panel" style="width:100%;min-height:100vh">
+    <div class="login-card" style="text-align:center">
+      <img class="login-logo" src="assets/nexa-horizontal-navy.svg" alt="Nexa Gestão" style="margin:0 auto 24px">
+      <h1>Acesso negado</h1>
+      <p id="accessBlockedMsg">Sua conta não está vinculada a nenhuma empresa. Contate o administrador.</p>
+      <button class="btn primary" style="width:auto;padding:10px 22px;margin:0 auto" onclick="handleLogout()">Sair</button>
     </div>
   </div>
 </div>
@@ -1108,8 +1119,9 @@ const NAV = [
 function podeVer(id){ return PERFIS[state.role].mods.includes(id); }
 function renderSidebar(){
   const e=EMPRESAS[state.empresa];
+  const multiEmpresa=((currentUser&&currentUser.empresas)||[]).length>1;
   let h='<div class="side-head"><div class="brand"><img class="brand-mark" src="assets/nexa-icone-navy.svg" alt="Nexa Gestão" style="width:44px;height:44px;border-radius:11px;object-fit:contain;background:none"><div><div class="brand-name">'+esc(state.appName)+'</div></div></div>';
-  h+='<button class="company-pill" onclick="cycleEmpresa()">'+companyMark(state.empresa,22)+'<span class="nm">'+e.curto+'</span>'+icon('swap',14)+'</button></div>';
+  h+='<button class="company-pill" '+(multiEmpresa?'onclick="cycleEmpresa()"':'style="cursor:default"')+'>'+companyMark(state.empresa,22)+'<span class="nm">'+e.curto+'</span>'+(multiEmpresa?icon('swap',14):'')+'</button></div>';
   h+='<nav class="side-nav">';
   NAV.forEach(sec=>{
     const items=sec.items.filter(i=>podeVer(i.id));
@@ -1131,7 +1143,7 @@ function renderSidebar(){
   $('sidebar').innerHTML=h;
 }
 function renderTopbar(){
-  const ks=Object.keys(EMPRESAS), e=EMPRESAS[state.empresa];
+  const ks=(currentUser&&currentUser.empresas)||[], e=EMPRESAS[state.empresa];
   let h='<button class="icon-btn" onclick="toggleSidebar()">'+icon('panel',16)+'</button>';
   h+='<div class="hdr-company">'+companyMark(state.empresa,34)+'<div class="hdr-company-name">'+esc(e.curto)+'</div>'+
      (ks.length>1?'<select class="hdr-emp-sel" onchange="setEmpresa(this.value)" title="Trocar empresa">'+
@@ -1148,11 +1160,14 @@ function renderTopbar(){
   $('topbar').innerHTML=h;
 }
 function toggleSidebar(){ state.collapsed=!state.collapsed; $('app').classList.toggle('collapsed',state.collapsed); }
+function empresaAutorizada(key){ return !!(currentUser && currentUser.empresas && currentUser.empresas.includes(key)); }
 function cycleEmpresa(){
-  const ks=Object.keys(EMPRESAS);
+  const ks=(currentUser&&currentUser.empresas)||[];
+  if(ks.length<2) return;
   setEmpresa(ks[(ks.indexOf(state.empresa)+1)%ks.length]);
 }
 async function setEmpresa(e){
+  if(!empresaAutorizada(e)){ toast('Acesso negado: empresa não autorizada para o seu usuário'); return; }
   state.empresa=e; render(); // troca imediata com o que já está em cache; recarrega o plano de contas real em seguida
   try{ await loadPlanoContas(e); }catch(err){ console.error('Falha ao recarregar plano de contas:', err); }
   try{ await loadCentrosResultado(e); }catch(err){ console.error('Falha ao recarregar centros de resultado:', err); }
@@ -1521,7 +1536,7 @@ async function exportPDF(rep){
 state.conciliacaoResolvidas = state.conciliacaoResolvidas || {};
 function conciliacaoAlertas(){
   const out=[]; const origEmp=state.empresa;
-  Object.keys(EMPRESAS).forEach(emp=>{
+  ((currentUser&&currentUser.empresas)||[]).forEach(emp=>{
     if(!BASES[emp].saldosMensais) return;
     state.empresa=emp;
     const s=saldos('proj');
@@ -2395,7 +2410,7 @@ function renderAdminPage(p){
   else if(p==='empresas'){
     h=adminShell('Empresas','Clique em uma empresa para editar',
       tbl([['Empresa'],['CNPJ'],['Arquivo de importação'],['Usuários'],['Status']],
-        Object.keys(EMPRESAS).map(k=>{const e=EMPRESAS[k];
+        ((currentUser&&currentUser.empresas)||[]).map(k=>{const e=EMPRESAS[k];
           return '<tr class="hoverable" onclick="editEmpresa(\''+k+'\')"><td style="font-weight:600">'+esc(e.nome)+'</td><td>'+e.cnpj+'</td><td style="color:var(--text2)">'+k+'.xlsx</td><td>'+USUARIOS.filter(u=>u.empresas.includes(e.curto)).length+'</td><td><span class="status-badge st-ok">Ativa</span></td></tr>';}).join(''))+
       '<div style="margin-top:14px"><button class="btn" onclick="toast(\'No produto final, novas empresas são criadas aqui sem refazer o sistema\')">'+icon('building',15)+' Adicionar empresa</button></div>');
   }
@@ -2499,7 +2514,7 @@ function impRender(){
   let body='';
   if(imp.step===0){
     body='<div class="field"><label>Empresa de destino</label><select onchange="imp.empresa=this.value">'+
-      Object.keys(EMPRESAS).map(k=>'<option value="'+k+'"'+(k===imp.empresa?' selected':'')+'>'+EMPRESAS[k].nome+'</option>').join('')+'</select></div>';
+      ((currentUser&&currentUser.empresas)||[]).map(k=>'<option value="'+k+'"'+(k===imp.empresa?' selected':'')+'>'+EMPRESAS[k].nome+'</option>').join('')+'</select></div>';
   } else if(imp.step===1){
     body='<div style="border:1.5px dashed var(--border);border-radius:12px;padding:34px;text-align:center;cursor:pointer" onclick="impNext()">'+
       '<div style="color:var(--accent);margin-bottom:10px">'+icon('upload',26)+'</div>'+
@@ -3903,7 +3918,7 @@ function renderDashEditorPage(){
   props+='</div></div>';
 
   let toolbar='<div class="card" style="margin-bottom:16px"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:14px 18px">';
-  toolbar+='<span style="font-size:12px;font-weight:600;color:var(--text2)">Empresa</span><select class="select" onchange="setEmpresa(this.value)">'+Object.keys(EMPRESAS).map(k=>'<option value="'+k+'"'+(k===state.empresa?' selected':'')+'>'+EMPRESAS[k].curto+'</option>').join('')+'</select>';
+  toolbar+='<span style="font-size:12px;font-weight:600;color:var(--text2)">Empresa</span><select class="select" onchange="setEmpresa(this.value)">'+((currentUser&&currentUser.empresas)||[]).map(k=>'<option value="'+k+'"'+(k===state.empresa?' selected':'')+'>'+EMPRESAS[k].curto+'</option>').join('')+'</select>';
   toolbar+='<span style="font-size:12px;font-weight:600;color:var(--text2)">Perfil</span><select class="select" onchange="state.dcfgPerfil=this.value;state.dsel=null;render()">'+Object.keys(PERFIS).map(p=>'<option'+(p===state.dcfgPerfil?' selected':'')+'>'+p+'</option>').join('')+'</select>';
   toolbar+='<span style="font-size:12px;font-weight:600;color:var(--text2)">Colunas de cards</span><div class="seg">'+[2,3,4,6].map(n=>'<button class="'+(cfg.cols===n?'on':'')+'" onclick="dashCols('+n+')">'+n+'</button>').join('')+'</div>';
   toolbar+='<div style="flex:1"></div>';
@@ -3962,7 +3977,7 @@ function dashReset(){
 function dashCopyFrom(){
   let h=drawerHead('Copiar layout de...','Duplicar a configuração de outra empresa ou perfil para '+EMPRESAS[state.empresa].curto+' / '+state.dcfgPerfil);
   h+='<div class="drawer-body">';
-  h+='<div class="field"><label>Empresa de origem</label><select id="cpEmp">'+Object.keys(EMPRESAS).map(k=>'<option value="'+k+'">'+EMPRESAS[k].curto+'</option>').join('')+'</select></div>';
+  h+='<div class="field"><label>Empresa de origem</label><select id="cpEmp">'+((currentUser&&currentUser.empresas)||[]).map(k=>'<option value="'+k+'">'+EMPRESAS[k].curto+'</option>').join('')+'</select></div>';
   h+='<div class="field"><label>Perfil de origem</label><select id="cpPerf">'+Object.keys(PERFIS).map(p=>'<option>'+p+'</option>').join('')+'</select></div>';
   h+='</div><div class="drawer-foot"><button class="btn" onclick="closeDrawer()">Cancelar</button><button class="btn primary" onclick="dashDoCopy()">Copiar layout</button></div>';
   openDrawer(h);
@@ -3985,7 +4000,7 @@ function renderChartFull(){
   const TN={area:'Área',linha:'Linha',colunas:'Colunas',barras:'Barras',empilhadas:'Empilhadas',pizza:'Pizza',rosca:'Rosca',waterfall:'Waterfall',tabela:'Tabela',ranking:'Ranking',treemap:'Treemap'};
   let r; try{ r=def.render(ui,{h:440,big:true}); }catch(e){ r={body:'<div class="empty"><div class="t2">Erro ao renderizar.</div></div>'}; }
   let h='<div class="modal-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:200px"><div class="drawer-title">'+def.t+'</div><div class="drawer-sub">'+EMPRESAS[state.empresa].nome+'</div></div>'+
-    '<select class="select" onchange="setEmpresa(this.value);renderChartFull()">'+Object.keys(EMPRESAS).map(k=>'<option value="'+k+'"'+(k===state.empresa?' selected':'')+'>'+EMPRESAS[k].curto+'</option>').join('')+'</select>'+
+    '<select class="select" onchange="setEmpresa(this.value);renderChartFull()">'+((currentUser&&currentUser.empresas)||[]).map(k=>'<option value="'+k+'"'+(k===state.empresa?' selected':'')+'>'+EMPRESAS[k].curto+'</option>').join('')+'</select>'+
     '<button class="btn sm" onclick="openPeriodo()">'+icon('calendar',13)+' '+esc(state.periodoLabel)+'</button>'+
     '<select class="select" onchange="chartUI(\''+id+'\').tipo=this.value;renderChartFull()">'+def.tipos.map(t=>'<option value="'+t+'"'+((ui.tipo||def.tipos[0])===t?' selected':'')+'>'+(TN[t]||t)+'</option>').join('')+'</select>'+
     '<div class="seg">'+[[null,'Período'],[6,'6M'],[12,'Ano']].map(q=>'<button class="'+(ui.win===q[0]?'on':'')+'" onclick="chartUI(\''+id+'\').win='+(q[0]===null?'null':q[0])+';renderChartFull()">'+q[1]+'</button>').join('')+'</div>'+
@@ -3998,6 +4013,12 @@ function renderChartFull(){
 
 /* =========================== ROUTER / INIT =========================== */
 function render(){
+  if(currentUser && !empresaAutorizada(state.empresa)){
+    const primeira = (currentUser.empresas||[])[0];
+    if(!primeira){ showAccessBlocked('Sua conta não está vinculada a nenhuma empresa. Contate o administrador.'); return; }
+    toast('Acesso negado: empresa não autorizada para o seu usuário');
+    state.empresa = primeira;
+  }
   applyBrand(); applyChrome();
   renderSidebar(); renderTopbar();
   const views={dashboard:renderDashboard, fluxo:renderFluxo, dre:renderDre,
@@ -4018,13 +4039,29 @@ function initials(name){
   return (name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
 }
 
+function showAccessBlocked(msg){
+  $('loginGate').style.display='none';
+  $('app').classList.remove('ready');
+  $('accessBlockedMsg').textContent = msg;
+  $('accessBlocked').style.display='block';
+}
+function hideAccessBlocked(){ $('accessBlocked').style.display='none'; }
+
+/* A lista de empresas autorizadas vem de uma consulta real ao Supabase (tabela
+   "empresas"), cuja policy de SELECT já filtra por empresas_do_usuario() no
+   banco — o front-end nunca decide sozinho quais empresas mostrar; ele só
+   reflete o que o RLS efetivamente devolveu para este usuário autenticado. */
 async function loadUserProfile(user){
   let nome = user.email, perfilNome = 'Visualização';
   const { data } = await sb.from('usuarios').select('nome, perfis(nome)').eq('id', user.id).single();
   if(data && data.perfis && data.perfis.nome){ nome = data.nome; perfilNome = data.perfis.nome; }
   else if(data){ nome = data.nome; }
-  currentUser = { id:user.id, email:user.email, nome, perfil:perfilNome };
+  const idToKey = {}; Object.keys(EMPRESA_IDS).forEach(k=>idToKey[EMPRESA_IDS[k]]=k);
+  const { data: empresasRLS } = await sb.from('empresas').select('id');
+  const empresas = (empresasRLS||[]).map(r=>idToKey[r.id]).filter(Boolean);
+  currentUser = { id:user.id, email:user.email, nome, perfil:perfilNome, empresas };
   state.role = PERFIS[perfilNome] ? perfilNome : 'Visualização';
+  if(empresas.length && !empresas.includes(state.empresa)) state.empresa = empresas[0];
   showApp();
 }
 
@@ -4187,6 +4224,11 @@ async function loadBrandLogos(){
   });
 }
 async function showApp(){
+  if(!currentUser.empresas || !currentUser.empresas.length){
+    showAccessBlocked('Sua conta não está vinculada a nenhuma empresa. Contate o administrador.');
+    return;
+  }
+  hideAccessBlocked();
   $('loginGate').style.display='none';
   $('app').classList.add('ready');
   loadDash(); initTip(); applyBrand();
@@ -4255,6 +4297,12 @@ document.getElementById('recoverForm').addEventListener('submit', async function
 });
 
 (async function boot(){
+  /* Nenhuma empresa selecionada é persistida em localStorage — a autorização
+     vem sempre de uma consulta ao Supabase (ver loadUserProfile). Remove
+     qualquer chave legada/manual que tente reintroduzir esse padrão. */
+  ['pef_empresa','empresaSelecionada','selectedEmpresa','state_empresa'].forEach(k=>{
+    try{ localStorage.removeItem(k); }catch(e){}
+  });
   const { data:{ session } } = await sb.auth.getSession();
   if(session) await loadUserProfile(session.user);
   else $('loginGate').style.display='flex';
