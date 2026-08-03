@@ -480,11 +480,11 @@ const PLANO = [
   {c:'4.2',     n:'Passivo',                     t:'S', pai:'4',     cls:'Patrimonial'},
   {c:'4.2.01',  n:'Sinistros a Pagar (provisionados)', t:'A', pai:'4.2', cls:'Patrimonial'},
   {c:'4.2.02',  n:'Empréstimos',                 t:'A', pai:'4.2',   cls:'Patrimonial'},
-  {c:'5',       n:'DEDUÇÕES DA RECEITA',         t:'S', pai:null,    cls:'Dedução'},
-  {c:'5.01',    n:'Estornos e Devoluções',       t:'A', pai:'5',     cls:'Dedução'},
-  {c:'5.02',    n:'Cancelamentos',               t:'A', pai:'5',     cls:'Dedução'},
-  {c:'5.03',    n:'Tarifas de Emissão de Boletos', t:'A', pai:'5',   cls:'Dedução', obs:'Retida pelo banco antes do valor cair na conta — sai de Despesas Financeiras (era 3.4.06)'},
-  {c:'5.04',    n:'Outras Deduções',             t:'A', pai:'5',     cls:'Dedução'},
+  {c:'5',       n:'DEDUÇÕES DA RECEITA',         t:'S', pai:null,    cls:'Deducao da Receita'},
+  {c:'5.01',    n:'Estornos e Devoluções',       t:'A', pai:'5',     cls:'Deducao da Receita'},
+  {c:'5.02',    n:'Cancelamentos',               t:'A', pai:'5',     cls:'Deducao da Receita'},
+  {c:'5.03',    n:'Tarifas de Emissão de Boletos', t:'A', pai:'5',   cls:'Deducao da Receita', obs:'Retida pelo banco antes do valor cair na conta — sai de Despesas Financeiras (era 3.4.06)'},
+  {c:'5.04',    n:'Outras Deduções',             t:'A', pai:'5',     cls:'Deducao da Receita'},
   {c:'6',       n:'IRPJ E CSLL',                 t:'S', pai:null,    cls:'Tributo'},
   {c:'6.01',    n:'IRPJ',                        t:'A', pai:'6',     cls:'Tributo'},
   {c:'6.02',    n:'CSLL',                        t:'A', pai:'6',     cls:'Tributo'}
@@ -1053,7 +1053,15 @@ function cycleEmpresa(){
   const ks=Object.keys(EMPRESAS);
   setEmpresa(ks[(ks.indexOf(state.empresa)+1)%ks.length]);
 }
-function setEmpresa(e){ state.empresa=e; toast('Empresa alterada para '+EMPRESAS[e].curto+' — todos os módulos foram recalculados'); render(); }
+async function setEmpresa(e){
+  state.empresa=e; render(); // troca imediata com o que já está em cache; recarrega o plano de contas real em seguida
+  try{ await loadPlanoContas(e); }catch(err){ console.error('Falha ao recarregar plano de contas:', err); }
+  try{ await loadCentrosResultado(e); }catch(err){ console.error('Falha ao recarregar centros de resultado:', err); }
+  if(e==='AGIBENS' && !AGIBENS_HYDRATED){
+    try{ await hydrateAgibensReal(); }catch(err){ console.error('Falha ao carregar dados reais da Agibens:', err); }
+  }
+  if(state.empresa===e){ toast('Empresa alterada para '+EMPRESAS[e].curto+' — todos os módulos foram recalculados'); render(); }
+}
 function setRole(r){
   state.role=r;
   if(!podeVer(state.view)){ state.view='dashboard'; state.adminPage=null; }
@@ -2289,12 +2297,7 @@ function renderAdminPage(p){
           return '<tr class="hoverable" onclick="editEmpresa(\''+k+'\')"><td style="font-weight:600">'+esc(e.nome)+'</td><td>'+e.cnpj+'</td><td style="color:var(--text2)">'+k+'.xlsx</td><td>'+USUARIOS.filter(u=>u.empresas.includes(e.curto)).length+'</td><td><span class="status-badge st-ok">Ativa</span></td></tr>';}).join(''))+
       '<div style="margin-top:14px"><button class="btn" onclick="toast(\'No produto final, novas empresas são criadas aqui sem refazer o sistema\')">'+icon('building',15)+' Adicionar empresa</button></div>');
   }
-  else if(p==='plano'){
-    h=adminShell('Plano de Contas',EMPRESAS[state.empresa].curto+' — clique em uma conta para editar; lançamentos apenas em analíticas',
-      '<div style="margin-bottom:14px"><button class="btn primary sm" onclick="editConta(null)">'+icon('layers',14)+' Adicionar conta analítica</button></div>'+
-      tbl([['Código'],['Conta'],['Natureza'],['Tipo'],['Conta pai'],['Lançamentos']],
-        PLANO.map(a=>'<tr class="hoverable lvl'+Math.min((a.c.split('.').length-1),3)+'" onclick="editConta(\''+a.c+'\')"><td style="color:var(--text2)">'+a.c+'</td><td'+(a.t==='S'?' style="font-weight:600"':'')+'>'+esc(a.n)+(a.red?' <span class="status-badge st-neutro">redutora</span>':'')+'</td><td>'+(['Receita','Receita Financeira'].includes(a.cls)?'Crédito':'Débito')+'</td><td><span class="status-badge '+(a.t==='S'?'st-neutro':'st-aberto')+'">'+(a.t==='S'?'Sintética':'Analítica')+'</span></td><td style="color:var(--text2)">'+(a.pai||'—')+'</td><td>'+(a.t==='S'?'<span style="color:var(--text2)">Bloqueados</span>':'Permitidos')+'</td></tr>').join('')));
-  }
+  else if(p==='plano'){ h=renderPlanoContas(); }
   else if(p==='dre'){ h=renderDreConfig(); }
   else if(p==='dashboard'){ h=renderDashEditorPage(); }
   else if(p==='bancos'){
@@ -2636,34 +2639,175 @@ function saveEmpresa(k){
   applyBrand(); saveDash();
   closeDrawer(); toast('Empresa salva'); render();
 }
+/* =========================== PLANO DE CONTAS (CRUD real, Supabase) =========================== */
+const PC_CLASSIFICACOES=['Receita','Receita Financeira','Custo','Despesa','Despesa Financeira','Deducao da Receita','Tributo','Patrimonial'];
+const PC_CLASS_LABEL={'Receita':'Receita','Receita Financeira':'Receita Financeira','Custo':'Custo','Despesa':'Despesa','Despesa Financeira':'Despesa Financeira','Deducao da Receita':'Dedução da Receita','Tributo':'Tributo','Patrimonial':'Patrimonial'};
+state.pcFiltro = state.pcFiltro || {busca:'', cls:'', tipo:'', natureza:''};
+state.pcSel = state.pcSel || {};
+function pcCentros(){ return (CENTROS_REMOTE[state.empresa]||[]); }
+async function loadCentrosResultado(emp){
+  const empId=EMPRESA_IDS[emp]; if(!empId) return;
+  const { data, error } = await sb.from('centros_resultado').select('*').eq('empresa_id',empId).eq('ativo',true).order('nome');
+  if(!error && data) CENTROS_REMOTE[emp]=data;
+}
+const CENTROS_REMOTE={};
+function renderPlanoContas(){
+  const f=state.pcFiltro;
+  const lista=PLANO.filter(a=>{
+    if(f.busca && !(a.c.toLowerCase().includes(f.busca.toLowerCase())||a.n.toLowerCase().includes(f.busca.toLowerCase()))) return false;
+    if(f.cls && a.cls!==f.cls) return false;
+    if(f.tipo && a.t!==f.tipo) return false;
+    if(f.natureza && a.natureza!==f.natureza) return false;
+    return true;
+  });
+  const nSel=Object.keys(state.pcSel).filter(k=>state.pcSel[k]).length;
+  let inner='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">'+
+    '<button class="btn primary sm" onclick="editConta(null)">'+icon('layers',14)+' Nova conta</button>'+
+    '<input type="text" class="select" style="width:220px" placeholder="Buscar código ou nome" value="'+esc(f.busca)+'" oninput="state.pcFiltro.busca=this.value;renderAdminPage(\'plano\')">'+
+    '<select class="select" onchange="state.pcFiltro.cls=this.value;renderAdminPage(\'plano\')"><option value="">Todas as classificações</option>'+PC_CLASSIFICACOES.map(c=>'<option value="'+c+'"'+(f.cls===c?' selected':'')+'>'+PC_CLASS_LABEL[c]+'</option>').join('')+'</select>'+
+    '<select class="select" onchange="state.pcFiltro.tipo=this.value;renderAdminPage(\'plano\')"><option value="">Sintética e analítica</option><option value="S"'+(f.tipo==='S'?' selected':'')+'>Sintética</option><option value="A"'+(f.tipo==='A'?' selected':'')+'>Analítica</option></select>'+
+    '<select class="select" onchange="state.pcFiltro.natureza=this.value;renderAdminPage(\'plano\')"><option value="">Entrada e saída</option><option value="entrada"'+(f.natureza==='entrada'?' selected':'')+'>Entrada</option><option value="saida"'+(f.natureza==='saida'?' selected':'')+'>Saída</option></select>'+
+    '</div>';
+  if(nSel){
+    inner+='<div class="card" style="margin-bottom:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+      '<b style="font-size:12.5px">'+nSel+' conta(s) selecionada(s)</b>'+
+      '<select class="select" id="pcBulkNatureza"><option value="">Natureza (custo/despesa)…</option><option value="fixa">Marcar como Fixa</option><option value="variavel">Marcar como Variável</option><option value="pendente">Marcar como Pendente</option></select>'+
+      '<button class="btn sm" onclick="pcAplicarEmMassa()">Aplicar</button>'+
+      '<button class="btn sm ghost" onclick="state.pcSel={};renderAdminPage(\'plano\')">Limpar seleção</button></div>';
+  }
+  const centros=pcCentros();
+  const rows=lista.map(a=>{
+    const centro=centros.find(c=>c.id===a.centroId);
+    const custoTag = (a.cls==='Custo'||a.cls==='Despesa') ? (a.custoNatureza==='fixa'?'<span class="status-badge st-ok">Fixa</span>':a.custoNatureza==='variavel'?'<span class="status-badge st-aberto">Variável</span>':'<span class="status-badge st-pend">Pendente</span>') : '<span style="color:var(--text2)">—</span>';
+    return '<tr class="hoverable lvl'+Math.min((a.c.split('.').length-1),3)+'">'+
+      '<td style="width:26px" onclick="event.stopPropagation()"><input type="checkbox" class="perm-check" '+(state.pcSel[a.c]?'checked':'')+' onchange="state.pcSel[\''+a.c+'\']=this.checked;renderAdminPage(\'plano\')"></td>'+
+      '<td onclick="editConta(\''+a.c+'\')" style="color:var(--text2)">'+a.c+'</td>'+
+      '<td onclick="editConta(\''+a.c+'\')"'+(a.t==='S'?' style="font-weight:600"':'')+'>'+esc(a.n)+(a.red?' <span class="status-badge st-neutro">redutora</span>':'')+'</td>'+
+      '<td onclick="editConta(\''+a.c+'\')">'+(PC_CLASS_LABEL[a.cls]||a.cls||'—')+'</td>'+
+      '<td onclick="editConta(\''+a.c+'\')"><span class="status-badge '+(a.natureza==='entrada'?'st-ok':'st-vencido')+'">'+(a.natureza==='entrada'?'Entrada':'Saída')+'</span></td>'+
+      '<td onclick="editConta(\''+a.c+'\')"><span class="status-badge '+(a.t==='S'?'st-neutro':'st-aberto')+'">'+(a.t==='S'?'Sintética':'Analítica')+'</span></td>'+
+      '<td onclick="editConta(\''+a.c+'\')">'+custoTag+'</td>'+
+      '<td onclick="editConta(\''+a.c+'\')" style="color:var(--text2)">'+(centro?esc(centro.nome):'—')+'</td></tr>';
+  }).join('');
+  inner+='<div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>Código</th><th>Conta</th><th>Classificação</th><th>Natureza</th><th>Tipo</th><th>Custo/Despesa</th><th>Centro de Resultado</th></tr></thead><tbody>'+
+    (rows||'<tr><td colspan="8"><div class="empty" style="padding:24px"><div class="t1">Nenhuma conta encontrada</div></div></td></tr>')+'</tbody></table></div></div>';
+  return adminShell('Plano de Contas', EMPRESAS[state.empresa].curto+' — '+lista.length+' conta(s). Clique numa linha para editar; contas com lançamentos só podem ser inativadas.', inner);
+}
+async function pcAplicarEmMassa(){
+  const val=$('pcBulkNatureza').value;
+  if(!val){ toast('Escolha uma opção de natureza para aplicar'); return; }
+  const codigos=Object.keys(state.pcSel).filter(k=>state.pcSel[k]);
+  if(!codigos.length) return;
+  const empId=EMPRESA_IDS[state.empresa];
+  const { error } = await sb.from('plano_contas').update({custo_natureza:val, updated_by:currentUser?currentUser.id:null, updated_at:new Date().toISOString()}).eq('empresa_id',empId).in('codigo',codigos);
+  if(error){ toast('Falha ao aplicar em massa — tente novamente'); console.error(error); return; }
+  await sb.from('logs').insert({empresa_id:empId, acao:'Plano de contas — classificação em massa', detalhe:codigos.length+' conta(s) marcada(s) como "'+val+'": '+codigos.join(', '), usuario_id:currentUser?currentUser.id:null});
+  state.pcSel={};
+  toast(codigos.length+' conta(s) atualizada(s)');
+  await loadPlanoContas(state.empresa);
+  renderAdminPage('plano');
+}
 function editConta(code){
+  const centros=pcCentros();
+  const centroOpts='<option value="">Nenhum</option>'+centros.map(c=>'<option value="'+c.id+'">'+esc(c.nome)+'</option>').join('');
   if(code){
     const a=acc(code);
+    const pais=PLANO.filter(x=>x.t==='S'&&x.c!==code);
+    const mostraCustoNat = a.cls==='Custo'||a.cls==='Despesa';
     openDrawer(drawerHead('Editar conta '+code,(a.t==='S'?'Sintética':'Analítica'))+'<div class="drawer-body">'+
+      '<div class="field"><label>Código</label><input type="text" value="'+a.c+'" disabled style="opacity:.6"></div>'+
       fld('cpNome','Nome da conta',a.n)+
+      '<div class="field"><label>Conta pai</label><select id="cpPai"><option value="">Nenhuma (nível 1)</option>'+pais.map(x=>'<option value="'+x.c+'"'+(a.pai===x.c?' selected':'')+'>'+x.c+' — '+esc(x.n)+'</option>').join('')+'</select></div>'+
+      '<div class="field"><label>Classificação</label><select id="cpCls" onchange="$(\'cpCustoNatWrap\').style.display=(this.value===\'Custo\'||this.value===\'Despesa\')?\'block\':\'none\'">'+PC_CLASSIFICACOES.map(c=>'<option value="'+c+'"'+(a.cls===c?' selected':'')+'>'+PC_CLASS_LABEL[c]+'</option>').join('')+'</select></div>'+
+      fldSel('cpTipo','Tipo de conta',['Sintética','Analítica'],a.t==='S'?'Sintética':'Analítica')+
+      fldSel('cpNatureza','Natureza','Entrada,Saída'.split(','),a.natureza==='entrada'?'Entrada':'Saída')+
+      '<div id="cpCustoNatWrap" class="field" style="display:'+(mostraCustoNat?'block':'none')+'"><label>Custo/despesa</label><select id="cpCustoNat"><option value="pendente"'+(a.custoNatureza==='pendente'||!a.custoNatureza?' selected':'')+'>Pendente</option><option value="fixa"'+(a.custoNatureza==='fixa'?' selected':'')+'>Fixa</option><option value="variavel"'+(a.custoNatureza==='variavel'?' selected':'')+'>Variável</option></select></div>'+
+      '<div class="field"><label>Centro de Resultado</label><select id="cpCentro">'+centroOpts.replace('value="'+a.centroId+'"','value="'+a.centroId+'" selected')+'</select></div>'+
       (a.t==='A'?fldSel('cpRed','Conta redutora',['Não','Sim'],a.red?'Sim':'Não'):'')+
-      '</div>'+crudFoot('saveConta(\''+code+'\')'));
+      '<div class="field"><label>Observação</label><textarea id="cpObs" rows="2" style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface);font-family:inherit">'+esc(a.obs||'')+'</textarea></div>'+
+      '</div><div class="drawer-foot" style="flex-wrap:wrap">'+
+      '<button class="btn" style="color:var(--warn)" onclick="pcInativar(\''+code+'\')">Inativar</button>'+
+      '<button class="btn" style="color:var(--neg)" onclick="pcExcluir(\''+code+'\')">Excluir</button>'+
+      '<button class="btn" onclick="closeDrawer()">Cancelar</button>'+
+      '<button class="btn primary" onclick="saveConta(\''+code+'\')">Salvar</button></div>');
   } else {
-    const pais=PLANO.filter(a=>a.t==='S'&&a.c!=='4'&&!a.c.startsWith('4'));
-    openDrawer(drawerHead('Nova conta analítica','O código é gerado a partir da conta pai')+'<div class="drawer-body">'+
-      '<div class="field"><label>Conta pai (sintética)</label><select id="cpPai">'+pais.map(a=>'<option value="'+a.c+'">'+a.c+' — '+esc(a.n)+'</option>').join('')+'</select></div>'+
+    const pais=PLANO.filter(x=>x.t==='S');
+    openDrawer(drawerHead('Nova conta','Vinculada a '+EMPRESAS[state.empresa].curto)+'<div class="drawer-body">'+
+      fld('cpCod','Código (ex.: 3.3.9.01)','')+
       fld('cpNome','Nome da conta','')+
+      '<div class="field"><label>Conta pai</label><select id="cpPai"><option value="">Nenhuma (nível 1)</option>'+pais.map(x=>'<option value="'+x.c+'">'+x.c+' — '+esc(x.n)+'</option>').join('')+'</select></div>'+
+      '<div class="field"><label>Classificação</label><select id="cpCls" onchange="$(\'cpCustoNatWrap\').style.display=(this.value===\'Custo\'||this.value===\'Despesa\')?\'block\':\'none\'">'+PC_CLASSIFICACOES.map(c=>'<option value="'+c+'">'+PC_CLASS_LABEL[c]+'</option>').join('')+'</select></div>'+
+      fldSel('cpTipo','Tipo de conta',['Sintética','Analítica'],'Analítica')+
+      fldSel('cpNatureza','Natureza','Entrada,Saída'.split(','),'Saída')+
+      '<div id="cpCustoNatWrap" class="field" style="display:none"><label>Custo/despesa</label><select id="cpCustoNat"><option value="pendente" selected>Pendente</option><option value="fixa">Fixa</option><option value="variavel">Variável</option></select></div>'+
+      '<div class="field"><label>Centro de Resultado</label><select id="cpCentro">'+centroOpts+'</select></div>'+
+      '<div class="field"><label>Observação</label><textarea id="cpObs" rows="2" style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface);font-family:inherit"></textarea></div>'+
       '</div>'+crudFoot('saveConta(null)'));
   }
 }
-function saveConta(code){
+async function saveConta(code){
+  const nome=$('cpNome').value.trim();
+  if(!nome){ toast('Informe o nome da conta'); return; }
+  const pai=$('cpPai').value||null;
+  const cls=$('cpCls').value;
+  const tipo=$('cpTipo').value==='Sintética'?'S':'A';
+  const natureza=$('cpNatureza').value==='Entrada'?'entrada':'saida';
+  const custoNat=(cls==='Custo'||cls==='Despesa')?($('cpCustoNat')?$('cpCustoNat').value:'pendente'):null;
+  const centroId=$('cpCentro').value||null;
+  const red=$('cpRed')?$('cpRed').value==='Sim':false;
+  const obs=$('cpObs')?$('cpObs').value:'';
+  const empId=EMPRESA_IDS[state.empresa];
+  const uid=currentUser?currentUser.id:null;
   if(code){
-    const a=acc(code);
-    a.n=$('cpNome').value||a.n;
-    const rd=$('cpRed'); if(rd)a.red=rd.value==='Sim';
+    const antes=acc(code);
+    const { error } = await sb.from('plano_contas').update({
+      nome, pai_codigo:pai, classificacao:cls, tipo, natureza, custo_natureza:custoNat,
+      centro_resultado_id:centroId, redutora:red, observacao:obs,
+      updated_by:uid, updated_at:new Date().toISOString()
+    }).eq('empresa_id',empId).eq('codigo',code);
+    if(error){ toast('Falha ao salvar — verifique os dados e tente novamente'); console.error(error); return; }
+    await sb.from('logs').insert({empresa_id:empId, acao:'Conta editada', detalhe:code+' — '+nome+' (antes: '+antes.n+', '+PC_CLASS_LABEL[antes.cls]+' → agora: '+PC_CLASS_LABEL[cls]+')', usuario_id:uid});
   } else {
-    const pai=$('cpPai').value, nome=$('cpNome').value;
-    if(!nome){ toast('Informe o nome da conta'); return; }
-    const irmaos=filhos(pai).map(f=>parseInt(f.c.slice(pai.length+1),10)||0);
-    const seq=String((irmaos.length?Math.max(...irmaos):0)+1).padStart(2,'0');
-    PLANO.push({c:pai+'.'+seq, n:nome, t:'A', pai, cls:acc(pai).cls});
+    const codigo=$('cpCod').value.trim();
+    if(!codigo){ toast('Informe o código da conta'); return; }
+    if(acc(codigo)){ toast('Já existe uma conta com esse código'); return; }
+    const { error } = await sb.from('plano_contas').insert({
+      empresa_id:empId, codigo, nome, pai_codigo:pai, classificacao:cls, tipo, natureza,
+      custo_natureza:custoNat, centro_resultado_id:centroId, redutora:red, observacao:obs,
+      ativa:true, updated_by:uid
+    });
+    if(error){ toast('Falha ao criar a conta — tente novamente'); console.error(error); return; }
+    await sb.from('logs').insert({empresa_id:empId, acao:'Conta criada', detalhe:codigo+' — '+nome+' ('+PC_CLASS_LABEL[cls]+')', usuario_id:uid});
   }
-  closeDrawer(); toast('Plano de contas atualizado — relatórios recalculados'); render();
+  closeDrawer(); toast('Plano de contas atualizado — relatórios recalculados');
+  await loadPlanoContas(state.empresa);
+  render();
+}
+async function pcTemMovimentacao(code){
+  const empId=EMPRESA_IDS[state.empresa];
+  const [p,r] = await Promise.all([
+    sb.from('titulos_pagar').select('id',{count:'exact',head:true}).eq('empresa_id',empId).eq('conta_codigo',code),
+    sb.from('titulos_receber').select('id',{count:'exact',head:true}).eq('empresa_id',empId).eq('conta_codigo',code)
+  ]);
+  return (p.count||0)+(r.count||0);
+}
+async function pcInativar(code){
+  const empId=EMPRESA_IDS[state.empresa], uid=currentUser?currentUser.id:null;
+  const { error } = await sb.from('plano_contas').update({ativa:false, updated_by:uid, updated_at:new Date().toISOString()}).eq('empresa_id',empId).eq('codigo',code);
+  if(error){ toast('Falha ao inativar — tente novamente'); console.error(error); return; }
+  await sb.from('logs').insert({empresa_id:empId, acao:'Conta inativada', detalhe:code, usuario_id:uid});
+  closeDrawer(); toast('Conta inativada'); await loadPlanoContas(state.empresa); render();
+}
+async function pcExcluir(code){
+  const n=await pcTemMovimentacao(code);
+  if(n>0){ toast('Não é possível excluir: '+n+' lançamento(s) vinculado(s). Use "Inativar".'); return; }
+  const kids=filhos(code);
+  if(kids.length){ toast('Não é possível excluir: existem '+kids.length+' conta(s) filha(s). Remova-as primeiro.'); return; }
+  const empId=EMPRESA_IDS[state.empresa], uid=currentUser?currentUser.id:null;
+  const { error } = await sb.from('plano_contas').delete().eq('empresa_id',empId).eq('codigo',code);
+  if(error){ toast('Falha ao excluir — tente novamente'); console.error(error); return; }
+  await sb.from('logs').insert({empresa_id:empId, acao:'Conta excluída', detalhe:code, usuario_id:uid});
+  closeDrawer(); toast('Conta excluída'); await loadPlanoContas(state.empresa); render();
 }
 
 /* =========================== APARÊNCIA =========================== */
@@ -3751,7 +3895,25 @@ async function loadUserProfile(user){
 
 const AGIBENS_ID = 'afa74427-da67-4f1b-9789-bd8d7937284e';
 const EMPRESA_IDS = {AGIBENS:AGIBENS_ID, DUNORTE:'d375aabf-a539-45c6-bf39-16ea736cad9c'};
-
+let PLANO_CARREGADO=false;
+/* Carrega o plano de contas real do Supabase (tabela plano_contas) para a
+   empresa e substitui o array PLANO local — a partir daqui, qualquer edição
+   feita em Admin > Plano de Contas passa a valer na plataforma sem precisar
+   mexer em código. Mantém o PLANO hardcoded como fallback caso a consulta
+   falhe (ex.: offline) ou a tabela esteja vazia para a empresa. */
+async function loadPlanoContas(emp){
+  const empId = EMPRESA_IDS[emp];
+  if(!empId) return;
+  const { data, error } = await sb.from('plano_contas').select('*').eq('empresa_id', empId).eq('ativa', true).order('codigo');
+  if(error || !data || !data.length){ console.error('Falha ao carregar plano de contas real, mantendo plano local:', error); return; }
+  PLANO.length = 0;
+  data.forEach(r=>PLANO.push({
+    id:r.id, c:r.codigo, n:r.nome, t:r.tipo, pai:r.pai_codigo, cls:r.classificacao,
+    red:!!r.redutora, natureza:r.natureza, custoNatureza:r.custo_natureza,
+    centroId:r.centro_resultado_id, obs:r.observacao||''
+  }));
+  PLANO_CARREGADO=true;
+}
 function parseYMD(s){
   if(!s) return null;
   const [y,m,day] = s.split('-').map(Number);
@@ -3857,6 +4019,8 @@ async function showApp(){
   $('loginGate').style.display='none';
   $('app').classList.add('ready');
   loadDash(); initTip(); applyBrand();
+  try{ await loadPlanoContas(state.empresa); } catch(e){ console.error('Falha ao carregar plano de contas real:', e); }
+  try{ await loadCentrosResultado(state.empresa); } catch(e){ console.error('Falha ao carregar centros de resultado:', e); }
   if(state.empresa==='AGIBENS'){
     try{ await hydrateAgibensReal(); }
     catch(e){ console.error('Falha ao carregar dados reais da Agibens, mantendo demonstração:', e); }
