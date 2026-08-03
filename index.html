@@ -1330,6 +1330,27 @@ function fluxoChartDrill(i){ const c=FLUXO_COLS[i]; if(c) drill('1', c.m!=null?c
    função usada aqui, garantindo que cards e tabela nunca divirjam. */
 state.spStatus = state.spStatus||'Todos';
 function spToggle(k){ expandState.sp[k]=!expandState.sp[k]; render(); }
+function spDrillAssoc(dataISO){
+  const d2 = spLinhas().find(d=>d.data.toISOString().slice(0,10)===dataISO);
+  const itens = d2 ? d2.itens.filter(it=>it.tipo==='receber' && it.t.conta==='1.1.01') : [];
+  const soma = itens.reduce((t,it)=>t+it.valor,0);
+  let h=drawerHead('Contribuições de Associados', (d2?d2.data.toLocaleDateString('pt-BR'):'')+' — total '+money(soma,true));
+  h+='<div class="drawer-body">';
+  if(!itens.length){
+    h+='<div class="empty" style="padding:26px"><div class="t1">Nenhuma contribuição nesta data.</div></div>';
+  } else {
+    h+='<table class="tbl"><thead><tr><th>Associado</th><th>Vencimento</th><th>Documento</th><th>Status</th><th class="num">Valor Previsto</th></tr></thead><tbody>';
+    itens.slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')).forEach(it=>{
+      h+='<tr class="hoverable" onclick="detTitulo(\''+it.t.id+'\',\'receber\')"><td>'+esc(it.nome)+'</td><td>'+fdate(it.t.venc)+'</td>'+
+         '<td style="color:var(--text2)">'+esc(it.t.doc||'—')+'</td>'+
+         '<td><span class="status-badge '+(it.vencido?'st-vencido':'st-aberto')+'">'+(it.vencido?'Vencido':'Em aberto')+'</span></td>'+
+         '<td class="num">'+moneyHtml(it.valor,true)+'</td></tr>';
+    });
+    h+='</tbody><tfoot><tr class="row-total"><td colspan="4">Soma</td><td class="num">'+moneyHtml(soma,true)+'</td></tr></tfoot></table>';
+  }
+  h+='</div><div class="drawer-foot"><button class="btn" onclick="closeDrawer()">Fechar</button></div>';
+  openDrawer(h);
+}
 function spFimPeriodo(){
   const sel=MSEL(); const m1=sel[sel.length-1];
   return new Date(ANO, m1+1, 0);
@@ -1406,14 +1427,24 @@ function saldosProjetadosCard(sp){
        '<td class="num">'+moneyHtml(d2.ger,true)+'</td>'+
        '<td class="num" style="font-weight:650;color:'+(d2.saldo<0?'var(--neg)':'var(--navy)')+'">'+money(d2.saldo,true)+'</td></tr>';
     if(open){
-      d2.itens.sort((a,b)=>a.valor-b.valor).forEach(it=>{
-        h+='<tr class="hoverable lvl1" onclick="detTitulo(\''+it.t.id+'\',\''+it.tipo+'\')"><td style="font-weight:400"><span class="tree-lbl"><span style="width:26px;display:inline-block"></span>'+esc(it.nome)+
-           (it.vencido?' <span class="status-badge st-vencido" style="margin-left:6px">vencido</span>':'')+'</span></td>'+
-           '<td class="num">'+(it.valor>0?'<span class="money pos">'+money(it.valor,true)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
-           '<td class="num">'+(it.valor<0?'<span class="money neg">-'+money(-it.valor,true)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
-           '<td class="num">'+moneyHtml(it.valor,true)+'</td>'+
-           '<td class="num" style="color:var(--text2)">—</td></tr>';
-      });
+      // Contribuições de associados (conta 1.1.01) somadas em uma única linha
+      // por dia — o extrato individual só aparece no drawer (spDrillAssoc).
+      const isAssoc = it=>it.tipo==='receber' && it.t.conta==='1.1.01';
+      const assoc = d2.itens.filter(isAssoc);
+      const outros = d2.itens.filter(it=>!isAssoc(it));
+      const linhaRow = (nome, valor, vencido, onclick)=>
+        '<tr class="hoverable lvl1" onclick="'+onclick+'"><td style="font-weight:400"><span class="tree-lbl"><span style="width:26px;display:inline-block"></span>'+esc(nome)+
+        (vencido?' <span class="status-badge st-vencido" style="margin-left:6px">vencido</span>':'')+'</span></td>'+
+        '<td class="num">'+(valor>0?'<span class="money pos">'+money(valor,true)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
+        '<td class="num">'+(valor<0?'<span class="money neg">-'+money(-valor,true)+'</span>':'<span style="color:var(--text2)">R$ 0</span>')+'</td>'+
+        '<td class="num">'+moneyHtml(valor,true)+'</td>'+
+        '<td class="num" style="color:var(--text2)">—</td></tr>';
+      const rows=outros.map(it=>({valor:it.valor, html:linhaRow(it.nome, it.valor, it.vencido, "detTitulo('"+it.t.id+"','"+it.tipo+"')")}));
+      if(assoc.length){
+        const soma=assoc.reduce((t,it)=>t+it.valor,0);
+        rows.push({valor:soma, html:linhaRow('Contribuições de Associados ('+assoc.length+')', soma, false, "spDrillAssoc('"+k+"')")});
+      }
+      rows.sort((a,b)=>a.valor-b.valor).forEach(r=>h+=r.html);
     }
   });
   h+='</tbody></table></div></div>';
