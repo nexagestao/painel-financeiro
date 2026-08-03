@@ -533,11 +533,17 @@ function fluxoMes(m, reg){
   return {ent, sai, ger:ent-sai};
 }
 function saldos(reg){
+  // A partir de anchorM (mês do saldo real usado como saldoIni), os fluxos
+  // entram na trajetória de caixa normalmente. Antes disso, ent/sai/ger de
+  // cada mês continuam reais (para DRE e Demonstrativo do Fluxo), mas não são
+  // somados ao saldo — já estão embutidos no saldoIni, evitando dupla contagem.
+  const anchor = BASES[state.empresa].anchorM || 0;
   const out=[]; let s = BASES[state.empresa].saldoIni;
   for(let m=0;m<12;m++){
     const f = fluxoMes(m,reg);
-    out.push({ini:s, ...f, fim:s+f.ger});
-    s += f.ger;
+    const ger = m>=anchor ? f.ger : 0;
+    out.push({ini:s, ...f, fim:s+ger});
+    s += ger;
   }
   return out;
 }
@@ -3153,20 +3159,18 @@ async function hydrateAgibensReal(){
       vprev:Number(r.valor_previsto), vrec:Number(r.valor_recebido||0), status};
   });
 
-  // O acompanhamento da Agibens começa em agosto/2026 (mês 7) — o saldo inicial
-  // é o saldo real das contas em 31/07/2026, então já reflete tudo o que veio
-  // antes (inclusive jun/jul). Lançamentos com data anterior a agosto não
-  // entram na simulação de novo, senão o efeito deles seria contado duas vezes.
-  const INICIO_ANO = 7;
+  // DRE e Demonstrativo do Fluxo usam todos os títulos reais, de qualquer mês
+  // (não há corte aqui) — quem evita a dupla contagem no SALDO de caixa é o
+  // anchorM em saldos(), não a ausência de dados na DRE.
   const newVal = {};
   analiticas().forEach(a=>{ newVal[a.c] = {prev:Array(12).fill(0), real:Array(12).fill(0)}; });
   PAGAR.AGIBENS.forEach(t=>{
-    if(t.venc && t.venc.getFullYear()===ANO && t.venc.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
-    if(t.pgto && t.pgto.getFullYear()===ANO && t.pgto.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].real[t.pgto.getMonth()] += t.vpago;
+    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
+    if(t.pgto && t.pgto.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.pgto.getMonth()] += t.vpago;
   });
   RECEBER.AGIBENS.forEach(t=>{
-    if(t.venc && t.venc.getFullYear()===ANO && t.venc.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
-    if(t.rec && t.rec.getFullYear()===ANO && t.rec.getMonth()>=INICIO_ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += t.vrec;
+    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
+    if(t.rec && t.rec.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += t.vrec;
   });
   VAL.AGIBENS = newVal;
 
@@ -3177,15 +3181,17 @@ async function hydrateAgibensReal(){
     BASES.AGIBENS.bancos = contas.map(c=>({nome:c.nome, banco:c.banco,
       prop: totalFinal>0 ? (saldoPorConta[c.id] ?? Number(c.saldo_inicial))/totalFinal : 1/contas.length}));
 
-    // saldoIni é o saldo real de cada conta em 31/07/2026 (fim de julho),
-    // não o saldo_inicial cadastrado — como jun/jul não entram mais na
-    // simulação (ver INICIO_ANO acima), ele já "chega" em agosto sem alteração.
+    // saldoIni é o saldo real de cada conta em 31/07/2026 (fim de julho), não
+    // o saldo_inicial cadastrado. anchorM (agosto, mês 7) diz a saldos() para
+    // só somar fluxos ao caixa a partir daí — jun/jul já estão embutidos no
+    // saldoIni e continuam aparecendo normalmente na DRE e no Demonstrativo.
     const FIM_JULHO = '2026-07-31';
     const saldoJulhoPorConta = {};
     saldosRows.filter(s=>s.data<=FIM_JULHO).forEach(s=>{
       if(!(s.conta_bancaria_id in saldoJulhoPorConta)) saldoJulhoPorConta[s.conta_bancaria_id]=Number(s.saldo);
     });
     BASES.AGIBENS.saldoIni = contas.reduce((t,c)=>t+(saldoJulhoPorConta[c.id] ?? Number(c.saldo_inicial)),0);
+    BASES.AGIBENS.anchorM = 7;
   }
   AGIBENS_HYDRATED = true;
 }
