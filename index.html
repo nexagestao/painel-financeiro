@@ -2148,7 +2148,14 @@ function renderAparencia(){
     '<div class="card"><div class="card-head"><div style="flex:1"><div class="card-title">Identidade — '+EMPRESAS[state.empresa].curto+'</div><div class="card-sub">Cada empresa possui logo, nome e cor institucional próprios</div></div></div><div class="card-body">'+
     '<div class="field"><label>Nome da plataforma</label><input type="text" value="'+esc(BRAND[state.empresa].nome)+'" onchange="BRAND[state.empresa].nome=this.value;applyBrand();render()"></div>'+
     '<div class="field"><label>Cor institucional da empresa</label><input type="color" value="'+BRAND[state.empresa].cor+'" style="height:42px;padding:4px" onchange="setAccent(this.value)"></div>'+
-    '<div class="field"><label>Logotipo</label><button class="btn" style="width:100%" onclick="toast(\'Upload demonstrativo de logotipo\')">'+icon('upload',14)+' Enviar logotipo</button></div>'+
+    '<div class="field"><label>Logotipo</label>'+
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:9px">'+companyMark(state.empresa,56)+
+    '<div style="font-size:11.5px;color:var(--text2)">PNG, JPG, WebP ou SVG &middot; até 2MB<br>Visível para todos os usuários desta empresa, em qualquer dispositivo.</div></div>'+
+    '<input type="file" id="logoInput" accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml" style="display:none" onchange="onLogoSelected(this)">'+
+    '<div style="display:flex;gap:8px"><button class="btn" style="flex:1;justify-content:center" onclick="$(\'logoInput\').click()">'+icon('upload',14)+' '+(BRAND[state.empresa].logoUrl?'Substituir logotipo':'Enviar logotipo')+'</button>'+
+    (BRAND[state.empresa].logoUrl?'<button class="btn" onclick="removeLogo()">Remover</button>':'')+'</div>'+
+    '<div id="logoStatus" style="font-size:11.5px;color:var(--text2);margin-top:6px"></div>'+
+    '</div>'+
     '</div></div>'+
     '<div class="card"><div class="card-head"><div class="card-title">Experiência</div></div><div class="card-body">'+
     aparLinha('Modo escuro','Tema escuro em toda a plataforma','dark')+
@@ -2172,6 +2179,46 @@ function aparToggle(key){
 function setAccent(c){
   BRAND[state.empresa].cor=c;
   applyBrand(); saveDash(); render();
+}
+async function onLogoSelected(inp){
+  const file = inp.files && inp.files[0];
+  if(!file) return;
+  const allowed = ['image/png','image/jpeg','image/webp','image/svg+xml'];
+  if(!allowed.includes(file.type)){ toast('Formato não suportado — use PNG, JPG, JPEG, WebP ou SVG'); inp.value=''; return; }
+  if(file.size > 2*1024*1024){ toast('Arquivo maior que 2MB'); inp.value=''; return; }
+  const emp = state.empresa;
+  const st = $('logoStatus'); if(st) st.textContent='Enviando...';
+  try{
+    const ext = (file.name.split('.').pop()||'png').toLowerCase();
+    const path = emp.toLowerCase()+'/logo.'+ext;
+    const { error: upErr } = await sb.storage.from('logos').upload(path, file, {upsert:true, contentType:file.type});
+    if(upErr) throw upErr;
+    const { data: pub } = sb.storage.from('logos').getPublicUrl(path);
+    const url = pub.publicUrl+'?v='+Date.now();
+    const { error: dbErr } = await sb.from('empresas').update({logo_url:url}).eq('id', EMPRESA_IDS[emp]);
+    if(dbErr) throw dbErr;
+    BRAND[emp].logoUrl = url;
+    toast('Logotipo atualizado');
+    render();
+  }catch(e){
+    console.error('Falha ao enviar logotipo:', e);
+    toast('Falha ao enviar o logotipo — tente novamente');
+    if(st) st.textContent='Falha ao enviar. Tente novamente.';
+  }
+  inp.value='';
+}
+async function removeLogo(){
+  const emp = state.empresa;
+  try{
+    const { error } = await sb.from('empresas').update({logo_url:null}).eq('id', EMPRESA_IDS[emp]);
+    if(error) throw error;
+    BRAND[emp].logoUrl = null;
+    toast('Logotipo removido');
+    render();
+  }catch(e){
+    console.error('Falha ao remover logotipo:', e);
+    toast('Falha ao remover o logotipo — tente novamente');
+  }
 }
 function applyChrome(){
   document.body.classList.toggle('dark',state.dark);
@@ -3176,6 +3223,7 @@ async function loadUserProfile(user){
 }
 
 const AGIBENS_ID = 'afa74427-da67-4f1b-9789-bd8d7937284e';
+const EMPRESA_IDS = {AGIBENS:AGIBENS_ID, DUNORTE:'d375aabf-a539-45c6-bf39-16ea736cad9c'};
 
 function parseYMD(s){
   if(!s) return null;
@@ -3270,6 +3318,14 @@ async function hydrateAgibensReal(){
   AGIBENS_HYDRATED = true;
 }
 
+async function loadBrandLogos(){
+  const { data, error } = await sb.from('empresas').select('id, logo_url');
+  if(error || !data) return;
+  Object.keys(EMPRESA_IDS).forEach(k=>{
+    const row = data.find(r=>r.id===EMPRESA_IDS[k]);
+    if(row) BRAND[k].logoUrl = row.logo_url || null;
+  });
+}
 async function showApp(){
   $('loginGate').style.display='none';
   $('app').classList.add('ready');
@@ -3278,6 +3334,7 @@ async function showApp(){
     try{ await hydrateAgibensReal(); }
     catch(e){ console.error('Falha ao carregar dados reais da Agibens, mantendo demonstração:', e); }
   }
+  try{ await loadBrandLogos(); } catch(e){ console.error('Falha ao carregar logos das empresas:', e); }
   render();
 }
 
