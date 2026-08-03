@@ -61,6 +61,10 @@ input,select,textarea{font-family:inherit;font-size:13px;color:var(--text)}
 #app.collapsed .brand-name,#app.collapsed .brand-sub{display:none}
 .company-pill{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg);cursor:pointer;width:100%}
 .company-pill:hover{border-color:var(--accent)}
+.hdr-company{display:flex;align-items:center;gap:10px;padding:2px 4px 2px 2px;flex:none}
+.hdr-company-name{font-family:var(--font-display);font-weight:650;font-size:14.5px;color:var(--text);white-space:nowrap}
+.hdr-emp-sel{border:1px solid var(--border);border-radius:9px;padding:6px 26px 6px 11px;font-size:12.5px;font-weight:600;background:var(--surface);color:var(--text2);margin-left:2px;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><path d='M1 3l4 4 4-4' stroke='%23667085' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
+.hdr-emp-sel:hover{border-color:var(--accent);color:var(--text)}
 .company-dot{width:22px;height:22px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
 .company-pill span.nm{font-weight:600;font-size:12.5px;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #app.collapsed .company-pill span,#app.collapsed .company-pill svg{display:none}
@@ -973,7 +977,7 @@ function podeVer(id){ return PERFIS[state.role].mods.includes(id); }
 function renderSidebar(){
   const e=EMPRESAS[state.empresa];
   let h='<div class="side-head"><div class="brand"><div class="brand-mark">PE</div><div><div class="brand-name">'+esc(state.appName)+'</div></div></div>';
-  h+='<button class="company-pill" onclick="cycleEmpresa()"><div class="company-dot">'+e.sigla+'</div><span class="nm">'+e.curto+'</span>'+icon('swap',14)+'</button></div>';
+  h+='<button class="company-pill" onclick="cycleEmpresa()">'+companyMark(state.empresa,22)+'<span class="nm">'+e.curto+'</span>'+icon('swap',14)+'</button></div>';
   h+='<nav class="side-nav">';
   NAV.forEach(sec=>{
     const items=sec.items.filter(i=>podeVer(i.id));
@@ -994,11 +998,13 @@ function renderSidebar(){
   $('sidebar').innerHTML=h;
 }
 function renderTopbar(){
+  const ks=Object.keys(EMPRESAS), e=EMPRESAS[state.empresa];
   let h='<button class="icon-btn" onclick="toggleSidebar()">'+icon('panel',16)+'</button>';
-  h+='<select class="select" onchange="setEmpresa(this.value)">'+
-     Object.keys(EMPRESAS).map(k=>'<option value="'+k+'"'+(k===state.empresa?' selected':'')+'>'+EMPRESAS[k].curto+'</option>').join('')+'</select>';
+  h+='<div class="hdr-company">'+companyMark(state.empresa,34)+'<div class="hdr-company-name">'+esc(e.curto)+'</div>'+
+     (ks.length>1?'<select class="hdr-emp-sel" onchange="setEmpresa(this.value)" title="Trocar empresa">'+
+       ks.map(k=>'<option value="'+k+'"'+(k===state.empresa?' selected':'')+'>'+EMPRESAS[k].curto+'</option>').join('')+'</select>':'')+
+     '</div>';
   h+='<button class="btn sm" onclick="openPeriodo()" title="Filtro de período">'+icon('calendar',14)+' '+esc(state.periodoLabel)+' '+icon('chevD',12)+'</button>';
-  h+='<div class="top-status"><span class="status-dot"></span>Base atualizada em '+state.baseAtualizada+'</div>';
   h+='<div class="top-sep"></div>';
   h+='<button class="btn sm ghost" onclick="openFiltros()">'+icon('filter',14)+' Filtros</button>';
   if(PERFIS[state.role].exportar)
@@ -2265,9 +2271,14 @@ body.dark .card:hover{border-color:#2D3644}
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
 const BRAND = {
-  AGIBENS:{cor:'#0E5C6E', nome:'Painel Executivo Financeiro', logo:'AG'},
-  DUNORTE:{cor:'#0E5C6E', nome:'Painel Executivo Financeiro', logo:'DN'}
+  AGIBENS:{cor:'#0E5C6E', nome:'Painel Executivo Financeiro', logo:'AG', logoUrl:null},
+  DUNORTE:{cor:'#0E5C6E', nome:'Painel Executivo Financeiro', logo:'DN', logoUrl:null}
 };
+function companyMark(emp, size){
+  const e=EMPRESAS[emp], b=BRAND[emp], s=size||34;
+  if(b.logoUrl) return '<img src="'+esc(b.logoUrl)+'" alt="'+esc(e.curto)+'" style="width:'+s+'px;height:'+s+'px;border-radius:9px;object-fit:contain;background:var(--surface);border:1px solid var(--border);flex:none">';
+  return '<div style="width:'+s+'px;height:'+s+'px;border-radius:9px;background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:'+Math.round(s*.4)+'px;display:flex;align-items:center;justify-content:center;flex:none">'+e.sigla+'</div>';
+}
 function applyBrand(){
   const b=BRAND[state.empresa];
   state.accent=b.cor; state.appName=b.nome;
