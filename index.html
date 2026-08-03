@@ -217,6 +217,11 @@ body.dark td.total-highlight{background:#123138}
 .tbl-dre th.av-col,.tbl-dre td.av-col{color:var(--text2);font-size:12.5px;border-left:1px dashed var(--border)}
 .tbl-dre th:first-child,.tbl-dre td:first-child{position:sticky;left:0;z-index:2;background:var(--surface);box-shadow:2px 0 4px -2px rgba(16,24,40,.12)}
 .tbl-dre thead th:first-child{z-index:3}
+/* Cabeçalho de duas linhas: a 1ª (Descrição + meses) já herda position:sticky;top:0
+   de ".tbl th"; a 2ª (R$ / AV%) herdaria o mesmo top:0 e sobreporia a 1ª, então
+   recebe um top igual à altura real da 1ª linha (padding 9px+9px, borda 1px e
+   texto 10.5px ≈ 34px) para empilhar logo abaixo dela, sem sobreposição. */
+.tbl-dre thead tr:last-child th{top:34px}
 .tbl-dre tr.row-result td:first-child{background:#E8F1F3 !important}
 .tbl-dre tr.row-result.final td:first-child{background:#CFE4E8 !important}
 body.dark .tbl-dre tr.row-result td:first-child{background:#123138 !important}
