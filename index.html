@@ -1801,22 +1801,45 @@ function saldosProjetadosCard(sp){
 }
 
 /* =========================== DRE =========================== */
+const DRE_GRUPOS_CUSTO=['DEDUÇÕES DA RECEITA','CUSTOS','DESPESAS OPERACIONAIS','DESPESAS','IRPJ E CSLL'];
+state.dreView = state.dreView||'valor'; // 'valor' (R$) | 'av' (análise vertical)
+function avPct(x){ return x.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
+/* Célula em R$ (comportamento original) ou AV% (valor da linha / Receita Bruta
+   do mês × 100 — só na apresentação, nada é recalculado no Supabase). Contas e
+   grupos de custo/dedução/tributo saem com sinal invertido (negativo) na AV%;
+   linhas de Resultado e Receita mantêm o sinal já calculado por dreLinhaVal/v. */
+function dreCell(vv, rb, opts){
+  opts=opts||{};
+  const clickAttr = opts.click ? ' class="num clickv" onclick="'+opts.click+'"' : ' class="num"';
+  if(state.dreView!=='av'){
+    return '<td'+clickAttr+'>'+(opts.result?resultMoney(vv,opts.dec):moneyHtml(vv,opts.dec,opts.dir))+'</td>';
+  }
+  if(Math.abs(rb)<0.005) return '<td'+clickAttr+tip('Não há Receita Bruta no período.')+'>—</td>';
+  let p=vv/rb*100; if(opts.flip) p=-p;
+  const cls=p>0.005?'pos':p<-0.005?'neg':'zero';
+  return '<td'+clickAttr+'><span class="money '+cls+'">'+avPct(p)+'</span></td>';
+}
 function renderDre(){
   const reg = state.regime==='pxr'?'proj':state.regime;
   const meses=MSEL();
   const cfg=DRE_CFG[state.empresa].filter(l=>l.ativa);
+  const rbLine = cfg.find(l=>l.nome==='RECEITA BRUTA');
+  const rbPorMes = meses.map(m=>rbLine?dreLinhaVal(rbLine,m,reg):0);
+  const rbTotal = rbPorMes.reduce((t,x)=>t+x,0);
   let h=pageHead('DRE Gerencial','',
     PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':'');
+  h+='<div class="seg" style="margin-bottom:14px">'+[['valor','R$'],['av','AV %']].map(o=>
+    '<button class="'+(state.dreView===o[0]?'on':'')+'" onclick="state.dreView=\''+o[0]+'\';render()">'+o[1]+'</button>').join('')+'</div>';
   h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl"><thead><tr><th style="min-width:260px">Descrição</th>';
   meses.forEach(m=>h+='<th class="num">'+MESES[m]+'</th>');
   h+='<th class="num">Total</th></tr></thead><tbody>';
 
   function grpColor(l){
-    if(['CUSTOS','DESPESAS OPERACIONAIS','DESPESAS','DEDUÇÕES DA RECEITA','IRPJ E CSLL'].includes(l.nome)) return 'var(--neg)';
+    if(DRE_GRUPOS_CUSTO.includes(l.nome)) return 'var(--neg)';
     if(l.nome.indexOf('RECEITA')>=0) return 'var(--pos)';
     return 'inherit';
   }
-  function contaRows(code, level){
+  function contaRows(code, level, flip){
     const a=acc(code); if(!a) return '';
     const kids=filhos(code);
     const open=!!expandState.dre[code];
@@ -1825,35 +1848,38 @@ function renderDre(){
       (kids.length?'<button class="tree-toggle" onclick="toggleRow(\'dre\',\''+code+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
       esc(a.n)+(a.red?' <span class="status-badge st-neutro" style="margin-left:6px">redutora</span>':'')+'</span></td>';
     let tot=0;
-    meses.forEach(m=>{
+    meses.forEach((m,i)=>{
       const vv=v(code,m,reg); tot+=vv;
-      hh+='<td class="num clickv" onclick="drill(\''+code+'\','+m+')">'+moneyHtml(vv,null,dir)+'</td>';
+      hh+=dreCell(vv, rbPorMes[i], {click:"drill('"+code+"',"+m+")", dir, flip});
     });
-    hh+='<td class="num" style="font-weight:600">'+moneyHtml(tot,null,dir)+'</td></tr>';
-    if(kids.length&&open) kids.forEach(k=>hh+=contaRows(k.c,level+1));
+    hh+=dreCell(tot, rbTotal, {dir, flip}).replace('class="num','style="font-weight:600" class="num');
+    hh+='</tr>';
+    if(kids.length&&open) kids.forEach(k=>hh+=contaRows(k.c,level+1,flip));
     return hh;
   }
   cfg.forEach(l=>{
     if(l.tipo==='Grupo'){
       const open=!!expandState.dre[l.id];
       const dirG=l.nome.indexOf('RECEITA')>=0?'in':null;
+      const flipG = DRE_GRUPOS_CUSTO.includes(l.nome);
       let tot=0;
       let hh='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'dre\',\''+l.id+'\')">'+(open?'&minus;':'+')+'</button>'+
         '<span style="color:'+grpColor(l)+';font-weight:650">'+esc(l.nome)+'</span></span></td>';
-      meses.forEach(m=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv;
-        hh+='<td class="num clickv" onclick="drillLinha(\''+l.id+'\','+m+')">'+moneyHtml(vv,null,dirG)+'</td>'; });
-      hh+='<td class="num" style="font-weight:650">'+moneyHtml(tot,null,dirG)+'</td></tr>';
+      meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv;
+        hh+=dreCell(vv, rbPorMes[i], {click:"drillLinha('"+l.id+"',"+m+")", dir:dirG, flip:flipG}); });
+      hh+=dreCell(tot, rbTotal, {dir:dirG, flip:flipG}).replace('class="num','style="font-weight:650" class="num');
+      hh+='</tr>';
       h+=hh;
       if(open){
-        if(l.kids){ l.kids.forEach(([c])=>{ h+=contaRows(c,1); }); }
-        else filhos(l.ref).forEach(f=>{ h+=contaRows(f.c,1); });
+        if(l.kids){ l.kids.forEach(([c])=>{ h+=contaRows(c,1,flipG); }); }
+        else filhos(l.ref).forEach(f=>{ h+=contaRows(f.c,1,flipG); });
       }
     } else {
       let tot=0;
       const isFinal = l.nome==='RESULTADO LÍQUIDO';
       let hh='<tr class="row-result'+(isFinal?' final':'')+'"><td>'+esc(l.nome)+'</td>';
-      meses.forEach(m=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+='<td class="num">'+resultMoney(vv)+'</td>'; });
-      hh+='<td class="num">'+resultMoney(tot)+'</td></tr>';
+      meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+=dreCell(vv, rbPorMes[i], {result:true}); });
+      hh+=dreCell(tot, rbTotal, {result:true})+'</tr>';
       h+=hh;
     }
   });
