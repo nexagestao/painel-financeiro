@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel Executivo Financeiro</title>
+<title>Nexa Gestão | Painel Financeiro</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -272,7 +275,7 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
 <body>
 <div id="loginGate" style="display:none">
   <form class="login-card" id="loginForm">
-    <div class="brand-mark">PE</div>
+    <img class="brand-mark" src="assets/nexa-icone-navy.svg" alt="Nexa Gestão" style="object-fit:contain">
     <h1>Painel Executivo Financeiro</h1>
     <p>Entre com sua conta para acessar o painel.</p>
     <div class="login-field"><label for="loginEmail">E-mail</label><input type="email" id="loginEmail" autocomplete="username" required></div>
@@ -1007,7 +1010,7 @@ const NAV = [
 function podeVer(id){ return PERFIS[state.role].mods.includes(id); }
 function renderSidebar(){
   const e=EMPRESAS[state.empresa];
-  let h='<div class="side-head"><div class="brand"><div class="brand-mark">PE</div><div><div class="brand-name">'+esc(state.appName)+'</div></div></div>';
+  let h='<div class="side-head"><div class="brand"><img class="brand-mark" src="assets/nexa-icone-navy.svg" alt="Nexa Gestão" style="width:44px;height:44px;border-radius:11px;object-fit:contain;background:none"><div><div class="brand-name">'+esc(state.appName)+'</div></div></div>';
   h+='<button class="company-pill" onclick="cycleEmpresa()">'+companyMark(state.empresa,22)+'<span class="nm">'+e.curto+'</span>'+icon('swap',14)+'</button></div>';
   h+='<nav class="side-nav">';
   NAV.forEach(sec=>{
