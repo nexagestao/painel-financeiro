@@ -183,7 +183,13 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
 .st-neutro{color:var(--text2);background:var(--bg)}
 
 /* ---------- Charts ---------- */
-.chart-box{width:100%;overflow:hidden}
+.chart-box{width:100%;max-width:1120px;display:block;margin:0 auto;overflow:hidden}
+.pc-body{display:flex;gap:20px;align-items:stretch;justify-content:center}
+.pc-body .chart-box{flex:none}
+.pc-summary{display:none;flex-direction:column;justify-content:center;gap:10px;min-width:180px;max-width:220px;padding:8px 4px}
+.pc-summary .row{font-size:12px;color:var(--text2)}
+.pc-summary .row b{display:block;font-size:15px;font-weight:700;color:var(--text);margin-top:2px}
+@media(min-width:1500px){ .pc-summary{display:flex} }
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);padding:0 18px 4px}
 .legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:6px}
 .axis-lbl{font-family:'Inter',sans-serif;font-size:12.5px;font-weight:500;letter-spacing:normal;fill:var(--text2)}
@@ -1586,15 +1592,21 @@ function renderFluxo(){
   const lbls=cols.map(c=>c.label.replace(/<br>.*/,''));
   const prevGer=cols.map(c=>colFluxo(c,'prev').ger);
   const splitAt = state.fluxoPeriodo==='mensal' ? cols.findIndex(c=>c.m===REAL_M) : -1;
+  const resLiquido=totalEnt-totalSai, saldoFimPeriodo=saldosCol[saldosCol.length-1].fim;
   h+=chartCard({
     id:'evolucao', title:'Fluxo de Caixa — Entradas, Saídas e Saldo',
-    trend: pctChange(totalEnt-totalSai, prevGer.reduce((t,x)=>t+x,0)),
+    trend: pctChange(resLiquido, prevGer.reduce((t,x)=>t+x,0)),
     body: pcComboBarLine('flx', lbls,
       [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--pos)'},
        {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--neg)', neg:true}],
       {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
-      {h:300, click:'fluxoChartDrill'})
-      + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}])
+      {click:'fluxoChartDrill'})
+      + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]),
+    summary: '<div class="row">Resumo do período<b style="color:var(--text2);font-weight:600;font-size:11px">'+esc(state.periodoLabel)+'</b></div>'+
+      '<div class="row">Total de entradas<b style="color:var(--pos)">'+money(totalEnt,true)+'</b></div>'+
+      '<div class="row">Total de saídas<b style="color:var(--neg)">-'+money(totalSai,true)+'</b></div>'+
+      '<div class="row">Resultado líquido<b style="color:'+(resLiquido<0?'var(--neg)':resLiquido>0?'var(--pos)':'var(--text2)')+'">'+money(resLiquido,true)+'</b></div>'+
+      '<div class="row">Saldo final<b style="color:'+(saldoFimPeriodo<0?'var(--neg)':saldoFimPeriodo>0?'var(--pos)':'var(--text2)')+'">'+money(saldoFimPeriodo,true)+'</b></div>'
   });
 
   h+=saldosProjetadosCard(sp);
@@ -2720,7 +2732,7 @@ function smoothPath(pts){
 function fmtOf(o){ return o&&o.fmt==='pct' ? (x=>pct(x)) : (x=>money(x)); }
 function pcLineArea(cid, labels, series, opts){
   opts=opts||{};
-  const H=opts.h||300, W=760, L=64, R=16, T=18, B=28;
+  const H=opts.h||420, W=1120, L=76, R=24, T=22, B=34;
   const F=fmtOf(opts);
   const all=series.flatMap(s=>s.values.filter(x=>x!=null));
   let {min,max}=yScaleInfo(Math.min(...all,0),Math.max(...all));
@@ -2772,7 +2784,7 @@ function pcLineArea(cid, labels, series, opts){
 }
 function pcBars(cid, labels, groups, opts){
   opts=opts||{};
-  const H=opts.h||280, W=760, L=64, R=16, T=16, B=28;
+  const H=opts.h||420, W=1120, L=76, R=24, T=20, B=34;
   const F=fmtOf(opts);
   const all=groups.flatMap(g=>g.values);
   let {min,max}=yScaleInfo(Math.min(0,...all),Math.max(...all,0));
@@ -2804,7 +2816,7 @@ function pcBars(cid, labels, groups, opts){
    a partir do mês corrente quando splitAt é informado). */
 function pcComboBarLine(cid, labels, bars, line, opts){
   opts=opts||{};
-  const H=opts.h||300, W=760, L=64, R=16, T=18, B=28;
+  const H=opts.h||420, W=1120, L=76, R=24, T=22, B=34;
   const F=fmtOf(opts);
   const allBar=bars.flatMap(b=>b.values);
   const allLine=line.values.filter(x=>x!=null);
@@ -2922,7 +2934,7 @@ function pcDonut(cid, items, opts){
 }
 function pcWaterfall(cid, steps, opts){
   opts=opts||{};
-  const H=opts.h||300, W=760, L=60, R=16, T=16, B=44;
+  const H=opts.h||420, W=1120, L=72, R=24, T=20, B=48;
   let run=0;
   const pts=steps.map(s=>{ const st={...s}; if(s.total){ st.from=0; st.to=s.value; run=s.value; } else { st.from=run; st.to=run+s.value; run=st.to; } return st; });
   const all=pts.flatMap(p=>[p.from,p.to,0]);
@@ -2988,7 +3000,7 @@ function chartCard(o){
     (def?'<button class="icon-btn" style="width:28px;height:28px" title="Expandir" onclick="openChartFull(\''+o.id+'\')">'+icon('chevR',13)+'</button>':'')+
     '<button class="icon-btn" style="width:28px;height:28px" title="Exportar" onclick="toast(\'Exportação demonstrativa — '+o.title+' (PNG/CSV)\')">'+icon('download',13)+'</button>'+
     '<button class="icon-btn" style="width:28px;height:28px" title="Configurar" onclick="cfgChart(\''+o.id+'\')">'+icon('settings',13)+'</button></div></div>'+
-    '<div class="card-body" style="padding-top:6px;flex:1">'+o.body+'</div></div>';
+    '<div class="card-body" style="padding-top:6px;flex:1">'+(o.summary?('<div class="pc-body">'+o.body+'<div class="pc-summary">'+o.summary+'</div></div>'):o.body)+'</div></div>';
 }
 function cfgChart(id){
   if(PERFIS[state.role].configurar){ state.dsel={kind:'chart',id}; goAdmin('dashboard'); }
