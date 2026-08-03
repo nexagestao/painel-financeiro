@@ -171,6 +171,16 @@ body.dark tr.row-result.final td{background:#173F47}
 .money.zero{color:var(--text2)}
 td.total-highlight{background:#E8F1F3;border-left:2px solid #0F4C5C;font-weight:700 !important}
 body.dark td.total-highlight{background:#123138}
+/* DRE: R$ e AV% lado a lado, com a coluna de descrição fixa durante o scroll
+   horizontal (a tabela tem muitas colunas: 2 por mês + 2 de total). */
+.tbl-dre{min-width:900px}
+.tbl-dre th.av-col,.tbl-dre td.av-col{color:var(--text2);font-size:12.5px;border-left:1px dashed var(--border)}
+.tbl-dre th:first-child,.tbl-dre td:first-child{position:sticky;left:0;z-index:2;background:var(--surface);box-shadow:2px 0 4px -2px rgba(16,24,40,.12)}
+.tbl-dre thead th:first-child{z-index:3}
+.tbl-dre tr.row-result td:first-child{background:#E8F1F3 !important}
+.tbl-dre tr.row-result.final td:first-child{background:#CFE4E8 !important}
+body.dark .tbl-dre tr.row-result td:first-child{background:#123138 !important}
+body.dark .tbl-dre tr.row-result.final td:first-child{background:#173F47 !important}
 tr.row-sub td{font-weight:600;background:var(--bg)}
 td.clickv{cursor:pointer;border-radius:6px}
 td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
@@ -1802,22 +1812,32 @@ function saldosProjetadosCard(sp){
 
 /* =========================== DRE =========================== */
 const DRE_GRUPOS_CUSTO=['DEDUÇÕES DA RECEITA','CUSTOS','DESPESAS OPERACIONAIS','DESPESAS','IRPJ E CSLL'];
-state.dreView = state.dreView||'valor'; // 'valor' (R$) | 'av' (análise vertical)
 function avPct(x){ return x.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
-/* Célula em R$ (comportamento original) ou AV% (valor da linha / Receita Bruta
-   do mês × 100 — só na apresentação, nada é recalculado no Supabase). Contas e
-   grupos de custo/dedução/tributo saem com sinal invertido (negativo) na AV%;
-   linhas de Resultado e Receita mantêm o sinal já calculado por dreLinhaVal/v. */
-function dreCell(vv, rb, opts){
+/* R$ e AV% lado a lado, sempre visíveis (sem seletor) — só apresentação,
+   nada é recalculado no Supabase. A cor/sinal não depende de o valor estar
+   positivo ou negativo no banco: depende da natureza contábil da linha.
+   Deduções da Receita, Custos, Despesas Operacionais e IRPJ/CSLL (e as
+   contas dentro delas) são sempre saída — saem negativos e vermelhos em R$
+   e em AV%, mesmo vindo como magnitude positiva do cálculo. Receita e as
+   linhas de Resultado (inclusive Resultado Financeiro) mantêm o sinal já
+   líquido calculado por v()/dreLinhaVal — verde quando positivo, vermelho
+   quando negativo, cinza quando zero. */
+function dreCellPair(vv, rb, opts){
   opts=opts||{};
+  const flip = !!opts.flip;
+  const dv = flip ? -vv : vv;
+  const clsV = dv>0.005?'pos':dv<-0.005?'neg':'zero';
   const clickAttr = opts.click ? ' class="num clickv" onclick="'+opts.click+'"' : ' class="num"';
-  if(state.dreView!=='av'){
-    return '<td'+clickAttr+'>'+(opts.result?resultMoney(vv,opts.dec):moneyHtml(vv,opts.dec,opts.dir))+'</td>';
+  const tdMoney = '<td'+clickAttr+(opts.strong?' style="font-weight:'+opts.strong+'"':'')+'><span class="money '+clsV+'">'+money(dv,opts.dec)+'</span></td>';
+  let tdAv;
+  if(Math.abs(rb)<0.005){
+    tdAv = '<td class="num av-col"'+(opts.strong?' style="font-weight:'+opts.strong+'"':'')+tip('Não há Receita Bruta no período.')+'>—</td>';
+  } else {
+    let p=vv/rb*100; if(flip) p=-p;
+    const clsP=p>0.005?'pos':p<-0.005?'neg':'zero';
+    tdAv = '<td class="num av-col"'+(opts.strong?' style="font-weight:'+opts.strong+'"':'')+'><span class="money '+clsP+'">'+avPct(p)+'</span></td>';
   }
-  if(Math.abs(rb)<0.005) return '<td'+clickAttr+tip('Não há Receita Bruta no período.')+'>—</td>';
-  let p=vv/rb*100; if(opts.flip) p=-p;
-  const cls=p>0.005?'pos':p<-0.005?'neg':'zero';
-  return '<td'+clickAttr+'><span class="money '+cls+'">'+avPct(p)+'</span></td>';
+  return tdMoney+tdAv;
 }
 function renderDre(){
   const reg = state.regime==='pxr'?'proj':state.regime;
@@ -1828,11 +1848,12 @@ function renderDre(){
   const rbTotal = rbPorMes.reduce((t,x)=>t+x,0);
   let h=pageHead('DRE Gerencial','',
     PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':'');
-  h+='<div class="seg" style="margin-bottom:14px">'+[['valor','R$'],['av','AV %']].map(o=>
-    '<button class="'+(state.dreView===o[0]?'on':'')+'" onclick="state.dreView=\''+o[0]+'\';render()">'+o[1]+'</button>').join('')+'</div>';
-  h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl"><thead><tr><th style="min-width:260px">Descrição</th>';
-  meses.forEach(m=>h+='<th class="num">'+MESES[m]+'</th>');
-  h+='<th class="num">Total</th></tr></thead><tbody>';
+  h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl tbl-dre"><thead>';
+  h+='<tr><th rowspan="2" style="min-width:250px">Descrição</th>';
+  meses.forEach(m=>h+='<th colspan="2" style="text-align:center">'+MESES[m]+'</th>');
+  h+='<th colspan="2" style="text-align:center">Total</th></tr><tr>';
+  meses.forEach(()=>h+='<th class="num">R$</th><th class="num av-col">AV %</th>');
+  h+='<th class="num">R$</th><th class="num av-col">AV %</th></tr></thead><tbody>';
 
   function grpColor(l){
     if(DRE_GRUPOS_CUSTO.includes(l.nome)) return 'var(--neg)';
@@ -1843,16 +1864,15 @@ function renderDre(){
     const a=acc(code); if(!a) return '';
     const kids=filhos(code);
     const open=!!expandState.dre[code];
-    const dir=code[0]==='1'?'in':null;
     let hh='<tr class="lvl'+Math.min(level,3)+'"><td><span class="tree-lbl">'+
       (kids.length?'<button class="tree-toggle" onclick="toggleRow(\'dre\',\''+code+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
       esc(a.n)+(a.red?' <span class="status-badge st-neutro" style="margin-left:6px">redutora</span>':'')+'</span></td>';
     let tot=0;
     meses.forEach((m,i)=>{
       const vv=v(code,m,reg); tot+=vv;
-      hh+=dreCell(vv, rbPorMes[i], {click:"drill('"+code+"',"+m+")", dir, flip});
+      hh+=dreCellPair(vv, rbPorMes[i], {click:"drill('"+code+"',"+m+")", flip});
     });
-    hh+=dreCell(tot, rbTotal, {dir, flip}).replace('class="num','style="font-weight:600" class="num');
+    hh+=dreCellPair(tot, rbTotal, {flip, strong:600});
     hh+='</tr>';
     if(kids.length&&open) kids.forEach(k=>hh+=contaRows(k.c,level+1,flip));
     return hh;
@@ -1860,14 +1880,13 @@ function renderDre(){
   cfg.forEach(l=>{
     if(l.tipo==='Grupo'){
       const open=!!expandState.dre[l.id];
-      const dirG=l.nome.indexOf('RECEITA')>=0?'in':null;
       const flipG = DRE_GRUPOS_CUSTO.includes(l.nome);
       let tot=0;
       let hh='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'dre\',\''+l.id+'\')">'+(open?'&minus;':'+')+'</button>'+
         '<span style="color:'+grpColor(l)+';font-weight:650">'+esc(l.nome)+'</span></span></td>';
       meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv;
-        hh+=dreCell(vv, rbPorMes[i], {click:"drillLinha('"+l.id+"',"+m+")", dir:dirG, flip:flipG}); });
-      hh+=dreCell(tot, rbTotal, {dir:dirG, flip:flipG}).replace('class="num','style="font-weight:650" class="num');
+        hh+=dreCellPair(vv, rbPorMes[i], {click:"drillLinha('"+l.id+"',"+m+")", flip:flipG}); });
+      hh+=dreCellPair(tot, rbTotal, {flip:flipG, strong:650});
       hh+='</tr>';
       h+=hh;
       if(open){
@@ -1878,8 +1897,8 @@ function renderDre(){
       let tot=0;
       const isFinal = l.nome==='RESULTADO LÍQUIDO';
       let hh='<tr class="row-result'+(isFinal?' final':'')+'"><td>'+esc(l.nome)+'</td>';
-      meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+=dreCell(vv, rbPorMes[i], {result:true}); });
-      hh+=dreCell(tot, rbTotal, {result:true})+'</tr>';
+      meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+=dreCellPair(vv, rbPorMes[i], {}); });
+      hh+=dreCellPair(tot, rbTotal, {})+'</tr>';
       h+=hh;
     }
   });
