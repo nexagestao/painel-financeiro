@@ -130,7 +130,7 @@ input,select,textarea{font-family:inherit;font-size:13px;color:var(--text)}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:15px 17px;box-shadow:var(--shadow)}
 .kpi .lb{font-size:12px;font-weight:500;color:var(--text2);display:flex;align-items:center;gap:6px}
 .kpi .vl{font-family:var(--font-mono);font-size:23px;font-weight:650;letter-spacing:-.02em;margin:7px 0 5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kpi .vl.pos{color:var(--pos)} .kpi .vl.neg{color:var(--neg)} .kpi .vl.navy{color:var(--navy)}
+.kpi .vl.pos{color:var(--pos)} .kpi .vl.neg{color:var(--neg)} .kpi .vl.navy{color:var(--navy)} .kpi .vl.zero{color:var(--text2)}
 .kpi .dl{font-size:11.5px;color:var(--text2);display:flex;align-items:center;gap:5px}
 .delta{display:inline-flex;align-items:center;gap:3px;font-family:var(--font-mono);font-weight:600;font-size:11.5px;padding:1px 7px;border-radius:999px}
 .delta.up{color:var(--pos);background:var(--pos-soft)}
@@ -169,6 +169,8 @@ tr.row-result.final td{background:#CFE4E8;font-weight:800}
 body.dark tr.row-result td{background:#123138;color:#BFDCE3}
 body.dark tr.row-result.final td{background:#173F47}
 .money.zero{color:var(--text2)}
+td.total-highlight{background:#E8F1F3;border-left:2px solid #0F4C5C;font-weight:700 !important}
+body.dark td.total-highlight{background:#123138}
 tr.row-sub td{font-weight:600;background:var(--bg)}
 td.clickv{cursor:pointer;border-radius:6px}
 td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
@@ -784,9 +786,9 @@ function moneyHtml(x, dec, dir){
   else if(dir==='in' && x>0) cls += ' pos';
   return '<span class="'+cls+'">'+money(x,dec)+'</span>';
 }
-function resultMoney(x){
+function resultMoney(x, dec){
   const cls = x>0?'pos':x<0?'neg':'zero';
-  return '<span class="money '+cls+'">'+money(x)+'</span>';
+  return '<span class="money '+cls+'">'+money(x,dec)+'</span>';
 }
 function kfmt(x){
   const a = Math.abs(x), sign = x<0?'-':'';
@@ -1230,7 +1232,7 @@ function buildReportFluxo(){
   const rows=[
     ['Saldo Inicial'].concat(saldosCol.map(x=>Math.round(x.ini))).concat([Math.round(saldosCol[0].ini)]),
     ['Entradas'].concat(flx.map(f=>Math.round(f.ent))).concat([Math.round(flx.reduce((t,f)=>t+f.ent,0))]),
-    ['Saídas'].concat(flx.map(f=>Math.round(f.sai))).concat([Math.round(flx.reduce((t,f)=>t+f.sai,0))]),
+    ['Saídas'].concat(flx.map(f=>-Math.round(f.sai))).concat([-Math.round(flx.reduce((t,f)=>t+f.sai,0))]),
     ['Geração de Caixa'].concat(flx.map(f=>Math.round(f.ger))).concat([Math.round(flx.reduce((t,f)=>t+f.ger,0))]),
     ['Saldo Final'].concat(saldosCol.map(x=>Math.round(x.fim))).concat([Math.round(saldosCol[saldosCol.length-1].fim)])
   ];
@@ -1568,10 +1570,10 @@ function renderFluxo(){
 
   let h=pageHead('Fluxo de Caixa','');
   h+='<div class="kpi-grid">';
-  h+=kpi('Saldo Atual',money(sAtual,true),null,'consolidado bancário',sAtual<0?'neg':'navy');
+  h+=kpi('Saldo Atual',money(sAtual,true),null,'consolidado bancário',sAtual<0?'neg':sAtual>0?'pos':'zero');
   h+=kpi('Entradas Previstas',money(sp.ent,true),null,'títulos em aberto a partir de hoje','pos');
   h+=kpi('Saídas Previstas',money(sp.sai,true),null,'títulos em aberto a partir de hoje','neg');
-  h+=kpi('Saldo Final Previsto',money(sp.saldoFinal,true),null,'até '+esc(state.periodoLabel),sp.saldoFinal<0?'neg':'navy');
+  h+=kpi('Saldo Final Previsto',money(sp.saldoFinal,true),null,'até '+esc(state.periodoLabel),sp.saldoFinal<0?'neg':sp.saldoFinal>0?'pos':'zero');
   h+='</div>';
 
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center">';
@@ -1589,7 +1591,7 @@ function renderFluxo(){
     trend: pctChange(totalEnt-totalSai, prevGer.reduce((t,x)=>t+x,0)),
     body: pcComboBarLine('flx', lbls,
       [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--pos)'},
-       {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--neg)'}],
+       {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--neg)', neg:true}],
       {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
       {h:300, click:'fluxoChartDrill'})
       + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}])
@@ -1600,14 +1602,15 @@ function renderFluxo(){
   h+='<div class="card" style="margin-top:16px"><div class="card-head"><div class="card-title">Demonstrativo do Fluxo</div></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th style="min-width:250px">Descrição</th>';
   cols.forEach(c=>h+='<th class="num">'+c.label+'</th>');
   h+='<th class="num">Total</th></tr></thead><tbody>';
-  h+='<tr class="row-total"><td>Saldo Inicial</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.ini,true)+'</td>').join('')+'<td class="num">'+moneyHtml(saldo0,true)+'</td></tr>';
+  h+='<tr class="row-total"><td>Saldo Inicial</td>'+saldosCol.map(x=>'<td class="num">'+resultMoney(x.ini,true)+'</td>').join('')+'<td class="num">'+resultMoney(saldo0,true)+'</td></tr>';
 
-  function rowFor(node, level){
+  function rowFor(node, level, forceSai){
     const a=node.code?acc(node.code):null;
     const id=node.id||node.code;
     const label=node.label||(a?a.n:id);
     const open=!!expandState.fluxo[id];
     const hasKids=node.kids&&node.kids.length;
+    const isSai = forceSai || node.kind==='sai';
     let vals; let dir=null;
     if(node.kind==='ent'){ vals=flx.map(f=>f.ent); dir='in'; }
     else if(node.kind==='sai'){ vals=flx.map(f=>f.sai); }
@@ -1617,19 +1620,20 @@ function renderFluxo(){
       (hasKids?'<button class="tree-toggle" onclick="toggleRow(\'fluxo\',\''+id+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
       esc(label)+'</span></td>';
     vals.forEach((vv,ci)=>{
-      const pv = state.regime==='pxr' ? (node.code?colVal(node.code,cols[ci],'prev'):colFluxo(cols[ci],'prev')[node.kind==='ent'?'ent':'sai']) : null;
+      let pv = state.regime==='pxr' ? (node.code?colVal(node.code,cols[ci],'prev'):colFluxo(cols[ci],'prev')[node.kind==='ent'?'ent':'sai']) : null;
+      if(isSai){ vv=-vv; if(pv!=null) pv=-pv; }
       hh+=cellHtml(vv,pv,node.code||null,ci,dir);
     });
-    hh+='<td class="num" style="font-weight:600">'+moneyHtml(total,true,dir)+'</td></tr>';
-    if(hasKids&&open) node.kids.forEach(k=>hh+=rowFor(k,level+1));
+    hh+='<td class="num'+(level===0?' total-highlight':'')+'" style="font-weight:600">'+moneyHtml(isSai?-total:total,true,dir)+'</td></tr>';
+    if(hasKids&&open) node.kids.forEach(k=>hh+=rowFor(k,level+1,isSai));
     return hh;
   }
   fluxoTreeDef().forEach(n=>h+=rowFor(n,0));
-  h+='<tr class="row-sub"><td>Geração de Caixa</td>'+flx.map(f=>'<td class="num">'+moneyHtml(f.ger,true)+'</td>').join('')+'<td class="num">'+moneyHtml(totalEnt-totalSai,true)+'</td></tr>';
+  h+='<tr class="row-sub"><td>Resultado Líquido (Geração de Caixa)</td>'+flx.map(f=>'<td class="num">'+resultMoney(f.ger,true)+'</td>').join('')+'<td class="num total-highlight">'+resultMoney(totalEnt-totalSai,true)+'</td></tr>';
   // A diferença de conciliação (saldosCol[i].conc) continua calculada em
   // saldos() para checagem do saldo bancário, mas não vira linha no relatório
   // — só gera alerta para Administrador (ver conciliacaoAlertas()).
-  h+='<tr class="row-total"><td>Saldo Final</td>'+saldosCol.map(x=>'<td class="num">'+moneyHtml(x.fim,true)+'</td>').join('')+'<td class="num">'+moneyHtml(saldosCol[saldosCol.length-1].fim,true)+'</td></tr>';
+  h+='<tr class="row-total"><td>Saldo Final</td>'+saldosCol.map(x=>'<td class="num">'+resultMoney(x.fim,true)+'</td>').join('')+'<td class="num total-highlight">'+resultMoney(saldosCol[saldosCol.length-1].fim,true)+'</td></tr>';
   h+='</tbody></table></div></div>';
   $('content').innerHTML=h;
 }
@@ -1755,10 +1759,10 @@ function saldosProjetadosCard(sp){
     const open=!!expandState.sp[k];
     h+='<tr style="font-weight:600"><td><span class="tree-lbl"><button class="tree-toggle" onclick="spToggle(\''+k+'\')">'+(open?'&minus;':'+')+'</button>'+
        d2.data.toLocaleDateString('pt-BR')+'</span></td>'+
-       '<td class="num"><span class="money'+(d2.ent?' pos':'')+'">'+money(d2.ent,true)+'</span></td>'+
-       '<td class="num"><span class="money'+(d2.sai?' neg':'')+'">'+(d2.sai?'-':'')+money(d2.sai,true)+'</span></td>'+
-       '<td class="num">'+moneyHtml(d2.ger,true)+'</td>'+
-       '<td class="num" style="font-weight:650;color:'+(d2.saldo<0?'var(--neg)':'var(--navy)')+'">'+money(d2.saldo,true)+'</td></tr>';
+       '<td class="num"><span class="money'+(d2.ent?' pos':' zero')+'">'+money(d2.ent,true)+'</span></td>'+
+       '<td class="num"><span class="money'+(d2.sai?' neg':' zero')+'">'+(d2.sai?'-':'')+money(d2.sai,true)+'</span></td>'+
+       '<td class="num">'+resultMoney(d2.ger,true)+'</td>'+
+       '<td class="num" style="font-weight:650">'+resultMoney(d2.saldo,true)+'</td></tr>';
     if(open){
       // Contribuições de associados (conta 1.1.01) somadas em uma única linha
       // por dia — o extrato individual só aparece no drawer (spDrillAssoc).
@@ -2761,7 +2765,7 @@ function pcLineArea(cid, labels, series, opts){
   });
   const slot=(W-L-R)/Math.max(1,n-1);
   labels.forEach((lb,i)=>{
-    const rows=series.map(s=>{ const [color]=TONE[s.kind]||TONE.main; return s.values[i]==null?null:[color,s.name,F(s.values[i])]; }).filter(Boolean);
+    const rows=series.map(s=>{ const [color]=TONE[s.kind]||TONE.main; return s.values[i]==null?null:[color,s.name,F(s.name==='Saídas'?-Math.abs(s.values[i]):s.values[i])]; }).filter(Boolean);
     out+='<rect x="'+(X(i)-slot/2)+'" y="0" width="'+slot+'" height="'+H+'" fill="transparent"'+tip(tipRows(lb,rows))+(opts.click?' style="cursor:pointer" onclick="'+opts.click+'('+i+')"':'')+'/>';
   });
   return out+'</svg>';
@@ -2831,10 +2835,12 @@ function pcComboBarLine(cid, labels, bars, line, opts){
     } else {
       out+='<path class="pc-line" d="'+smoothPath(idxPts.map(p=>[p.x,p.y]))+'" fill="none" stroke="var(--navy)" stroke-width="2.4" stroke-linecap="round"/>';
     }
-    idxPts.forEach(p=>out+='<circle class="pc-fade" cx="'+p.x+'" cy="'+p.y+'" r="3.4" fill="var(--navy)" stroke="var(--surface)" stroke-width="1.5"/>');
+    idxPts.forEach(p=>out+='<circle class="pc-fade" cx="'+p.x+'" cy="'+p.y+'" r="3.4" fill="'+(p.i!=null&&line.values[p.i]<0?'var(--neg)':line.values[p.i]>0?'var(--pos)':'var(--text2)')+'" stroke="var(--surface)" stroke-width="1.5"/>');
   }
   labels.forEach((lb,i)=>{
-    const rows=bars.map(b=>[b.tone||'var(--accent)', b.name, F(b.values[i])]);
+    // Saídas exibem valor negativo no tooltip (sem alterar a altura da barra,
+    // que segue usando a magnitude positiva já calculada acima).
+    const rows=bars.map(b=>[b.tone||'var(--accent)', b.name, F(b.neg?-Math.abs(b.values[i]):b.values[i])]);
     if(line.values[i]!=null) rows.push(['var(--navy)', line.name, F(line.values[i])]);
     out+='<rect x="'+(L+slot*i)+'" y="0" width="'+slot+'" height="'+H+'" fill="transparent"'+tip(tipRows(lb,rows))+(opts.click?' style="cursor:pointer" onclick="'+opts.click+'('+i+')"':'')+'/>';
   });
@@ -3154,7 +3160,7 @@ const CHART_DEFS={
       const ent=wm.map(m=>fluxoMes(m,reg).ent), sai=wm.map(m=>fluxoMes(m,reg).sai);
       const sal=saldos(reg), splitIdx=wm.indexOf(REAL_M);
       const body=pcComboBarLine('fes', wm.map(m=>MESES[m]),
-        [{name:'Entradas',values:ent,tone:'var(--pos)'},{name:'Saídas',values:sai,tone:'var(--neg)'}],
+        [{name:'Entradas',values:ent,tone:'var(--pos)'},{name:'Saídas',values:sai,tone:'var(--neg)',neg:true}],
         {name:'Saldo final',values:wm.map(m=>sal[m].fim),splitAt:splitIdx>=0?splitIdx:null},
         {h:o&&o.h||280,click:'dd_fluxoes'})
         + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]);
