@@ -2683,20 +2683,23 @@ function dd_res(i){ const wm=LAST_WM['resultado_mensal']||MSEL(); if(wm[i]!=null
 function dd_pxr(i){ const wm=LAST_WM['pxr']||MSEL(); drill('1', wm[i]); }
 
 const CHART_DEFS={
-  evolucao:{t:'Evolução do Saldo', d:'Saldo consolidado — realizado até Jul, projetado adiante; pontos vermelhos indicam caixa negativo', tipos:['area','linha'], size:6,
+  evolucao:{t:'Evolução do Saldo', d:'Saldo consolidado — realizado até Jul, previsto adiante; pontos vermelhos indicam caixa negativo', tipos:['area','linha'], size:6,
     render(ui,o){ const wm=winMonths('evolucao'); const reg='proj'; const sal=saldos(reg);
+      const splitIdx=wm.indexOf(REAL_M);
       return { body: pcLineArea('evo', wm.map(m=>MESES[m]), [
           {name:'Saldo final', values:wm.map(m=>sal[m].fim), kind:'main', area:(ui.tipo||'area')!=='linha', dots:true},
           {name:'Entradas', values:wm.map(m=>sal[m].ent), kind:'ghost'},
           {name:'Saídas', values:wm.map(m=>sal[m].sai), kind:'ghost2'}
-        ], {h:o&&o.h||320, click:'dd_evolucao'}),
+        ], {h:o&&o.h||320, click:'dd_evolucao', splitAt:splitIdx>=0?splitIdx:null}),
         trend: trendFor(m=>fluxoMes(m,reg).ger, wm) }; }},
-  fluxo_es:{t:'Fluxo de Caixa', d:'Entradas e saídas mensais em regime de caixa', tipos:['colunas','linha'], size:3,
+  fluxo_es:{t:'Fluxo de Caixa', d:'Entradas, saídas e saldo mensais em regime de caixa', tipos:['barras'], size:3,
     render(ui,o){ const wm=winMonths('fluxo_es'); const reg=state.regime==='pxr'?'proj':state.regime;
       const ent=wm.map(m=>fluxoMes(m,reg).ent), sai=wm.map(m=>fluxoMes(m,reg).sai);
-      const body=(ui.tipo==='linha')
-        ? pcLineArea('fes', wm.map(m=>MESES[m]), [{name:'Entradas',values:ent,kind:'main',area:false,dots:true},{name:'Saídas',values:sai,kind:'ghost'}],{h:o&&o.h||280,click:'dd_fluxoes'})
-        : pcBars('fes', wm.map(m=>MESES[m]), [{name:'Entradas',values:ent,tone:'accent'},{name:'Saídas',values:sai,tone:'n1'}],{h:o&&o.h||280,click:'dd_fluxoes',extra:{name:'Geração',values:wm.map((m,i)=>ent[i]-sai[i])}});
+      const sal=saldos(reg), splitIdx=wm.indexOf(REAL_M);
+      const body=pcComboBarLine('fes', wm.map(m=>MESES[m]),
+        [{name:'Entradas',values:ent,tone:'var(--pos)'},{name:'Saídas',values:sai,tone:'var(--neg)'}],
+        {name:'Saldo final',values:wm.map(m=>sal[m].fim),splitAt:splitIdx>=0?splitIdx:null},
+        {h:o&&o.h||280,click:'dd_fluxoes'});
       return { body, trend: trendFor(m=>fluxoMes(m,reg).ent, wm) }; }},
   rcd:{t:'Receita x Custos x Despesas', d:'Competência — base da DRE gerencial', tipos:['colunas','empilhadas'], size:3,
     render(ui,o){ const wm=winMonths('rcd'); const reg=state.regime==='pxr'?'proj':state.regime;
@@ -2717,25 +2720,25 @@ const CHART_DEFS={
       const p=wm.map(m=>fluxoMes(m,'prev').ger), r=wm.map(m=>m<=REAL_M?fluxoMes(m,'real').ger:0);
       return { body: pcBars('pxr', wm.map(m=>MESES[m]), [{name:'Previsto',values:p,tone:'n2'},{name:'Realizado',values:r,tone:'accent'}], {h:o&&o.h||280, click:'dd_pxr'}),
         trend: null }; }},
-  comp_despesas:{t:'Composição das Despesas', d:'Participação de cada grupo no total de despesas do período', tipos:['treemap','rosca','ranking'], size:3,
+  comp_despesas:{t:'Composição das Despesas', d:'Participação de cada grupo no total de despesas do período', tipos:['rosca','treemap','ranking'], size:3,
     render(ui,o){ const wm=winMonths('comp_despesas'); const reg=state.regime==='pxr'?'proj':state.regime;
       const codes=['3.1','3.2','3.3.1','3.3.2','3.3.3','3.3.4','3.3.5','3.3.6','3.3.7','3.3.8','3.4'];
       const items=codes.map(c=>({name:acc(c).n, code:c, value:wm.reduce((t,m)=>t+v(c,m,reg),0)}));
-      const body=(ui.tipo==='rosca')?pcDonut('cd',items.sort((a,b)=>b.value-a.value).slice(0,7),{h:o&&o.h||260})
+      const body=(ui.tipo==='treemap')?pcTreemap('comp_despesas', items, {h:o&&o.h||300})
         :(ui.tipo==='ranking')?pcHBars(items.sort((a,b)=>b.value-a.value))
-        :pcTreemap('comp_despesas', items, {h:o&&o.h||300});
+        :pcDonut('cd',items.sort((a,b)=>b.value-a.value).slice(0,7),{h:o&&o.h||260});
       return { body, trend: trendFor(m=>v('3',m,reg), wm) }; }},
-  comp_custos:{t:'Composição dos Custos', d:'Sinistro, assistência e rastreamento — participação no custo total', tipos:['treemap','rosca','ranking'], size:3,
+  comp_custos:{t:'Composição dos Custos', d:'Sinistro, assistência e rastreamento — participação no custo total', tipos:['rosca','treemap','ranking'], size:3,
     render(ui,o){ const wm=winMonths('comp_custos'); const reg=state.regime==='pxr'?'proj':state.regime;
       const items=analiticas().filter(a=>a.c.startsWith('2.')&&!a.red).map(a=>({name:a.n, code:a.c, value:wm.reduce((t,m)=>t+v(a.c,m,reg),0)}));
-      const body=(ui.tipo==='rosca')?pcDonut('cc',[{name:'Sinistro',value:wm.reduce((t,m)=>t+v('2.1',m,reg),0)},{name:'Assistência',value:wm.reduce((t,m)=>t+v('2.2',m,reg),0)},{name:'Rastreador',value:wm.reduce((t,m)=>t+v('2.3',m,reg),0)}],{h:o&&o.h||260})
+      const body=(ui.tipo==='treemap')?pcTreemap('comp_custos', items, {h:o&&o.h||300})
         :(ui.tipo==='ranking')?pcHBars(items.sort((a,b)=>b.value-a.value).slice(0,8))
-        :pcTreemap('comp_custos', items, {h:o&&o.h||300});
+        :pcDonut('cc',[{name:'Sinistro',value:wm.reduce((t,m)=>t+v('2.1',m,reg),0)},{name:'Assistência',value:wm.reduce((t,m)=>t+v('2.2',m,reg),0)},{name:'Rastreador',value:wm.reduce((t,m)=>t+v('2.3',m,reg),0)}],{h:o&&o.h||260});
       return { body, trend: trendFor(m=>v('2',m,reg), wm) }; }},
-  saldo_bancos:{t:'Saldo por Conta Bancária', d:'Distribuição do caixa consolidado entre as contas', tipos:['barras','rosca'], size:3,
+  saldo_bancos:{t:'Saldo por Conta Bancária', d:'Distribuição do caixa consolidado entre as contas', tipos:['rosca','barras'], size:3,
     render(ui,o){ const sA=saldoAtual();
       const items=BASES[state.empresa].bancos.map(b=>({name:b.banco+' — '+b.nome, value:Math.round(sA*b.prop)}));
-      const body=(ui.tipo==='rosca')?pcDonut('sb',items,{h:o&&o.h||240}):pcHBars(items);
+      const body=(ui.tipo==='barras')?pcHBars(items):pcDonut('sb',items,{h:o&&o.h||240});
       return { body, trend:null }; }},
   inadimplencia:{t:'Inadimplência', d:'Percentual de boletos vencidos sobre emitidos (série demonstrativa)', tipos:['linha','area'], size:3,
     render(ui,o){ const wm=winMonths('inadimplencia');
