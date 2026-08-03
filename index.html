@@ -3764,12 +3764,12 @@ function saveDash(){
     const k=dashKey(state.empresa, state.dcfgPerfil||state.role);
     const cfg=DASH_STORE[k];
     if(cfg){ cfg.atualizado=new Date().toLocaleString('pt-BR'); cfg.por='Gabriela Lima'; }
-    localStorage.setItem('pef_v2', JSON.stringify({dash:DASH_STORE, brand:BRAND}));
+    localStorage.setItem('pef_v3', JSON.stringify({dash:DASH_STORE, brand:BRAND}));
   }catch(e){}
 }
 function loadDash(){
   try{
-    const raw=localStorage.getItem('pef_v2');
+    const raw=localStorage.getItem('pef_v3');
     if(raw){ const o=JSON.parse(raw);
       if(o.dash) DASH_STORE=o.dash;
       if(o.brand) Object.keys(o.brand).forEach(k=>{ if(BRAND[k]) Object.assign(BRAND[k], o.brand[k]); });
