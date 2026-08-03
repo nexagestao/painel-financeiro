@@ -1839,6 +1839,119 @@ function dreCellPair(vv, rb, opts){
   }
   return tdMoney+tdAv;
 }
+/* ---------- Cards executivos + gráficos compactos (acima da tabela da DRE) ---------- */
+function dreCardsHtml(reg, meses, cfg, rbTotal){
+  const lineOr=(n,fb)=>cfg.find(l=>l.nome===n&&l.ativa)||fb||{tipo:'Resultado',expr:[]};
+  const rl=lineOr('RECEITA LÍQUIDA'), eb=lineOr('EBITDA'), rliq=lineOr('RESULTADO LÍQUIDO'), despOp=lineOr('DESPESAS OPERACIONAIS');
+  const sumL=l=>meses.reduce((t,m)=>t+dreLinhaVal(l,m,reg),0);
+  const rlTot=sumL(rl), ebTot=sumL(eb), rliqTot=sumL(rliq), despOpTot=sumL(despOp);
+  const margEbitdaTot = Math.abs(rlTot)>=0.005 ? ebTot/rlTot*100 : null;
+  const margLiqTot = Math.abs(rlTot)>=0.005 ? rliqTot/rlTot*100 : null;
+  const ultM=meses[meses.length-1], antM=ultM-1, temAnt=antM>=0;
+  const mom=l=>{
+    if(!temAnt) return null;
+    const cur=dreLinhaVal(l,ultM,reg), ant=dreLinhaVal(l,antM,reg);
+    if(Math.abs(ant)<0.005) return null;
+    return (cur-ant)/Math.abs(ant)*100;
+  };
+  const momPP=(numL,denL)=>{
+    if(!temAnt) return null;
+    const curD=dreLinhaVal(denL,ultM,reg), antD=dreLinhaVal(denL,antM,reg);
+    if(Math.abs(curD)<0.005||Math.abs(antD)<0.005) return null;
+    return (dreLinhaVal(numL,ultM,reg)/curD*100)-(dreLinhaVal(numL,antM,reg)/antD*100);
+  };
+  const signCls=x=>x>0.005?'pos':x<-0.005?'neg':'zero';
+  function card(titulo, val, valCls, avTxt, delta, suf, invertGood){
+    let up = delta!=null ? delta>=0 : null;
+    if(invertGood && up!=null) up=!up;
+    const deltaHtml = delta==null ? '<span style="color:var(--text2);font-size:11px">sem mês anterior</span>' :
+      '<span class="delta '+(up?'up':'down')+'">'+(delta>=0?'&#9650;':'&#9660;')+' '+Math.abs(delta).toLocaleString('pt-BR',{maximumFractionDigits:1})+suf+' vs mês ant.</span>';
+    return '<div class="kpi"><div class="lb">'+titulo+'</div><div class="vl '+valCls+'" style="font-size:19px;white-space:normal">'+val+'</div>'+
+      '<div class="dl" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">'+(avTxt?'<span style="color:var(--text2)">'+avTxt+'</span>':'')+deltaHtml+'</div></div>';
+  }
+  let h='<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">';
+  h+=card('Receita Líquida', money(rlTot,true), signCls(rlTot), 'AV '+(Math.abs(rbTotal)>=0.005?avPct(rlTot/rbTotal*100):'—'), mom(rl), '%', false);
+  h+=card('EBITDA', money(ebTot,true), signCls(ebTot), 'AV '+(Math.abs(rbTotal)>=0.005?avPct(ebTot/rbTotal*100):'—'), mom(eb), '%', false);
+  h+=card('Margem EBITDA', margEbitdaTot!=null?avPct(margEbitdaTot):'—', margEbitdaTot!=null?signCls(margEbitdaTot):'', '', momPP(eb,rl), ' p.p.', false);
+  h+=card('Resultado Líquido', money(rliqTot,true), signCls(rliqTot), 'AV '+(Math.abs(rbTotal)>=0.005?avPct(rliqTot/rbTotal*100):'—'), mom(rliq), '%', false);
+  h+=card('Margem Líquida', margLiqTot!=null?avPct(margLiqTot):'—', margLiqTot!=null?signCls(margLiqTot):'', '', momPP(rliq,rl), ' p.p.', false);
+  h+=card('Despesas Operacionais', money(-despOpTot,true), despOpTot>0.005?'neg':'zero', 'AV '+(Math.abs(rbTotal)>=0.005?avPct(-despOpTot/rbTotal*100):'—'), mom(despOp), '%', true);
+  h+='</div>';
+  return h;
+}
+function dreChartsHtml(reg, meses, cfg){
+  const lineOr=(n,fb)=>cfg.find(l=>l.nome===n&&l.ativa)||fb||{tipo:'Resultado',expr:[]};
+  const rl=lineOr('RECEITA LÍQUIDA'), lb=lineOr('LUCRO BRUTO'), eb=lineOr('EBITDA'), rliq=lineOr('RESULTADO LÍQUIDO'),
+        despOp=lineOr('DESPESAS OPERACIONAIS'), custos=lineOr('CUSTOS');
+  const lbls=meses.map(m=>MESES[m]);
+  const splitIdx=meses.indexOf(REAL_M);
+  const rlArr=meses.map(m=>dreLinhaVal(rl,m,reg));
+  const custosArr=meses.map(m=>-dreLinhaVal(custos,m,reg));
+  const despArr=meses.map(m=>-dreLinhaVal(despOp,m,reg));
+  const margBruta=meses.map((m,i)=>Math.abs(rlArr[i])>=0.005?dreLinhaVal(lb,m,reg)/rlArr[i]*100:null);
+  const margEbit=meses.map((m,i)=>Math.abs(rlArr[i])>=0.005?dreLinhaVal(eb,m,reg)/rlArr[i]*100:null);
+  const margLiq=meses.map((m,i)=>Math.abs(rlArr[i])>=0.005?dreLinhaVal(rliq,m,reg)/rlArr[i]*100:null);
+  const c1=pcLineArea('dreEvo1', lbls, [
+    {name:'Receita Líquida', values:rlArr, kind:'main', area:false, dots:true},
+    {name:'Custos', values:custosArr, kind:'ghost'},
+    {name:'Despesas Operacionais', values:despArr, kind:'ghost2'}
+  ], {h:230, splitAt:splitIdx>=0?splitIdx:null});
+  const leg1=legend([{color:'var(--navy)',name:'Receita Líquida'},{color:NEUT1,name:'Custos'},{color:NEUT2,name:'Despesas Operacionais'}]);
+  const c2=pcLineArea('dreEvo2', lbls, [
+    {name:'Margem Bruta', values:margBruta, kind:'ghost', dots:true},
+    {name:'Margem EBITDA', values:margEbit, kind:'ghost2', dots:true},
+    {name:'Margem Líquida', values:margLiq, kind:'main', area:false, dots:true}
+  ], {h:230, fmt:'pct', splitAt:splitIdx>=0?splitIdx:null});
+  const leg2=legend([{color:NEUT1,name:'Margem Bruta'},{color:NEUT2,name:'Margem EBITDA'},{color:'var(--navy)',name:'Margem Líquida'}]);
+  return '<div class="grid g-50" style="margin-bottom:16px">'+
+    '<div class="card"><div class="card-head"><div class="card-title">Receita Líquida, Custos e Despesas Operacionais</div></div><div class="card-body" style="padding-top:6px">'+c1+leg1+'</div></div>'+
+    '<div class="card"><div class="card-head"><div class="card-title">Margens (Bruta, EBITDA, Líquida)</div></div><div class="card-body" style="padding-top:6px">'+c2+leg2+'</div></div>'+
+    '</div>';
+}
+/* ---------- Ponto de Equilíbrio ----------
+   Exige que cada conta de Custo/Despesa Operacional tenha a.natureza =
+   'variavel'|'fixa' no PLANO (campo local, não existe no Supabase hoje).
+   Enquanto nenhuma conta estiver classificada, não estimamos nada — só
+   avisamos quais contas precisam da classificação. */
+function pontoEquilibrioHtml(reg, meses){
+  const contasCusto=analiticas().filter(a=>a.c.startsWith('2.'));
+  const contasDespOp=analiticas().filter(a=>a.c.startsWith('3.1.')||a.c.startsWith('3.2.')||a.c.startsWith('3.3.'));
+  const relevantes=contasCusto.concat(contasDespOp);
+  const semClassificacao=relevantes.filter(a=>a.natureza!=='variavel'&&a.natureza!=='fixa');
+  let h='<div class="card" style="margin-bottom:16px"><div class="card-head"><div style="flex:1"><div class="card-title">Ponto de Equilíbrio</div><div class="card-sub">Margem de contribuição × despesas fixas — só valores realizados no período</div></div></div><div class="card-body">';
+  if(semClassificacao.length){
+    h+='<div class="empty" style="padding:18px 4px;text-align:left">'+
+      '<div style="display:flex;align-items:center;gap:8px;color:var(--warn);font-weight:650;font-size:13.5px">'+icon('alert',16)+' Classificação necessária</div>'+
+      '<div class="t2" style="margin:8px 0 10px;text-align:left">O plano de contas ainda não marca cada custo/despesa como variável ou fixa — sem essa classificação o Ponto de Equilíbrio não é estimado. '+semClassificacao.length+' conta(s) pendente(s):</div>'+
+      '<div style="max-height:170px;overflow:auto;font-size:12px;color:var(--text2);line-height:1.9;text-align:left">'+
+      semClassificacao.map(a=>'<div>'+a.c+' — '+esc(a.n)+'</div>').join('')+'</div></div></div></div>';
+    return h;
+  }
+  const mesesReal=meses.filter(m=>m<=REAL_M);
+  const somaContas=(lista,r)=>lista.reduce((t,a)=>t+mesesReal.reduce((t2,m)=>t2+v(a.c,m,r),0),0);
+  const cfgAtivo=DRE_CFG[state.empresa].filter(l=>l.ativa);
+  const rlLine=cfgAtivo.find(l=>l.nome==='RECEITA LÍQUIDA');
+  const receitaLiquida=mesesReal.reduce((t,m)=>t+(rlLine?dreLinhaVal(rlLine,m,'real'):0),0);
+  const custosVar=somaContas(relevantes.filter(a=>a.natureza==='variavel'),'real');
+  const despesasFixas=somaContas(relevantes.filter(a=>a.natureza==='fixa'),'real');
+  const margemContrib=Math.abs(receitaLiquida)>=0.005?(receitaLiquida-custosVar)/receitaLiquida:null;
+  const pe=(margemContrib&&margemContrib>0.0001)?despesasFixas/margemContrib:null;
+  if(pe==null){
+    h+='<div class="empty" style="padding:18px"><div class="t1">Não foi possível calcular</div><div class="t2">Margem de contribuição zerada ou negativa no período realizado.</div></div></div></div>';
+    return h;
+  }
+  const dist=receitaLiquida-pe, distPct=pe?dist/pe*100:0;
+  const acima=receitaLiquida>=pe;
+  const perto=Math.abs(distPct)<=5;
+  const cor=perto?'var(--warn)':(acima?'var(--pos)':'var(--neg)');
+  h+='<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:0">'+
+    kpi('Ponto de Equilíbrio',money(pe,true),null,'despesas fixas ÷ margem de contribuição')+
+    kpi('Receita Líquida (realizado)',money(receitaLiquida,true),null,'período selecionado')+
+    kpi('Distância até o PE',money(dist,true),null,pct(distPct,1),perto?'':(acima?'pos':'neg'))+
+    '<div class="kpi"><div class="lb">Status</div><div class="vl" style="font-size:16px;color:'+cor+'">'+(acima?'Acima do ponto de equilíbrio':'Abaixo do ponto de equilíbrio')+'</div></div>'+
+    '</div></div></div>';
+  return h;
+}
 function renderDre(){
   const reg = state.regime==='pxr'?'proj':state.regime;
   const meses=MSEL();
@@ -1848,6 +1961,9 @@ function renderDre(){
   const rbTotal = rbPorMes.reduce((t,x)=>t+x,0);
   let h=pageHead('DRE Gerencial','',
     PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':'');
+  h+=dreCardsHtml(reg, meses, cfg, rbTotal);
+  h+=dreChartsHtml(reg, meses, cfg);
+  h+=pontoEquilibrioHtml(reg, meses);
   h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl tbl-dre"><thead>';
   h+='<tr><th rowspan="2" style="min-width:250px">Descrição</th>';
   meses.forEach(m=>h+='<th colspan="2" style="text-align:center">'+MESES[m]+'</th>');
