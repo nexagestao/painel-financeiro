@@ -2088,6 +2088,8 @@ function renderDre(){
     if(l.nome.indexOf('RECEITA')>=0) return 'var(--pos)';
     return 'inherit';
   }
+  const CLS_SAIDA=['Custo','Despesa','Despesa Financeira','Deducao da Receita','Tributo'];
+  function custoLike(code){ const a=acc(code); return !!a && CLS_SAIDA.includes(a.cls); }
   function contaRows(code, level, flip){
     const a=acc(code); if(!a) return '';
     const kids=filhos(code);
@@ -2119,8 +2121,8 @@ function renderDre(){
       hh+='</tr>';
       h+=hh;
       if(open){
-        if(l.kids){ l.kids.forEach(([c])=>{ h+=contaRows(c,1,flipG); }); }
-        else filhos(l.ref).forEach(f=>{ h+=contaRows(f.c,1,flipG); });
+        if(l.kids){ l.kids.forEach(([c])=>{ h+=contaRows(c,1,custoLike(c)); }); }
+        else filhos(l.ref).forEach(f=>{ h+=contaRows(f.c,1,custoLike(f.c)); });
       }
     } else {
       let tot=0;
