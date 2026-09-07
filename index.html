@@ -466,7 +466,8 @@ const state = {
   regime:'proj', fluxoPeriodo:'mensal', periodoLabel:'Jun — Dez/2026',
   filtros:[{k:'Período',v:'Ano 2026'}],
   baseAtualizada:'31/07/2026 às 18:40',
-  pagarModo:'lista', receberModo:'lista'
+  pagarModo:'lista', receberModo:'lista',
+  titDataIni:'', titDataFim:''
 };
 
 /* ---------- Empresas ---------- */
@@ -2171,9 +2172,16 @@ function diasAtraso(t){ return Math.floor((HOJE - t.venc)/86400000); }
 function agingBuckets(){
   return [['A vencer',t=>diasAtraso(t)<=0],['1 a 5 dias',t=>diasAtraso(t)>=1&&diasAtraso(t)<=5],['6 a 15 dias',t=>diasAtraso(t)>=6&&diasAtraso(t)<=15],['16 a 30 dias',t=>diasAtraso(t)>=16&&diasAtraso(t)<=30],['31 a 60 dias',t=>diasAtraso(t)>=31&&diasAtraso(t)<=60],['61 a 90 dias',t=>diasAtraso(t)>=61&&diasAtraso(t)<=90],['Acima de 90 dias',t=>diasAtraso(t)>90]];
 }
+function titulosDataFiltro(arr){
+  const ini = state.titDataIni ? new Date(state.titDataIni+'T00:00:00') : null;
+  const fim = state.titDataFim ? new Date(state.titDataFim+'T23:59:59') : null;
+  return arr.filter(t=>(!ini || t.venc>=ini) && (!fim || t.venc<=fim));
+}
+function setTitDataFiltro(campo, val){ state[campo]=val; render(); }
+function limparTitDataFiltro(){ state.titDataIni=''; state.titDataFim=''; render(); }
 function renderTitulos(tipo){
   const pagar = tipo==='pagar';
-  const lista = pagar?pagarSel():receberSel();
+  const lista = titulosDataFiltro(pagar?pagarSel():receberSel());
   const modo = pagar?state.pagarModo:state.receberModo;
   const aberto = lista.filter(t=>t.status!=='Pago'&&t.status!=='Recebido');
   const vencidos = lista.filter(t=>t.status==='Vencido');
@@ -2215,8 +2223,17 @@ function renderTitulos(tipo){
   }
 
   const modos=[['lista','Lista'],['calendario','Calendário'],['venc','Por vencimento'],['parte',pagar?'Por fornecedor':'Por cliente'],['cat','Por categoria']];
-  h+='<div style="margin-bottom:14px"><div class="seg">'+modos.map(mo=>
-    '<button class="'+(modo===mo[0]?'on':'')+'" onclick="state.'+(pagar?'pagarModo':'receberModo')+'=\''+mo[0]+'\';render()">'+mo[1]+'</button>').join('')+'</div></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  h+='<div class="seg">'+modos.map(mo=>
+    '<button class="'+(modo===mo[0]?'on':'')+'" onclick="state.'+(pagar?'pagarModo':'receberModo')+'=\''+mo[0]+'\';render()">'+mo[1]+'</button>').join('')+'</div>';
+  h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+    '<span style="font-size:12px;font-weight:600;color:var(--text2)">Vencimento</span>'+
+    '<span style="font-size:12px;color:var(--text2)">De</span>'+
+    '<input type="date" class="select" value="'+esc(state.titDataIni)+'" onchange="setTitDataFiltro(\'titDataIni\',this.value)">'+
+    '<span style="font-size:12px;color:var(--text2)">Até</span>'+
+    '<input type="date" class="select" value="'+esc(state.titDataFim)+'" onchange="setTitDataFiltro(\'titDataFim\',this.value)">'+
+    ((state.titDataIni||state.titDataFim)?'<button class="btn sm ghost" onclick="limparTitDataFiltro()">'+icon('x',12)+' Limpar</button>':'')+
+    '</div></div>';
 
   if(modo==='lista'){
     h+='<div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Vencimento</th><th>'+(pagar?'Fornecedor':'Cliente')+'</th><th>Documento</th><th>Conta</th><th>Centro</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>';
