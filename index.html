@@ -2075,7 +2075,6 @@ function renderDre(){
   const rbTotal = rbPorMes.reduce((t,x)=>t+x,0);
   let h=pageHead('DRE Gerencial','',
     PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':'');
-  h+=dreChartsHtml(reg, meses, cfg);
   h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl tbl-dre"><thead>';
   h+='<tr><th rowspan="2" style="min-width:250px">Descrição</th>';
   meses.forEach(m=>h+='<th colspan="2" style="text-align:center">'+MESES[m]+'</th>');
@@ -2273,6 +2272,7 @@ function renderIndicadores(){
 
   let h=pageHead('Indicadores','');
   h+=dreCardsHtml(reg, sel, cfg, rb);
+  h+=dreChartsHtml(reg, sel, cfg);
   h+=pontoEquilibrioHtml(reg, sel);
   function grupo(t,items){
     let g='<div class="card" style="margin-bottom:16px"><div class="card-head"><div class="card-title">'+t+'</div></div><div class="card-body"><div class="kpi-grid" style="margin-bottom:0">';
