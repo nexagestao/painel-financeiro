@@ -495,13 +495,13 @@ const PLANO = [
   {c:'2.1.03',  n:'Mão de Obra / Funilaria',     t:'A', pai:'2.1',   cls:'Custo'},
   {c:'2.1.04',  n:'Compra de Peças',             t:'A', pai:'2.1',   cls:'Custo'},
   {c:'2.1.05',  n:'Vistoria de Sinistro',        t:'A', pai:'2.1',   cls:'Custo'},
-  {c:'2.1.06',  n:'(-) Recuperação de Sinistro / Ressarcimento', t:'A', pai:'2.1', cls:'Custo', red:true},
   {c:'2.1.07',  n:'Seguro de Responsabilidade Civil / D&O',      t:'A', pai:'2.1', cls:'Custo', obs:'Cobertura de sinistro — antes lançada em Despesas (3.3.7.02)'},
+  {c:'2.1.08',  n:'Carro Reserva / Hospedagem',                  t:'A', pai:'2.1', cls:'Custo', obs:'Custo de sinistro — antes em Assistência (2.2.04)'},
+  {c:'2.1.99',  n:'(-) Recuperação de Sinistro / Ressarcimento', t:'A', pai:'2.1', cls:'Custo', red:true, obs:'Sempre por último no grupo Sinistro (era 2.1.06)'},
   {c:'2.2',     n:'Assistência',                 t:'S', pai:'2',     cls:'Custo'},
   {c:'2.2.01',  n:'Guincho / Reboque',           t:'A', pai:'2.2',   cls:'Custo'},
   {c:'2.2.02',  n:'Chaveiro',                    t:'A', pai:'2.2',   cls:'Custo'},
   {c:'2.2.03',  n:'Troca de Pneu',               t:'A', pai:'2.2',   cls:'Custo'},
-  {c:'2.2.04',  n:'Carro Reserva / Hospedagem',  t:'A', pai:'2.2',   cls:'Custo'},
   {c:'2.3',     n:'Rastreador',                  t:'S', pai:'2',     cls:'Custo'},
   {c:'2.3.01',  n:'Mensalidade de Rastreamento', t:'A', pai:'2.3',   cls:'Custo'},
   {c:'2.3.02',  n:'Instalação de Rastreador',    t:'A', pai:'2.3',   cls:'Custo'},
@@ -512,9 +512,9 @@ const PLANO = [
   {c:'3.1.01',  n:'Comissão Recorrente',         t:'A', pai:'3.1',   cls:'Despesa'},
   {c:'3.1.02',  n:'Marketing e Publicidade',     t:'A', pai:'3.1',   cls:'Despesa'},
   {c:'3.1.03',  n:'Brindes e Eventos Comerciais',t:'A', pai:'3.1',   cls:'Despesa'},
+  {c:'3.1.04',  n:'Ajuda de Custo / Captação Comercial', t:'A', pai:'3.1', cls:'Despesa', obs:'Ajuda de custo e captação por placa a consultores/vendedores'},
   {c:'3.2',     n:'Pessoal',                     t:'S', pai:'3',     cls:'Despesa'},
   {c:'3.2.01',  n:'Salários e Ordenados',        t:'A', pai:'3.2',   cls:'Despesa'},
-  {c:'3.2.02',  n:'Serviços Prestados PJ - Interno', t:'A', pai:'3.2', cls:'Despesa'},
   {c:'3.2.03',  n:'Encargos Sociais (INSS, FGTS)',t:'A', pai:'3.2',  cls:'Despesa'},
   {c:'3.2.04',  n:'Benefícios (VT, VR/VA, plano de saúde)', t:'A', pai:'3.2', cls:'Despesa'},
   {c:'3.2.05',  n:'Outras Comissões/Bonificações Internas', t:'A', pai:'3.2', cls:'Despesa'},
@@ -601,7 +601,7 @@ const BASES = {
   AGIBENS:{
     '1.1.01':[138000,.012,1],'1.1.02':[7800,.02,2],'1.1.03':[3100,.015,3],'1.1.04':[2350,.01,4],'1.1.05':[1150,.008,5],
     '1.2.01':[1750,.01,6],'1.2.02':[900,.005,7],
-    '2.1.01':[28000,.012,8],'2.1.02':[9200,.012,9],'2.1.03':[11800,.01,10],'2.1.04':[8400,.012,11],'2.1.05':[1400,.008,12],'2.1.06':[-4200,.01,13],
+    '2.1.01':[28000,.012,8],'2.1.02':[9200,.012,9],'2.1.03':[11800,.01,10],'2.1.04':[8400,.012,11],'2.1.05':[1400,.008,12],'2.1.99':[-4200,.01,13],
     '2.2.01':[1450,.008,14],'2.2.02':[340,.005,15],'2.2.03':[290,.005,16],'2.2.04':[620,.008,17],
     '2.3.01':[4640,.01,18],'2.3.02':[950,.008,19],'2.3.03':[380,.005,20],'2.3.04':[320,.005,21],
     '3.1.01':[6500,.01,22],'3.1.02':[2500,.008,23],'3.1.03':[420,.005,24],
@@ -786,7 +786,7 @@ const RECEBER = {
     {id:'CR-2106', cli:'Vistorias agendadas', doc:'VIS 081', desc:'Taxas de vistoria — Agosto', conta:'1.1.03', centro:'Comercial', banco:'Itaú', comp:'08/2026', emissao:d(29,7), venc:d(15,8), rec:null, vprev:3200, vrec:0, status:'Em aberto'},
     {id:'CR-2107', cli:'Associados — multas e juros', doc:'MJ 072', desc:'Encargos por atraso — Julho', conta:'1.1.04', centro:'Cobrança', banco:'Itaú', comp:'07/2026', emissao:d(28,7), venc:d(28,7), rec:d(28,7), vprev:2310, vrec:2310, status:'Recebido'},
     {id:'CR-2108', cli:'Transferências de cota', doc:'TC 081', desc:'Taxas de transferência de titularidade', conta:'1.1.05', centro:'Comercial', banco:'Itaú', comp:'08/2026', emissao:d(29,7), venc:d(12,8), rec:null, vprev:1180, vrec:0, status:'Em aberto'},
-    {id:'CR-2109', cli:'Seguradora Aliança', doc:'RSS 019', desc:'Ressarcimento de sinistro — evento 2198', conta:'2.1.06', centro:'Sinistros', banco:'Itaú', comp:'07/2026', emissao:d(5,7), venc:d(5,8), rec:null, vprev:4100, vrec:0, status:'Em aberto'},
+    {id:'CR-2109', cli:'Seguradora Aliança', doc:'RSS 019', desc:'Ressarcimento de sinistro — evento 2198', conta:'2.1.99', centro:'Sinistros', banco:'Itaú', comp:'07/2026', emissao:d(5,7), venc:d(5,8), rec:null, vprev:4100, vrec:0, status:'Em aberto'},
     {id:'CR-2110', cli:'Receitas diversas', doc:'REC 031', desc:'Receita não recorrente', conta:'1.2.02', centro:'Administrativo', banco:'Sicoob', comp:'08/2026', emissao:d(28,7), venc:d(8,8), rec:null, vprev:900, vrec:0, status:'Em aberto'}
   ],
   DUNORTE:[
@@ -794,7 +794,7 @@ const RECEBER = {
     {id:'CR-7702', cli:'Associados em atraso — Julho', doc:'COB 07', desc:'Mensalidades vencidas 07/2026', conta:'1.1.01', centro:'Cobrança', banco:'Bradesco', comp:'07/2026', emissao:d(10,7), venc:d(20,7), rec:null, vprev:9800, vrec:0, status:'Vencido'},
     {id:'CR-7703', cli:'Associados em atraso — Junho', doc:'COB 06', desc:'Mensalidades vencidas 06/2026', conta:'1.1.01', centro:'Cobrança', banco:'Bradesco', comp:'06/2026', emissao:d(10,6), venc:d(20,6), rec:null, vprev:6900, vrec:0, status:'Vencido'},
     {id:'CR-7704', cli:'Novos associados — Julho', doc:'ADS 07', desc:'Taxas de adesão', conta:'1.1.02', centro:'Comercial', banco:'Sicredi', comp:'07/2026', emissao:d(25,7), venc:d(30,7), rec:d(30,7), vprev:2750, vrec:2750, status:'Recebido'},
-    {id:'CR-7705', cli:'Seguradora Horizonte', doc:'RSS 04', desc:'Ressarcimento de sinistro — evento 872', conta:'2.1.06', centro:'Sinistros', banco:'Bradesco', comp:'07/2026', emissao:d(8,7), venc:d(8,8), rec:null, vprev:2600, vrec:0, status:'Em aberto'},
+    {id:'CR-7705', cli:'Seguradora Horizonte', doc:'RSS 04', desc:'Ressarcimento de sinistro — evento 872', conta:'2.1.99', centro:'Sinistros', banco:'Bradesco', comp:'07/2026', emissao:d(8,7), venc:d(8,8), rec:null, vprev:2600, vrec:0, status:'Em aberto'},
     {id:'CR-7706', cli:'Vistorias agendadas', doc:'VIS 08', desc:'Taxas de vistoria — Agosto', conta:'1.1.03', centro:'Comercial', banco:'Sicredi', comp:'08/2026', emissao:d(29,7), venc:d(15,8), rec:null, vprev:1300, vrec:0, status:'Em aberto'}
   ]
 };
@@ -2091,13 +2091,14 @@ function renderDre(){
   function contaRows(code, level, flip){
     const a=acc(code); if(!a) return '';
     const kids=filhos(code);
+    const tot=meses.reduce((t,m)=>t+v(code,m,reg),0);
+    if(Math.abs(tot)<0.005) return '';
     const open=!!expandState.dre[code];
     let hh='<tr class="lvl'+Math.min(level,3)+'"><td><span class="tree-lbl">'+
       (kids.length?'<button class="tree-toggle" onclick="toggleRow(\'dre\',\''+code+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
       esc(a.n)+(a.red?' <span class="status-badge st-neutro" style="margin-left:6px">redutora</span>':'')+'</span></td>';
-    let tot=0;
     meses.forEach((m,i)=>{
-      const vv=v(code,m,reg); tot+=vv;
+      const vv=v(code,m,reg);
       hh+=dreCellPair(vv, rbPorMes[i], {click:"drill('"+code+"',"+m+")", flip});
     });
     hh+=dreCellPair(tot, rbTotal, {flip, strong:600});
@@ -4278,9 +4279,11 @@ async function hydrateAgibensReal(){
    - Agibens - GITHUB") já foi conciliado com o banco e traz o valor REAL
    por conta para Agosto — regime de CAIXA: filtrado por Data de Pagamento
    em 08/2026 (não vencimento) e somando a coluna "Valor pagamento" (não
-   "Valor parcela"), os 439 lançamentos do MGF. "Seguro de Responsabilidade
-   Civil / D&O" é custo de sinistro (2.1.07), não despesa administrativa —
-   estava em 3.3.7.02 antes de o plano de contas ganhar essa conta.
+   "Valor parcela"), os 439 lançamentos do MGF. DE-PARA de reclassificações
+   (confirmadas pelo usuário): "Seguro de Responsabilidade Civil / D&O" e
+   "Carro Reserva / Hospedagem" são custo de sinistro (2.1.07 e 2.1.08),
+   não despesa administrativa/assistência; "Ajuda de Custo" é conta própria
+   no Comercial (3.1.04), separada de "Comissão Recorrente" (3.1.01).
    Aplicamos esse total por cima do valor vindo dos títulos, sem alterar o
    status individual de cada título (que continua "Em aberto" até haver
    conciliação nominal por associado/fornecedor). Junho e Julho não são
@@ -4289,13 +4292,13 @@ function aplicarReconciliacaoMGF(){
   const AGO = 7;
   const realizadoAgosto = {
     '1.1.01':77017.14, '1.1.02':100.00, '1.2.01':0.66,
-    '2.1.04':6650.79, '2.1.05':6208.00, '2.1.07':1606.06, '2.2.01':11061.15, '2.2.04':2950.00, '2.3.01':137.00, '2.3.04':3795.00,
-    '3.1.01':16267.48, '3.1.03':135.78, '3.2.01':4425.10, '3.2.03':1277.51,
+    '2.1.04':6650.79, '2.1.05':6208.00, '2.1.07':1606.06, '2.1.08':2950.00, '2.2.01':11061.15, '2.3.01':137.00, '2.3.04':3795.00,
+    '3.1.01':1117.48, '3.1.03':135.78, '3.1.04':15150.00, '3.2.01':4425.10, '3.2.03':1277.51,
     '3.3.1.01':2200.00, '3.3.1.02':175.78, '3.3.1.06':611.59, '3.3.2.01':2910.29, '3.3.2.03':259.90,
     '3.3.3.01':685.00, '3.3.3.02':1600.00, '3.3.3.03':3900.00, '3.3.3.04':3500.00, '3.3.5.03':30.00,
     '3.4.01':143.47, '5.03':484.59
   };
-  const novasContas = ['2.1.07','5.03'];
+  const novasContas = ['2.1.07','2.1.08','3.1.04','5.03'];
   Object.keys(BASES.AGIBENS).concat(novasContas).forEach(code=>{
     if(!/^\d/.test(code)) return;
     if(!VAL.AGIBENS[code]) VAL.AGIBENS[code] = {prev:Array(12).fill(0), real:Array(12).fill(null)};
