@@ -511,8 +511,9 @@ const PLANO = [
   {c:'3.1',     n:'Comercial',                   t:'S', pai:'3',     cls:'Despesa'},
   {c:'3.1.01',  n:'Comissão Recorrente',         t:'A', pai:'3.1',   cls:'Despesa'},
   {c:'3.1.02',  n:'Marketing e Publicidade',     t:'A', pai:'3.1',   cls:'Despesa'},
-  {c:'3.1.03',  n:'Brindes e Eventos Comerciais',t:'A', pai:'3.1',   cls:'Despesa'},
-  {c:'3.1.04',  n:'Ajuda de Custo / Captação Comercial', t:'A', pai:'3.1', cls:'Despesa', obs:'Ajuda de custo e captação por placa a consultores/vendedores'},
+  {c:'3.1.03',  n:'Brinde Institucional',        t:'A', pai:'3.1',   cls:'Despesa'},
+  {c:'3.1.04',  n:'Ajuda de Custo',              t:'A', pai:'3.1', cls:'Despesa', obs:'Ajuda de custo a consultores/vendedores comerciais'},
+  {c:'3.1.05',  n:'Captação Comercial',          t:'A', pai:'3.1', cls:'Despesa', obs:'Captação por placa — separada de Ajuda de Custo'},
   {c:'3.2',     n:'Pessoal',                     t:'S', pai:'3',     cls:'Despesa'},
   {c:'3.2.01',  n:'Salários e Ordenados',        t:'A', pai:'3.2',   cls:'Despesa'},
   {c:'3.2.03',  n:'Encargos Sociais (INSS, FGTS)',t:'A', pai:'3.2',  cls:'Despesa'},
@@ -4284,8 +4285,9 @@ async function hydrateAgibensReal(){
    "Valor parcela"), os 439 lançamentos do MGF. DE-PARA de reclassificações
    (confirmadas pelo usuário): "Seguro de Responsabilidade Civil / D&O" e
    "Carro Reserva / Hospedagem" são custo de sinistro (2.1.07 e 2.1.08),
-   não despesa administrativa/assistência; "Ajuda de Custo" é conta própria
-   no Comercial (3.1.04), separada de "Comissão Recorrente" (3.1.01).
+   não despesa administrativa/assistência; "Ajuda de Custo" (3.1.04) e
+   "Captação Comercial" (3.1.05) são contas próprias, separadas entre si e
+   de "Comissão Recorrente" (3.1.01).
    Aplicamos esse total por cima do valor vindo dos títulos, sem alterar o
    status individual de cada título (que continua "Em aberto" até haver
    conciliação nominal por associado/fornecedor). Junho e Julho não são
@@ -4300,7 +4302,7 @@ function aplicarReconciliacaoMGF(){
     '3.3.3.01':685.00, '3.3.3.02':1600.00, '3.3.3.03':3900.00, '3.3.3.04':3500.00, '3.3.5.03':30.00,
     '3.4.01':143.47, '5.03':484.59
   };
-  const novasContas = ['2.1.07','2.1.08','3.1.04','5.03'];
+  const novasContas = ['2.1.07','2.1.08','3.1.04','3.1.05','5.03'];
   Object.keys(BASES.AGIBENS).concat(novasContas).forEach(code=>{
     if(!/^\d/.test(code)) return;
     if(!VAL.AGIBENS[code]) VAL.AGIBENS[code] = {prev:Array(12).fill(0), real:Array(12).fill(null)};
