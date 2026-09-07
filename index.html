@@ -4212,20 +4212,32 @@ function parseYMD(s){
 }
 function compStr(dt){ return dt ? String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear() : ''; }
 
+// Busca todas as linhas de uma tabela em páginas — o PostgREST tem um teto de
+// linhas por requisição configurado no servidor (comumente 1000), e pedir um
+// .range() maior que esse teto não o contorna: ele é simplesmente truncado de
+// volta ao máximo do servidor, sem erro. Paginar em loop funciona com
+// qualquer teto.
+async function fetchAllRows(query){
+  const PAGE = 1000;
+  let all = [], offset = 0;
+  while(true){
+    const { data, error } = await query.range(offset, offset+PAGE-1);
+    if(error) throw error;
+    all = all.concat(data||[]);
+    if(!data || data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
 async function hydrateAgibensReal(){
-  // .range() explícito: sem ele o PostgREST corta em 1000 linhas por padrão —
-  // com titulos_pagar/titulos_receber já passando disso, a cauda mais recente
-  // (ex.: importações do dia) ficava de fora silenciosamente.
-  const [pagarRes, receberRes, contasRes, saldosRes] = await Promise.all([
-    sb.from('titulos_pagar').select('*').eq('empresa_id', AGIBENS_ID).range(0, 19999),
-    sb.from('titulos_receber').select('*').eq('empresa_id', AGIBENS_ID).range(0, 19999),
+  const [pagarRows, receberRowsAll, contasRes, saldosRes] = await Promise.all([
+    fetchAllRows(sb.from('titulos_pagar').select('*').eq('empresa_id', AGIBENS_ID)),
+    fetchAllRows(sb.from('titulos_receber').select('*').eq('empresa_id', AGIBENS_ID)),
     sb.from('contas_bancarias').select('*').eq('empresa_id', AGIBENS_ID).eq('ativa', true),
     sb.from('saldos_bancarios').select('*').eq('empresa_id', AGIBENS_ID).order('data',{ascending:false})
   ]);
-  if(pagarRes.error || receberRes.error) throw (pagarRes.error||receberRes.error);
 
-  const pagarRows = pagarRes.data || [];
-  const receberRows = (receberRes.data || []).filter(r=>r.status!=='Cancelado');
+  const receberRows = receberRowsAll.filter(r=>r.status!=='Cancelado');
   const contas = contasRes.data || [];
   const saldosRows = saldosRes.data || [];
 
