@@ -1825,9 +1825,14 @@ function spFimEfetiva(){
 function spLinhas(){
   const ini = spIniEfetiva();
   const fim = spFimEfetiva();
+  // Meses até REAL_M (realizado) já são reconciliados pela DRE/MGF — títulos
+  // "Em aberto" nesses meses no Supabase são resíduo do fluxo anterior à
+  // reconciliação e não devem reaparecer como pendência na previsão de caixa.
+  // Só entra na previsão quem vence a partir do mês seguinte ao realizado.
+  const corteAberto = new Date(ANO, REAL_M+1, 1);
   const items=[];
-  PAGAR[state.empresa].filter(t=>t.status!=='Pago').forEach(t=>items.push({t, tipo:'pagar', nome:t.forn, valor:-t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
-  RECEBER[state.empresa].filter(t=>t.status!=='Recebido').forEach(t=>items.push({t, tipo:'receber', nome:t.cli, valor:t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
+  PAGAR[state.empresa].filter(t=>t.status!=='Pago' && t.venc>=corteAberto).forEach(t=>items.push({t, tipo:'pagar', nome:t.forn, valor:-t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
+  RECEBER[state.empresa].filter(t=>t.status!=='Recebido' && t.venc>=corteAberto).forEach(t=>items.push({t, tipo:'receber', nome:t.cli, valor:t.vprev, venc:t.venc, vencido:t.status==='Vencido'}));
   const byDay={};
   items.forEach(it=>{
     if(state.spStatus==='Em aberto'&&it.vencido)return;
@@ -3722,7 +3727,8 @@ const CHART_DEFS={
       const body=(ui.tipo==='ranking')?pcHBars(items):pcDonut('dc',items,{h:o&&o.h||260,pie:ui.tipo==='pizza'});
       return { body, trend: trendFor(m=>v('3',m,reg), wm) }; }},
   vencimentos:{t:'Próximos Vencimentos', d:'Contas a pagar em aberto, ordenadas por data', tipos:['tabela'], size:3,
-    render(){ const abertos=pagarSel().filter(p=>p.status==='Em aberto').sort((a,b)=>a.venc-b.venc).slice(0,6);
+    render(){ const corteAberto=new Date(ANO,REAL_M+1,1);
+      const abertos=pagarSel().filter(p=>p.status==='Em aberto' && p.venc>=corteAberto).sort((a,b)=>a.venc-b.venc).slice(0,6);
       let b='<table class="tbl"><thead><tr><th>Vencimento</th><th>Fornecedor</th><th class="num">Valor</th></tr></thead><tbody>';
       abertos.forEach(p=>{ b+='<tr class="hoverable" onclick="detTitulo(\''+p.id+'\',\'pagar\')"><td>'+fdate(p.venc)+'</td><td>'+esc(p.forn)+'</td><td class="num">'+moneyHtml(p.vprev)+'</td></tr>'; });
       return { body:b+'</tbody></table>', trend:null }; }},
