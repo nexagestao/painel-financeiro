@@ -445,7 +445,7 @@ function icon(name, size){
 /* ---------- Constantes ---------- */
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MESES_LONG = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-const REAL_M = 7;                 // realizado até Agosto (índice 7)
+const REAL_M = 6;                 // realizado até Julho (índice 6)
 const HOJE = new Date(2026,6,31); // 31/07/2026 — data-base simulada do restante da plataforma (realizado até jul/2026)
 const ANO = 2026;
 // Data real de hoje no fuso America/Sao_Paulo (independe do relógio local do
@@ -650,34 +650,6 @@ Object.keys(BASES).forEach(emp=>{
     if(b) VAL[emp][a.c] = serie(b[0], b[1], b[2]);
   });
 });
-
-/* ---------- Agosto/2026 realizado (Agibens) ----------
-   Fonte: ledger consolidado "MGF" (planilha "Base de Dados - Agibens - GITHUB",
-   atualizada em 07/09/2026) — 430 lançamentos com vencimento em 08/2026,
-   agregados por conta analítica (valor de parcela). Junho e Julho não são
-   tocados aqui; Set/2026 em diante seguem projetados até a próxima atualização. */
-(function(){
-  const AGO = 7;
-  const realizadoAgosto = {
-    '1.1.01':72687.10, '1.1.02':100.00, '1.2.01':0.66, '1.2.02':3113.41,
-    '2.1.04':6650.79, '2.1.05':6208.00, '2.2.01':8519.41, '2.2.04':2950.00, '2.3.01':137.00, '2.3.04':3795.00,
-    '3.1.01':16267.48, '3.1.03':135.78, '3.2.01':5125.10, '3.2.03':1277.51,
-    '3.3.1.01':2200.00, '3.3.1.02':175.78, '3.3.1.06':504.11, '3.3.2.01':2910.29, '3.3.2.03':259.90,
-    '3.3.3.01':685.00, '3.3.3.02':1600.00, '3.3.3.03':3900.00, '3.3.3.04':3500.00, '3.3.5.03':30.00, '3.3.7.02':901.70,
-    '3.4.01':143.47, '5.03':483.60
-  };
-  // REAL_M agora inclui Agosto, então serie() já teria gerado um valor
-  // sintético para o mês 7 de toda conta Agibens — sobrescrevemos com o
-  // valor real (ou zero, quando a conta não teve nenhum lançamento em
-  // Agosto no ledger) para não misturar dado fabricado com dado real.
-  Object.keys(BASES.AGIBENS).forEach(code=>{
-    if(!/^\d/.test(code)) return;
-    if(!VAL.AGIBENS[code]) VAL.AGIBENS[code] = {prev:Array(12).fill(0), real:Array(12).fill(null)};
-    VAL.AGIBENS[code].real[AGO] = realizadoAgosto[code] || 0;
-  });
-  if(!VAL.AGIBENS['5.03']) VAL.AGIBENS['5.03'] = {prev:Array(12).fill(0), real:Array(12).fill(null)};
-  VAL.AGIBENS['5.03'].real[AGO] = realizadoAgosto['5.03'];
-})();
 
 /* ---------- Motor de cálculo ---------- */
 function v(code, m, reg){
