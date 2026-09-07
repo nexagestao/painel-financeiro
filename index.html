@@ -496,6 +496,7 @@ const PLANO = [
   {c:'2.1.04',  n:'Compra de Peças',             t:'A', pai:'2.1',   cls:'Custo'},
   {c:'2.1.05',  n:'Vistoria de Sinistro',        t:'A', pai:'2.1',   cls:'Custo'},
   {c:'2.1.06',  n:'(-) Recuperação de Sinistro / Ressarcimento', t:'A', pai:'2.1', cls:'Custo', red:true},
+  {c:'2.1.07',  n:'Seguro de Responsabilidade Civil / D&O',      t:'A', pai:'2.1', cls:'Custo', obs:'Cobertura de sinistro — antes lançada em Despesas (3.3.7.02)'},
   {c:'2.2',     n:'Assistência',                 t:'S', pai:'2',     cls:'Custo'},
   {c:'2.2.01',  n:'Guincho / Reboque',           t:'A', pai:'2.2',   cls:'Custo'},
   {c:'2.2.02',  n:'Chaveiro',                    t:'A', pai:'2.2',   cls:'Custo'},
@@ -4274,30 +4275,32 @@ async function hydrateAgibensReal(){
    Os títulos individuais de Contas a Pagar/Receber em Agosto (importados
    no Supabase) são o valor COBRADO/PREVISTO por título — não refletem
    quem de fato pagou. O ledger consolidado "MGF" (planilha "Base de Dados
-   - Agibens - GITHUB", atualizada 07/09/2026) já foi conciliado com o
-   banco e traz o valor REAL por conta para Agosto: 430 lançamentos com
-   vencimento em 08/2026, todos com situação "PAGA". Aplicamos esse total
-   aqui, por cima do valor vindo dos títulos, sem alterar o status
-   individual de cada título (que continua "Em aberto" até haver uma
+   - Agibens - GITHUB") já foi conciliado com o banco e traz o valor REAL
+   por conta para Agosto — regime de CAIXA: filtrado por Data de Pagamento
+   em 08/2026 (não vencimento) e somando a coluna "Valor pagamento" (não
+   "Valor parcela"), os 439 lançamentos do MGF. "Seguro de Responsabilidade
+   Civil / D&O" é custo de sinistro (2.1.07), não despesa administrativa —
+   estava em 3.3.7.02 antes de o plano de contas ganhar essa conta.
+   Aplicamos esse total por cima do valor vindo dos títulos, sem alterar o
+   status individual de cada título (que continua "Em aberto" até haver
    conciliação nominal por associado/fornecedor). Junho e Julho não são
    tocados; Setembro em diante seguem projetados. */
 function aplicarReconciliacaoMGF(){
   const AGO = 7;
   const realizadoAgosto = {
-    '1.1.01':72687.10, '1.1.02':100.00, '1.2.01':0.66, '1.2.02':3113.41,
-    '2.1.04':6650.79, '2.1.05':6208.00, '2.2.01':8519.41, '2.2.04':2950.00, '2.3.01':137.00, '2.3.04':3795.00,
-    '3.1.01':16267.48, '3.1.03':135.78, '3.2.01':5125.10, '3.2.03':1277.51,
-    '3.3.1.01':2200.00, '3.3.1.02':175.78, '3.3.1.06':504.11, '3.3.2.01':2910.29, '3.3.2.03':259.90,
-    '3.3.3.01':685.00, '3.3.3.02':1600.00, '3.3.3.03':3900.00, '3.3.3.04':3500.00, '3.3.5.03':30.00, '3.3.7.02':901.70,
-    '3.4.01':143.47, '5.03':483.60
+    '1.1.01':77017.14, '1.1.02':100.00, '1.2.01':0.66,
+    '2.1.04':6650.79, '2.1.05':6208.00, '2.1.07':1606.06, '2.2.01':11061.15, '2.2.04':2950.00, '2.3.01':137.00, '2.3.04':3795.00,
+    '3.1.01':16267.48, '3.1.03':135.78, '3.2.01':4425.10, '3.2.03':1277.51,
+    '3.3.1.01':2200.00, '3.3.1.02':175.78, '3.3.1.06':611.59, '3.3.2.01':2910.29, '3.3.2.03':259.90,
+    '3.3.3.01':685.00, '3.3.3.02':1600.00, '3.3.3.03':3900.00, '3.3.3.04':3500.00, '3.3.5.03':30.00,
+    '3.4.01':143.47, '5.03':484.59
   };
-  Object.keys(BASES.AGIBENS).forEach(code=>{
+  const novasContas = ['2.1.07','5.03'];
+  Object.keys(BASES.AGIBENS).concat(novasContas).forEach(code=>{
     if(!/^\d/.test(code)) return;
     if(!VAL.AGIBENS[code]) VAL.AGIBENS[code] = {prev:Array(12).fill(0), real:Array(12).fill(null)};
     VAL.AGIBENS[code].real[AGO] = realizadoAgosto[code] || 0;
   });
-  if(!VAL.AGIBENS['5.03']) VAL.AGIBENS['5.03'] = {prev:Array(12).fill(0), real:Array(12).fill(null)};
-  VAL.AGIBENS['5.03'].real[AGO] = realizadoAgosto['5.03'];
 }
 
 async function loadBrandLogos(){
