@@ -4213,9 +4213,12 @@ function parseYMD(s){
 function compStr(dt){ return dt ? String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear() : ''; }
 
 async function hydrateAgibensReal(){
+  // .range() explícito: sem ele o PostgREST corta em 1000 linhas por padrão —
+  // com titulos_pagar/titulos_receber já passando disso, a cauda mais recente
+  // (ex.: importações do dia) ficava de fora silenciosamente.
   const [pagarRes, receberRes, contasRes, saldosRes] = await Promise.all([
-    sb.from('titulos_pagar').select('*').eq('empresa_id', AGIBENS_ID),
-    sb.from('titulos_receber').select('*').eq('empresa_id', AGIBENS_ID),
+    sb.from('titulos_pagar').select('*').eq('empresa_id', AGIBENS_ID).range(0, 19999),
+    sb.from('titulos_receber').select('*').eq('empresa_id', AGIBENS_ID).range(0, 19999),
     sb.from('contas_bancarias').select('*').eq('empresa_id', AGIBENS_ID).eq('ativa', true),
     sb.from('saldos_bancarios').select('*').eq('empresa_id', AGIBENS_ID).order('data',{ascending:false})
   ]);
