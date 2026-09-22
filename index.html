@@ -671,13 +671,27 @@ function v(code, m, reg){
 function vAno(code, reg){ let t=0; for(let m=0;m<12;m++) t+=v(code,m,reg); return t; }
 function vRange(code, m0, m1, reg){ let t=0; for(let m=m0;m<=m1;m++) t+=v(code,m,reg); return t; }
 
+/* Soma, para o mês m, os títulos das contas dadas que AINDA estão em aberto
+   (não pagos/recebidos) e vencem nesse mês — usado só para completar o mês
+   corrente (REAL_M) no Fluxo de Caixa, que pode estar em andamento: a
+   MGF/DRE só cobre o que já foi de fato pago/recebido, então o restante do
+   mês (ainda não vencido/liquidado) ficaria de fora sem isso. Não mexe na
+   DRE (v()), que continua estritamente caixa realizado por design. */
+function abertoMes(contas, m, tipo){
+  const arr = (tipo==='pagar' ? PAGAR : RECEBER)[state.empresa] || [];
+  const set = new Set(contas);
+  let t = 0;
+  arr.forEach(x=>{
+    if(!set.has(x.conta)) return;
+    if(!x.venc || x.venc.getFullYear()!==ANO || x.venc.getMonth()!==m) return;
+    if(tipo==='pagar' ? x.status==='Pago' : x.status==='Recebido') return;
+    t += x.vprev;
+  });
+  return t;
+}
 /* fluxo de caixa: entradas = receitas (1); saídas = custos (2) + despesas (3).
    Contas patrimoniais (4) não transitam pelo resultado. */
-function fluxoMes(m, reg){
-  const ent = v('1',m,reg);
-  const sai = v('2',m,reg)+v('3',m,reg)+v('5',m,reg)+v('6',m,reg);
-  return {ent, sai, ger:ent-sai};
-}
+function fluxoMes(m, reg){ return colFluxo({m}, reg); }
 function saldos(reg){
   // Meses encerrados com saldo bancário real (saldosMensais) usam esse saldo
   // diretamente como fim — não são recalculados a partir de entradas/saídas.
@@ -1674,8 +1688,20 @@ function colVal(code,col,reg){
   return vRange(code,col.m0,col.m1,reg);
 }
 function colFluxo(col,reg){
-  const ent=colVal('1',col,reg);
-  const sai=colVal('2',col,reg)+colVal('3',col,reg)+colVal('5',col,reg)+colVal('6',col,reg);
+  let ent=colVal('1',col,reg);
+  let sai=colVal('2',col,reg)+colVal('3',col,reg)+colVal('5',col,reg)+colVal('6',col,reg);
+  // O mês de REAL_M pode estar em andamento — a MGF/DRE só cobre o que já foi
+  // pago/recebido, então soma o que falta dele (ainda em aberto) pra não
+  // sumir do Fluxo de Caixa. Só no regime híbrido (nem 'real' nem 'prev'
+  // puro); colunas que abrangem REAL_M num range (trimestre/ano) entram uma
+  // única vez.
+  if(reg!=='real' && reg!=='prev'){
+    const abrangeReal = col.m===REAL_M || (col.m==null && col.frac==null && col.m0<=REAL_M && REAL_M<=col.m1);
+    if(abrangeReal){
+      ent += abertoMes(descendantAnaliticas('1'), REAL_M, 'receber');
+      sai += abertoMes(['2','3','5','6'].flatMap(descendantAnaliticas), REAL_M, 'pagar');
+    }
+  }
   return {ent,sai,ger:ent-sai};
 }
 function cellHtml(val, prevVal, clickCode, colIdx, dir){
