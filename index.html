@@ -1986,7 +1986,9 @@ function saldosProjetadosCard(sp){
 
 /* =========================== DRE =========================== */
 const DRE_GRUPOS_CUSTO=['DEDUÇÕES DA RECEITA','CUSTOS','DESPESAS OPERACIONAIS','DESPESAS','IRPJ E CSLL'];
-function avPct(x){ return x.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
+/* Percentuais da DRE (AV%, AH%, margens) arredondados para inteiro — mais
+   legível em apresentação. Evita "-0%". */
+function avPct(x){ const r=Math.round(x); return (r===0?0:r).toLocaleString('pt-BR',{maximumFractionDigits:0})+'%'; }
 /* R$, AV% e AH% lado a lado em cada mês (o Total só R$ e AV%), sempre
    visíveis (sem seletor) — só apresentação,
    nada é recalculado no Supabase. A cor/sinal não depende de o valor estar
@@ -2009,7 +2011,7 @@ function dreCellPair(vv, rb, opts){
     tdAv = '<td class="num av-col"'+(opts.strong?' style="font-weight:'+opts.strong+'"':'')+tip('Não há Receita Bruta no período.')+'>—</td>';
   } else {
     let p=vv/rb*100; if(flip) p=-p;
-    const clsP=p>0.005?'pos':p<-0.005?'neg':'zero';
+    const clsP=p>=0.5?'pos':p<=-0.5?'neg':'zero';
     tdAv = '<td class="num av-col"'+(opts.strong?' style="font-weight:'+opts.strong+'"':'')+'><span class="money '+clsP+'">'+avPct(p)+'</span></td>';
   }
   if(!('prev' in opts)) return tdMoney+tdAv;
@@ -2023,8 +2025,8 @@ function dreCellPair(vv, rb, opts){
   } else {
     const ah=(vv-pv)/Math.abs(pv)*100;
     const bom=flip?ah<0:ah>0;
-    const clsH=Math.abs(ah)<0.005?'zero':(bom?'pos':'neg');
-    tdAh='<td class="num ah-col"'+stA+'><span class="money '+clsH+'">'+(ah>0.005?'+':'')+avPct(ah)+'</span></td>';
+    const clsH=Math.abs(ah)<0.5?'zero':(bom?'pos':'neg');
+    tdAh='<td class="num ah-col"'+stA+'><span class="money '+clsH+'">'+(ah>=0.5?'+':'')+avPct(ah)+'</span></td>';
   }
   return tdMoney+tdAv+tdAh;
 }
