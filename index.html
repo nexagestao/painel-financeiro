@@ -235,6 +235,9 @@ body.dark .tbl-dre th.ah-col,body.dark .tbl-dre td.ah-col{color:#C4CCD8;border-l
    recebe um top igual à altura real da 1ª linha (padding 9px+9px, borda 1px e
    texto 10.5px ≈ 34px) para empilhar logo abaixo dela, sem sobreposição. */
 .tbl-dre thead tr:last-child th{top:34px}
+/* Na 2ª linha do cabeçalho o 1º th é o "R$" do 1º mês (Descrição tem
+   rowspan=2) — não deve ficar fixo à esquerda por cima de Descrição. */
+.tbl-dre thead tr:last-child th:first-child{left:auto;box-shadow:none;z-index:2}
 .tbl-dre tr.row-result td:first-child{background:#E8F1F3 !important}
 .tbl-dre tr.row-result.final td:first-child{background:#CFE4E8 !important}
 body.dark .tbl-dre tr.row-result td:first-child{background:#123138 !important}
