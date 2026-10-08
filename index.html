@@ -228,7 +228,8 @@ body.dark .tbl-dre th,body.dark .tbl-dre td{border-bottom-color:#3A4352}
 body.dark .tbl-dre td.mcol,body.dark .tbl-dre th.mcol,body.dark .tbl-dre tr.lvl0 td{border-color:#556070}
 body.dark .tbl-dre th.av-col,body.dark .tbl-dre td.av-col{color:#C4CCD8;border-left-color:#3A4352}
 body.dark .tbl-dre thead th{color:#C4CCD8;border-bottom-color:#8B95A7}
-.tbl-dre td.av-delta{font-weight:600}
+.tbl-dre th.ah-col,.tbl-dre td.ah-col{color:#344054;font-size:12.5px;border-left:1px solid #D0D5DD}
+body.dark .tbl-dre th.ah-col,body.dark .tbl-dre td.ah-col{color:#C4CCD8;border-left-color:#3A4352}
 /* Cabeçalho de duas linhas: a 1ª (Descrição + meses) já herda position:sticky;top:0
    de ".tbl th"; a 2ª (R$ / AV%) herdaria o mesmo top:0 e sobreporia a 1ª, então
    recebe um top igual à altura real da 1ª linha (padding 9px+9px, borda 1px e
@@ -1983,7 +1984,8 @@ function saldosProjetadosCard(sp){
 /* =========================== DRE =========================== */
 const DRE_GRUPOS_CUSTO=['DEDUÇÕES DA RECEITA','CUSTOS','DESPESAS OPERACIONAIS','DESPESAS','IRPJ E CSLL'];
 function avPct(x){ return x.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
-/* R$ e AV% lado a lado, sempre visíveis (sem seletor) — só apresentação,
+/* R$, AV% e AH% lado a lado em cada mês (o Total só R$ e AV%), sempre
+   visíveis (sem seletor) — só apresentação,
    nada é recalculado no Supabase. A cor/sinal não depende de o valor estar
    positivo ou negativo no banco: depende da natureza contábil da linha.
    Deduções da Receita, Custos, Despesas Operacionais e IRPJ/CSLL (e as
@@ -2007,7 +2009,21 @@ function dreCellPair(vv, rb, opts){
     const clsP=p>0.005?'pos':p<-0.005?'neg':'zero';
     tdAv = '<td class="num av-col"'+(opts.strong?' style="font-weight:'+opts.strong+'"':'')+'><span class="money '+clsP+'">'+avPct(p)+'</span></td>';
   }
-  return tdMoney+tdAv;
+  if(!('prev' in opts)) return tdMoney+tdAv;
+  /* AH% — análise horizontal: variação sobre o mês anterior, calculada no
+     valor com sinal da linha. A cor diz se a variação é boa ou ruim: em
+     linhas de saída (flip) crescer é piora (vermelho); nas demais, melhora. */
+  const pv=opts.prev, stA=opts.strong?' style="font-weight:'+opts.strong+'"':'';
+  let tdAh;
+  if(pv==null || Math.abs(pv)<0.005){
+    tdAh='<td class="num ah-col"'+stA+tip(pv==null?'Sem mês anterior.':'Mês anterior zerado — variação não se aplica.')+'>—</td>';
+  } else {
+    const ah=(vv-pv)/Math.abs(pv)*100;
+    const bom=flip?ah<0:ah>0;
+    const clsH=Math.abs(ah)<0.005?'zero':(bom?'pos':'neg');
+    tdAh='<td class="num ah-col"'+stA+'><span class="money '+clsH+'">'+(ah>0.005?'+':'')+avPct(ah)+'</span></td>';
+  }
+  return tdMoney+tdAv+tdAh;
 }
 /* ---------- Cards executivos + gráficos compactos (acima da tabela da DRE) ---------- */
 function dreCardsHtml(reg, meses, cfg, rbTotal){
@@ -2133,9 +2149,9 @@ function renderDre(){
     PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':'');
   h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl tbl-dre"><thead>';
   h+='<tr><th rowspan="2" style="min-width:250px">Descrição</th>';
-  meses.forEach(m=>h+='<th colspan="2" class="mcol" style="text-align:center">'+MESES[m]+'</th>');
+  meses.forEach(m=>h+='<th colspan="3" class="mcol" style="text-align:center">'+MESES[m]+'</th>');
   h+='<th colspan="2" class="mcol" style="text-align:center">Total</th></tr><tr>';
-  meses.forEach(()=>h+='<th class="num mcol">R$</th><th class="num av-col">AV %</th>');
+  meses.forEach(m=>h+='<th class="num mcol">R$</th><th class="num av-col">AV %</th><th class="num ah-col"'+tip(m>0?'Variação sobre '+MESES[m-1]:'Sem mês anterior')+'>AH %</th>');
   h+='<th class="num mcol">R$</th><th class="num av-col">AV %</th></tr></thead><tbody>';
 
   function grpColor(l){
@@ -2156,7 +2172,7 @@ function renderDre(){
       esc(a.n)+(a.red?' <span class="status-badge st-neutro" style="margin-left:6px">redutora</span>':'')+'</span></td>';
     meses.forEach((m,i)=>{
       const vv=v(code,m,reg);
-      hh+=dreCellPair(vv, rbPorMes[i], {click:"drill('"+code+"',"+m+")", flip});
+      hh+=dreCellPair(vv, rbPorMes[i], {click:"drill('"+code+"',"+m+")", flip, prev:m>0?v(code,m-1,reg):null});
     });
     hh+=dreCellPair(tot, rbTotal, {flip, strong:600});
     hh+='</tr>';
@@ -2171,7 +2187,7 @@ function renderDre(){
       let hh='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'dre\',\''+l.id+'\')">'+(open?'&minus;':'+')+'</button>'+
         '<span style="color:'+grpColor(l)+';font-weight:650">'+esc(l.nome)+'</span></span></td>';
       meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv;
-        hh+=dreCellPair(vv, rbPorMes[i], {click:"drillLinha('"+l.id+"',"+m+")", flip:flipG}); });
+        hh+=dreCellPair(vv, rbPorMes[i], {click:"drillLinha('"+l.id+"',"+m+")", flip:flipG, prev:m>0?dreLinhaVal(l,m-1,reg):null}); });
       hh+=dreCellPair(tot, rbTotal, {flip:flipG, strong:650});
       hh+='</tr>';
       h+=hh;
@@ -2183,77 +2199,14 @@ function renderDre(){
       let tot=0;
       const isFinal = l.nome==='RESULTADO LÍQUIDO';
       let hh='<tr class="row-result'+(isFinal?' final':'')+'"><td>'+esc(l.nome)+'</td>';
-      meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+=dreCellPair(vv, rbPorMes[i], {}); });
+      meses.forEach((m,i)=>{ const vv=dreLinhaVal(l,m,reg); tot+=vv; hh+=dreCellPair(vv, rbPorMes[i], {prev:m>0?dreLinhaVal(l,m-1,reg):null}); });
       hh+=dreCellPair(tot, rbTotal, {})+'</tr>';
       h+=hh;
     }
   });
   h+='</tbody></table></div></div>';
-  h+=dreAVComparativoHtml(reg, meses, cfg, rbPorMes, custoLike);
   $('content').innerHTML=h;
 }
-/* ---------- Análise Vertical — comparativo mensal ----------
-   Mesma AV% da tabela acima (linha ÷ Receita Bruta do mês), mas só os
-   percentuais lado a lado para comparar a estrutura de um mês com o outro,
-   mais a média do período e a variação em pontos percentuais entre os dois
-   últimos meses realizados da seleção (ou os dois últimos selecionados, se
-   não houver dois realizados). Saídas aparecem negativas (mesma convenção da
-   DRE), então Δ positivo é sempre melhora (verde) e negativo, piora. Usa os
-   mesmos botões +/− de expansão da tabela principal. */
-function dreAVComparativoHtml(reg, meses, cfg, rbPorMes, custoLike){
-  const n=meses.length;
-  const idxReal=meses.map((m,i)=>i).filter(i=>reg!=='prev'&&meses[i]<=REAL_M);
-  const [iA,iB]=idxReal.length>=2?idxReal.slice(-2):[n-2,n-1];
-  const temDelta=n>=2;
-  const pctOf=(vv,i,flip)=>Math.abs(rbPorMes[i])<0.005?null:(flip?-1:1)*vv/rbPorMes[i]*100;
-  const cls=x=>x==null?'zero':x>0.005?'pos':x<-0.005?'neg':'zero';
-  const td=(p,extra)=>'<td class="num'+(extra||'')+'">'+(p==null?'—':'<span class="money '+cls(p)+'">'+avPct(p)+'</span>')+'</td>';
-  function cells(valsFn, flip){
-    const ps=meses.map((m,i)=>pctOf(valsFn(m),i,flip));
-    let hh='';
-    ps.forEach((p,i)=>hh+=td(p, i===0?' mcol':''));
-    const ok=ps.filter(p=>p!=null);
-    hh+=td(ok.length?ok.reduce((t,p)=>t+p,0)/ok.length:null,' mcol');
-    if(temDelta){
-      const a=ps[iA], b=ps[iB];
-      if(a==null||b==null) hh+='<td class="num av-delta">—</td>';
-      else { const d=b-a; hh+='<td class="num av-delta"><span class="money '+cls(d)+'">'+(d>0.005?'+':'')+d.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+' p.p.</span></td>'; }
-    }
-    return hh;
-  }
-  function contaRowsAV(code, level, flip){
-    const a=acc(code); if(!a) return '';
-    if(Math.abs(meses.reduce((t,m)=>t+v(code,m,reg),0))<0.005) return '';
-    const kids=filhos(code), open=!!expandState.dre[code];
-    let hh='<tr class="lvl'+Math.min(level,3)+'"><td><span class="tree-lbl">'+
-      (kids.length?'<button class="tree-toggle" onclick="toggleRow(\'dre\',\''+code+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
-      esc(a.n)+'</span></td>'+cells(m=>v(code,m,reg), flip)+'</tr>';
-    if(kids.length&&open) kids.forEach(k=>hh+=contaRowsAV(k.c,level+1,flip));
-    return hh;
-  }
-  let h='<div class="card" style="margin-top:16px"><div class="card-head"><div style="flex:1"><div class="card-title">Análise Vertical — comparativo mensal</div>'+
-    '<div class="card-sub">% de cada linha sobre a Receita Bruta do mês'+(temDelta?' · Δ = '+MESES[meses[iB]]+' vs '+MESES[meses[iA]]+' em pontos percentuais':'')+'</div></div></div>';
-  h+='<div class="tbl-wrap"><table class="tbl tbl-dre"><thead><tr><th style="min-width:250px">Descrição</th>';
-  meses.forEach((m,i)=>h+='<th class="num'+(i===0?' mcol':'')+'">'+MESES[m]+(m>REAL_M&&reg!=='real'?' <span style="font-weight:400;text-transform:none">(prev.)</span>':'')+'</th>');
-  h+='<th class="num mcol">Média</th>'+(temDelta?'<th class="num">Δ '+MESES[meses[iB]]+' vs '+MESES[meses[iA]]+'</th>':'')+'</tr></thead><tbody>';
-  cfg.forEach(l=>{
-    if(l.tipo==='Grupo'){
-      const flipG=DRE_GRUPOS_CUSTO.includes(l.nome), open=!!expandState.dre[l.id];
-      h+='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'dre\',\''+l.id+'\')">'+(open?'&minus;':'+')+'</button>'+
-        '<span style="font-weight:650">'+esc(l.nome)+'</span></span></td>'+cells(m=>dreLinhaVal(l,m,reg), flipG)+'</tr>';
-      if(open){
-        if(l.kids) l.kids.forEach(([c])=>{ h+=contaRowsAV(c,1,custoLike(c)); });
-        else filhos(l.ref).forEach(f=>{ h+=contaRowsAV(f.c,1,custoLike(f.c)); });
-      }
-    } else {
-      const isFinal=l.nome==='RESULTADO LÍQUIDO';
-      h+='<tr class="row-result'+(isFinal?' final':'')+'"><td>'+esc(l.nome)+'</td>'+cells(m=>dreLinhaVal(l,m,reg), false)+'</tr>';
-    }
-  });
-  h+='</tbody></table></div></div>';
-  return h;
-}
-
 /* =========================== CONTAS A PAGAR / RECEBER =========================== */
 function detTitulo(id, tipo){
   const lista = tipo==='pagar'?PAGAR[state.empresa]:RECEBER[state.empresa];
