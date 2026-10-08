@@ -2196,11 +2196,15 @@ function renderDre(){
    Mesma AV% da tabela acima (linha ÷ Receita Bruta do mês), mas só os
    percentuais lado a lado para comparar a estrutura de um mês com o outro,
    mais a média do período e a variação em pontos percentuais entre os dois
-   últimos meses selecionados. Saídas aparecem negativas (mesma convenção da
+   últimos meses realizados da seleção (ou os dois últimos selecionados, se
+   não houver dois realizados). Saídas aparecem negativas (mesma convenção da
    DRE), então Δ positivo é sempre melhora (verde) e negativo, piora. Usa os
    mesmos botões +/− de expansão da tabela principal. */
 function dreAVComparativoHtml(reg, meses, cfg, rbPorMes, custoLike){
-  const n=meses.length, temDelta=n>=2;
+  const n=meses.length;
+  const idxReal=meses.map((m,i)=>i).filter(i=>reg!=='prev'&&meses[i]<=REAL_M);
+  const [iA,iB]=idxReal.length>=2?idxReal.slice(-2):[n-2,n-1];
+  const temDelta=n>=2;
   const pctOf=(vv,i,flip)=>Math.abs(rbPorMes[i])<0.005?null:(flip?-1:1)*vv/rbPorMes[i]*100;
   const cls=x=>x==null?'zero':x>0.005?'pos':x<-0.005?'neg':'zero';
   const td=(p,extra)=>'<td class="num'+(extra||'')+'">'+(p==null?'—':'<span class="money '+cls(p)+'">'+avPct(p)+'</span>')+'</td>';
@@ -2211,7 +2215,7 @@ function dreAVComparativoHtml(reg, meses, cfg, rbPorMes, custoLike){
     const ok=ps.filter(p=>p!=null);
     hh+=td(ok.length?ok.reduce((t,p)=>t+p,0)/ok.length:null,' mcol');
     if(temDelta){
-      const a=ps[n-2], b=ps[n-1];
+      const a=ps[iA], b=ps[iB];
       if(a==null||b==null) hh+='<td class="num av-delta">—</td>';
       else { const d=b-a; hh+='<td class="num av-delta"><span class="money '+cls(d)+'">'+(d>0.005?'+':'')+d.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+' p.p.</span></td>'; }
     }
@@ -2228,10 +2232,10 @@ function dreAVComparativoHtml(reg, meses, cfg, rbPorMes, custoLike){
     return hh;
   }
   let h='<div class="card" style="margin-top:16px"><div class="card-head"><div style="flex:1"><div class="card-title">Análise Vertical — comparativo mensal</div>'+
-    '<div class="card-sub">% de cada linha sobre a Receita Bruta do mês'+(temDelta?' · Δ = '+MESES[meses[n-1]]+' vs '+MESES[meses[n-2]]+' em pontos percentuais':'')+'</div></div></div>';
+    '<div class="card-sub">% de cada linha sobre a Receita Bruta do mês'+(temDelta?' · Δ = '+MESES[meses[iB]]+' vs '+MESES[meses[iA]]+' em pontos percentuais':'')+'</div></div></div>';
   h+='<div class="tbl-wrap"><table class="tbl tbl-dre"><thead><tr><th style="min-width:250px">Descrição</th>';
   meses.forEach((m,i)=>h+='<th class="num'+(i===0?' mcol':'')+'">'+MESES[m]+(m>REAL_M&&reg!=='real'?' <span style="font-weight:400;text-transform:none">(prev.)</span>':'')+'</th>');
-  h+='<th class="num mcol">Média</th>'+(temDelta?'<th class="num">Δ p.p.</th>':'')+'</tr></thead><tbody>';
+  h+='<th class="num mcol">Média</th>'+(temDelta?'<th class="num">Δ '+MESES[meses[iB]]+' vs '+MESES[meses[iA]]+'</th>':'')+'</tr></thead><tbody>';
   cfg.forEach(l=>{
     if(l.tipo==='Grupo'){
       const flipG=DRE_GRUPOS_CUSTO.includes(l.nome), open=!!expandState.dre[l.id];
