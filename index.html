@@ -723,9 +723,19 @@ function saldos(reg){
   for(let m=0;m<12;m++){
     const f = fluxoMes(m,reg);
     let ini, fim, conciliacao=0;
+    const sh = BASES[emp].saldoHoje;
     if(reais[m]){
       ini = reais[m].ini; fim = reais[m].fim;
       conciliacao = (fim-ini) - f.ger;
+      s = fim;
+    } else if(sh && sh.m===m){
+      // Mês em andamento com saldo bancário do dia: o fim parte do saldo
+      // real de hoje + o que ainda está em aberto no mês (no regime 'real',
+      // só o saldo de hoje) — não do saldo anterior + fluxo estimado.
+      ini = s!=null ? s : BASES[emp].saldoIni;
+      fim = sh.valor + (reg==='real' ? 0 :
+        abertoMes(descendantAnaliticas('1'), m, 'receber') -
+        abertoMes(['2','3','5','6'].flatMap(descendantAnaliticas), m, 'pagar'));
       s = fim;
     } else if(m<anchor){
       ini = s!=null ? s : 0; fim = ini; s = fim;
@@ -737,7 +747,10 @@ function saldos(reg){
   }
   return out;
 }
-function saldoAtual(){ return saldos('real')[REAL_M].fim; }
+function saldoAtual(){
+  const sh = BASES[state.empresa].saldoHoje;
+  return sh ? sh.valor : saldos('real')[REAL_M].fim;
+}
 function menorSaldoProj(){
   const s = saldos('proj');
   let min = Infinity, mm = 0;
@@ -1753,7 +1766,8 @@ function renderFluxo(){
 
   let h=pageHead('Fluxo de Caixa','');
   h+='<div class="kpi-grid">';
-  h+=kpi('Saldo Atual',money(sAtual,true),null,'consolidado bancário',sAtual<0?'neg':sAtual>0?'pos':'zero');
+  const shF = BASES[state.empresa].saldoHoje;
+  h+=kpi('Saldo Atual',money(sAtual,true),null,'consolidado bancário'+(shF?' em '+shF.data.toLocaleDateString('pt-BR'):''),sAtual<0?'neg':sAtual>0?'pos':'zero');
   h+=kpi('Entradas Previstas',money(sp.ent,true),null,'títulos em aberto a partir de hoje','pos');
   h+=kpi('Saídas Previstas',money(sp.sai,true),null,'títulos em aberto a partir de hoje','neg');
   h+=kpi('Saldo Final Previsto',money(sp.saldoFinal,true),null,'até '+esc(state.periodoLabel),sp.saldoFinal<0?'neg':sp.saldoFinal>0?'pos':'zero');
@@ -4357,10 +4371,18 @@ async function hydrateAgibensReal(){
     // vários meses (era o bug: só existia o snapshot de 31/07 e ele "vazava"
     // para junho também).
     const porMes = {};
+    // Snapshot que NÃO é de fim de mês (ex.: "saldo de hoje" 08/10) não fecha
+    // o mês: vira saldoHoje — ponto de partida do Saldo Atual e da previsão
+    // diária, e base do fim projetado do mês corrente em saldos().
+    const hojePorConta = {}; let dataHoje = null;
     saldosRows.forEach(s=>{
       const dt = parseYMD(s.data);
       if(!dt || dt.getFullYear()!==ANO) return;
       const m = dt.getMonth();
+      if(dt.getDate() !== new Date(ANO, m+1, 0).getDate()){
+        if(!dataHoje || dt>dataHoje){ dataHoje = dt; }
+        return;
+      }
       (porMes[m]=porMes[m]||{});
       if(!(s.conta_bancaria_id in porMes[m])) porMes[m][s.conta_bancaria_id]=Number(s.saldo);
     });
@@ -4376,6 +4398,12 @@ async function hydrateAgibensReal(){
     BASES.AGIBENS.saldosMensais = saldosMensais;
     BASES.AGIBENS.saldoIni = prevFim;
     BASES.AGIBENS.anchorM = mesesReais.length ? mesesReais[mesesReais.length-1]+1 : 0;
+    BASES.AGIBENS.saldoHoje = null;
+    if(dataHoje && !(dataHoje.getMonth() in porMes)){
+      saldosRows.forEach(s=>{ const dt=parseYMD(s.data); if(dt && +dt===+dataHoje) hojePorConta[s.conta_bancaria_id]=Number(s.saldo); });
+      BASES.AGIBENS.saldoHoje = {data:dataHoje, m:dataHoje.getMonth(),
+        valor: contas.reduce((t,c)=>t+(hojePorConta[c.id] ?? 0),0)};
+    }
   }
   aplicarReconciliacaoMGF();
   AGIBENS_HYDRATED = true;
