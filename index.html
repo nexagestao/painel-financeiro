@@ -217,6 +217,18 @@ body.dark td.total-highlight{background:#123138}
 .tbl-dre th.av-col,.tbl-dre td.av-col{color:var(--text2);font-size:12.5px;border-left:1px dashed var(--border)}
 .tbl-dre th:first-child,.tbl-dre td:first-child{position:sticky;left:0;z-index:2;background:var(--surface);box-shadow:2px 0 4px -2px rgba(16,24,40,.12)}
 .tbl-dre thead th:first-child{z-index:3}
+/* Linhas reforçadas para apresentação (projetor/tela compartilhada): grade
+   mais escura, separador sólido entre meses e AV% em cor legível. */
+.tbl-dre th,.tbl-dre td{border-bottom:1px solid #C3CAD5}
+.tbl-dre td.mcol,.tbl-dre th.mcol{border-left:1.5px solid #98A2B3}
+.tbl-dre th.av-col,.tbl-dre td.av-col{color:#344054;border-left:1px solid #D0D5DD}
+.tbl-dre tr.lvl0 td{border-top:1.5px solid #98A2B3}
+.tbl-dre thead th{color:#344054;border-bottom:1.5px solid #667085}
+body.dark .tbl-dre th,body.dark .tbl-dre td{border-bottom-color:#3A4352}
+body.dark .tbl-dre td.mcol,body.dark .tbl-dre th.mcol,body.dark .tbl-dre tr.lvl0 td{border-color:#556070}
+body.dark .tbl-dre th.av-col,body.dark .tbl-dre td.av-col{color:#C4CCD8;border-left-color:#3A4352}
+body.dark .tbl-dre thead th{color:#C4CCD8;border-bottom-color:#8B95A7}
+.tbl-dre td.av-delta{font-weight:600}
 /* Cabeçalho de duas linhas: a 1ª (Descrição + meses) já herda position:sticky;top:0
    de ".tbl th"; a 2ª (R$ / AV%) herdaria o mesmo top:0 e sobreporia a 1ª, então
    recebe um top igual à altura real da 1ª linha (padding 9px+9px, borda 1px e
@@ -1985,7 +1997,7 @@ function dreCellPair(vv, rb, opts){
   const flip = !!opts.flip;
   const dv = flip ? -vv : vv;
   const clsV = dv>0.005?'pos':dv<-0.005?'neg':'zero';
-  const clickAttr = opts.click ? ' class="num clickv" onclick="'+opts.click+'"' : ' class="num"';
+  const clickAttr = opts.click ? ' class="num mcol clickv" onclick="'+opts.click+'"' : ' class="num mcol"';
   const tdMoney = '<td'+clickAttr+(opts.strong?' style="font-weight:'+opts.strong+'"':'')+'><span class="money '+clsV+'">'+money(dv,opts.dec)+'</span></td>';
   let tdAv;
   if(Math.abs(rb)<0.005){
@@ -2121,10 +2133,10 @@ function renderDre(){
     PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':'');
   h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl tbl-dre"><thead>';
   h+='<tr><th rowspan="2" style="min-width:250px">Descrição</th>';
-  meses.forEach(m=>h+='<th colspan="2" style="text-align:center">'+MESES[m]+'</th>');
-  h+='<th colspan="2" style="text-align:center">Total</th></tr><tr>';
-  meses.forEach(()=>h+='<th class="num">R$</th><th class="num av-col">AV %</th>');
-  h+='<th class="num">R$</th><th class="num av-col">AV %</th></tr></thead><tbody>';
+  meses.forEach(m=>h+='<th colspan="2" class="mcol" style="text-align:center">'+MESES[m]+'</th>');
+  h+='<th colspan="2" class="mcol" style="text-align:center">Total</th></tr><tr>';
+  meses.forEach(()=>h+='<th class="num mcol">R$</th><th class="num av-col">AV %</th>');
+  h+='<th class="num mcol">R$</th><th class="num av-col">AV %</th></tr></thead><tbody>';
 
   function grpColor(l){
     if(DRE_GRUPOS_CUSTO.includes(l.nome)) return 'var(--neg)';
@@ -2177,7 +2189,65 @@ function renderDre(){
     }
   });
   h+='</tbody></table></div></div>';
+  h+=dreAVComparativoHtml(reg, meses, cfg, rbPorMes, custoLike);
   $('content').innerHTML=h;
+}
+/* ---------- Análise Vertical — comparativo mensal ----------
+   Mesma AV% da tabela acima (linha ÷ Receita Bruta do mês), mas só os
+   percentuais lado a lado para comparar a estrutura de um mês com o outro,
+   mais a média do período e a variação em pontos percentuais entre os dois
+   últimos meses selecionados. Saídas aparecem negativas (mesma convenção da
+   DRE), então Δ positivo é sempre melhora (verde) e negativo, piora. Usa os
+   mesmos botões +/− de expansão da tabela principal. */
+function dreAVComparativoHtml(reg, meses, cfg, rbPorMes, custoLike){
+  const n=meses.length, temDelta=n>=2;
+  const pctOf=(vv,i,flip)=>Math.abs(rbPorMes[i])<0.005?null:(flip?-1:1)*vv/rbPorMes[i]*100;
+  const cls=x=>x==null?'zero':x>0.005?'pos':x<-0.005?'neg':'zero';
+  const td=(p,extra)=>'<td class="num'+(extra||'')+'">'+(p==null?'—':'<span class="money '+cls(p)+'">'+avPct(p)+'</span>')+'</td>';
+  function cells(valsFn, flip){
+    const ps=meses.map((m,i)=>pctOf(valsFn(m),i,flip));
+    let hh='';
+    ps.forEach((p,i)=>hh+=td(p, i===0?' mcol':''));
+    const ok=ps.filter(p=>p!=null);
+    hh+=td(ok.length?ok.reduce((t,p)=>t+p,0)/ok.length:null,' mcol');
+    if(temDelta){
+      const a=ps[n-2], b=ps[n-1];
+      if(a==null||b==null) hh+='<td class="num av-delta">—</td>';
+      else { const d=b-a; hh+='<td class="num av-delta"><span class="money '+cls(d)+'">'+(d>0.005?'+':'')+d.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+' p.p.</span></td>'; }
+    }
+    return hh;
+  }
+  function contaRowsAV(code, level, flip){
+    const a=acc(code); if(!a) return '';
+    if(Math.abs(meses.reduce((t,m)=>t+v(code,m,reg),0))<0.005) return '';
+    const kids=filhos(code), open=!!expandState.dre[code];
+    let hh='<tr class="lvl'+Math.min(level,3)+'"><td><span class="tree-lbl">'+
+      (kids.length?'<button class="tree-toggle" onclick="toggleRow(\'dre\',\''+code+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
+      esc(a.n)+'</span></td>'+cells(m=>v(code,m,reg), flip)+'</tr>';
+    if(kids.length&&open) kids.forEach(k=>hh+=contaRowsAV(k.c,level+1,flip));
+    return hh;
+  }
+  let h='<div class="card" style="margin-top:16px"><div class="card-head"><div style="flex:1"><div class="card-title">Análise Vertical — comparativo mensal</div>'+
+    '<div class="card-sub">% de cada linha sobre a Receita Bruta do mês'+(temDelta?' · Δ = '+MESES[meses[n-1]]+' vs '+MESES[meses[n-2]]+' em pontos percentuais':'')+'</div></div></div>';
+  h+='<div class="tbl-wrap"><table class="tbl tbl-dre"><thead><tr><th style="min-width:250px">Descrição</th>';
+  meses.forEach((m,i)=>h+='<th class="num'+(i===0?' mcol':'')+'">'+MESES[m]+(m>REAL_M&&reg!=='real'?' <span style="font-weight:400;text-transform:none">(prev.)</span>':'')+'</th>');
+  h+='<th class="num mcol">Média</th>'+(temDelta?'<th class="num">Δ p.p.</th>':'')+'</tr></thead><tbody>';
+  cfg.forEach(l=>{
+    if(l.tipo==='Grupo'){
+      const flipG=DRE_GRUPOS_CUSTO.includes(l.nome), open=!!expandState.dre[l.id];
+      h+='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'dre\',\''+l.id+'\')">'+(open?'&minus;':'+')+'</button>'+
+        '<span style="font-weight:650">'+esc(l.nome)+'</span></span></td>'+cells(m=>dreLinhaVal(l,m,reg), flipG)+'</tr>';
+      if(open){
+        if(l.kids) l.kids.forEach(([c])=>{ h+=contaRowsAV(c,1,custoLike(c)); });
+        else filhos(l.ref).forEach(f=>{ h+=contaRowsAV(f.c,1,custoLike(f.c)); });
+      }
+    } else {
+      const isFinal=l.nome==='RESULTADO LÍQUIDO';
+      h+='<tr class="row-result'+(isFinal?' final':'')+'"><td>'+esc(l.nome)+'</td>'+cells(m=>dreLinhaVal(l,m,reg), false)+'</tr>';
+    }
+  });
+  h+='</tbody></table></div></div>';
+  return h;
 }
 
 /* =========================== CONTAS A PAGAR / RECEBER =========================== */
@@ -4367,8 +4437,8 @@ async function hydrateAgibensReal(){
    custo de Sinistro (2.1.99); "Central de Monitoramento" (2.3.04), "Taxas Municipais e
    Estaduais" (3.3.8.01) e "Despesas de Representação Comercial" (3.3.5.01)
    usam as contas homônimas do plano. Transferências de Valores são
-   movimentação entre contas próprias e ficam fora da DRE, assim como 1
-   saída "A Identificar" (R$ 3.000) até ser classificada. Não altera o
+   movimentação entre contas próprias e ficam fora da DRE; a saída "A
+   Identificar" de R$ 3.000 é compra de móveis (3.3.1.10). Não altera o
    status dos títulos "Em aberto" importados do Supabase — só adiciona os
    lançamentos reais do MGF/DRE ao lado. Junho e Julho não são tocados;
    Outubro em diante seguem projetados até a próxima planilha. */
@@ -4932,41 +5002,42 @@ const MGF_SET_PAGAR = [
   {id:'MGS-P114', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(24,9), vprev:5.94, vpago:5.94, status:'Pago'},
   {id:'MGS-P115', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(24,9), vprev:23.27, vpago:23.27, status:'Pago'},
   {id:'MGS-P116', forn:'CARLOS JUNIOR OJOPI DE OLIVEIRA', doc:'', desc:'SALARIOS E ORDENADOS', conta:'3.2.01', centro:'ADMINISTRATIVO', banco:'', comp:'09/2026', emissao:d(20,9), venc:d(20,9), pgto:d(25,9), vprev:1500.0, vpago:1500.0, status:'Pago'},
-  {id:'MGS-P117', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:13.86, vpago:13.86, status:'Pago'},
-  {id:'MGS-P118', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:53.7, vpago:53.7, status:'Pago'},
-  {id:'MGS-P119', forn:'TARIFAS DE EMISSAO DE BOLETOS', doc:'', desc:'TARIFAS DE EMISSAO DE BOLETOS', conta:'5.03', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:8.15, vpago:8.15, status:'Pago'},
-  {id:'MGS-P120', forn:'TARIFAS DE EMISSAO DE BOLETOS', doc:'', desc:'TARIFAS DE EMISSAO DE BOLETOS', conta:'5.03', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:0.99, vpago:0.99, status:'Pago'},
-  {id:'MGS-P121', forn:'VIVO TELEFONICA BRASIL S.A.', doc:'', desc:'TELEFONIA E INTERNET', conta:'3.3.1.06', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:220.0, vpago:220.0, status:'Pago'},
-  {id:'MGS-P122', forn:'ASSIST ME ASSESSORIA E SERVICOS LTDA.', doc:'', desc:'GUINCHO / REBOQUE', conta:'2.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:3683.46, vpago:3683.46, status:'Pago'},
-  {id:'MGS-P123', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(26,9), vprev:0.99, vpago:0.99, status:'Pago'},
-  {id:'MGS-P124', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(27,9), vprev:1.98, vpago:1.98, status:'Pago'},
-  {id:'MGS-P125', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(28,9), vprev:7.92, vpago:7.92, status:'Pago'},
-  {id:'MGS-P126', forn:'TARIFAS DE EMISSAO DE BOLETOS', doc:'', desc:'TARIFAS DE EMISSAO DE BOLETOS', conta:'5.03', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:6.42, vpago:6.42, status:'Pago'},
-  {id:'MGS-P127', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:395.0, vpago:395.0, status:'Pago'},
-  {id:'MGS-P128', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:297.0, vpago:297.0, status:'Pago'},
-  {id:'MGS-P129', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:150.0, vpago:150.0, status:'Pago'},
-  {id:'MGS-P130', forn:'HUB ASSISTENCIA 24 HORAS LTDA', doc:'', desc:'GUINCHO / REBOQUE', conta:'2.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:1000.0, vpago:1000.0, status:'Pago'},
-  {id:'MGS-P131', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'DESPESAS DE REPRESENTACAO COMERCIAL', conta:'3.3.5.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:500.0, vpago:500.0, status:'Pago'},
-  {id:'MGS-P132', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'DESPESAS DE REPRESENTACAO COMERCIAL', conta:'3.3.5.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:60.0, vpago:60.0, status:'Pago'},
-  {id:'MGS-P133', forn:'HINOVA - SOLUCOES DIGITAIS LTDA', doc:'', desc:'LOCACAO DE SOFTWARE / SAAS', conta:'3.3.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:554.15, vpago:554.15, status:'Pago'},
-  {id:'MGS-P134', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(28,9), vprev:39.38, vpago:39.38, status:'Pago'},
-  {id:'MGS-P135', forn:'TAXAS MUNICIPAIS E ESTADUAIS', doc:'', desc:'TAXAS MUNICIPAIS E ESTADUAIS', conta:'3.3.8.01', centro:'', banco:'', comp:'09/2026', emissao:d(29,9), venc:d(29,9), pgto:d(29,9), vprev:359.54, vpago:359.54, status:'Pago'},
-  {id:'MGS-P136', forn:'GUINCHO / REBOQUE', doc:'', desc:'GUINCHO / REBOQUE', conta:'2.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(29,9), venc:d(29,9), pgto:d(29,9), vprev:170.0, vpago:170.0, status:'Pago'},
-  {id:'MGS-P137', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(29,9), vprev:4.95, vpago:4.95, status:'Pago'},
-  {id:'MGS-P138', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(29,9), vprev:12.53, vpago:12.53, status:'Pago'},
-  {id:'MGS-P139', forn:'MOREIRA FIGUEIREDO SOCIEDADE INDIVIDUAL DE ADVOCACIA', doc:'', desc:'CONSULTORIA JURIDICA', conta:'3.3.3.02', centro:'JURIDICO', banco:'', comp:'09/2026', emissao:d(10,9), venc:d(10,9), pgto:d(30,9), vprev:1600.0, vpago:1600.0, status:'Pago'},
-  {id:'MGS-P140', forn:'VERB CALL LTDA - BARBARA', doc:'', desc:'COMISSAO RECORRENTE', conta:'3.1.01', centro:'COMERCIAL', banco:'', comp:'09/2026', emissao:d(20,9), venc:d(20,9), pgto:d(30,9), vprev:255.11, vpago:255.11, status:'Pago'},
-  {id:'MGS-P141', forn:'TAXAS DE CARTORIO E REGISTRO', doc:'', desc:'TAXAS DE CARTORIO E REGISTRO', conta:'3.3.8.02', centro:'ADMINISTRATIVO', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:2380.43, vpago:2380.43, status:'Pago'},
-  {id:'MGS-P142', forn:'USE RASTREAMENTO', doc:'', desc:'CENTRAL DE MONITORAMENTO', conta:'2.3.04', centro:'RASTREADOR', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:137.0, vpago:137.0, status:'Pago'},
-  {id:'MGS-P143', forn:'FLOW SERVIÇOS ADMINISTRATIVOS', doc:'', desc:'CONSULTORIA OPERACIONAL', conta:'3.3.3.04', centro:'ADMINISTRATIVO', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:1750.0, vpago:1750.0, status:'Pago'},
-  {id:'MGS-P144', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:0.99, vpago:0.99, status:'Pago'},
-  {id:'MGS-P145', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:8.91, vpago:8.91, status:'Pago'},
-  {id:'MGS-P146', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:48.33, vpago:48.33, status:'Pago'},
-  {id:'MGS-P147', forn:'VANESSA DO NASCIMENTO GREGÓRIO', doc:'', desc:'LIMPEZA E CONSERVACAO', conta:'3.3.1.09', centro:'', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:900.0, vpago:900.0, status:'Pago'},
-  {id:'MGS-P148', forn:'AJUDA DE CUSTO', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:1000.0, vpago:1000.0, status:'Pago'},
-  {id:'MGS-P149', forn:'VANESSA DO NASCIMENTO GREGÓRIO', doc:'', desc:'LIMPEZA E CONSERVACAO', conta:'3.3.1.09', centro:'', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:400.0, vpago:400.0, status:'Pago'},
-  {id:'MGS-P150', forn:'VERB CALL LTDA - BARBARA', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'COMERCIAL', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:4500.0, vpago:4500.0, status:'Pago'},
-  {id:'MGS-P151', forn:'MR GESTAO COMERCIAL LTDA', doc:'', desc:'CAPTAÇÃO POR PLACA', conta:'3.1.05', centro:'COMERCIAL', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:4923.28, vpago:4923.28, status:'Pago'},
+  {id:'MGS-P117', forn:'MÓVEIS E ELETRODOMÉSTICOS', doc:'', desc:'MÓVEIS E ELETRODOMÉSTICOS', conta:'3.3.1.10', centro:'ADMINISTRATIVO', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:3000.0, vpago:3000.0, status:'Pago'},
+  {id:'MGS-P118', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:13.86, vpago:13.86, status:'Pago'},
+  {id:'MGS-P119', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:53.7, vpago:53.7, status:'Pago'},
+  {id:'MGS-P120', forn:'TARIFAS DE EMISSAO DE BOLETOS', doc:'', desc:'TARIFAS DE EMISSAO DE BOLETOS', conta:'5.03', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:8.15, vpago:8.15, status:'Pago'},
+  {id:'MGS-P121', forn:'TARIFAS DE EMISSAO DE BOLETOS', doc:'', desc:'TARIFAS DE EMISSAO DE BOLETOS', conta:'5.03', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:0.99, vpago:0.99, status:'Pago'},
+  {id:'MGS-P122', forn:'VIVO TELEFONICA BRASIL S.A.', doc:'', desc:'TELEFONIA E INTERNET', conta:'3.3.1.06', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:220.0, vpago:220.0, status:'Pago'},
+  {id:'MGS-P123', forn:'ASSIST ME ASSESSORIA E SERVICOS LTDA.', doc:'', desc:'GUINCHO / REBOQUE', conta:'2.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(25,9), vprev:3683.46, vpago:3683.46, status:'Pago'},
+  {id:'MGS-P124', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(26,9), vprev:0.99, vpago:0.99, status:'Pago'},
+  {id:'MGS-P125', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(27,9), vprev:1.98, vpago:1.98, status:'Pago'},
+  {id:'MGS-P126', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(25,9), venc:d(25,9), pgto:d(28,9), vprev:7.92, vpago:7.92, status:'Pago'},
+  {id:'MGS-P127', forn:'TARIFAS DE EMISSAO DE BOLETOS', doc:'', desc:'TARIFAS DE EMISSAO DE BOLETOS', conta:'5.03', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:6.42, vpago:6.42, status:'Pago'},
+  {id:'MGS-P128', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:395.0, vpago:395.0, status:'Pago'},
+  {id:'MGS-P129', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:297.0, vpago:297.0, status:'Pago'},
+  {id:'MGS-P130', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:150.0, vpago:150.0, status:'Pago'},
+  {id:'MGS-P131', forn:'HUB ASSISTENCIA 24 HORAS LTDA', doc:'', desc:'GUINCHO / REBOQUE', conta:'2.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:1000.0, vpago:1000.0, status:'Pago'},
+  {id:'MGS-P132', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'DESPESAS DE REPRESENTACAO COMERCIAL', conta:'3.3.5.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:500.0, vpago:500.0, status:'Pago'},
+  {id:'MGS-P133', forn:'RENATO SANTOS DA CUNHA 13119329762', doc:'', desc:'DESPESAS DE REPRESENTACAO COMERCIAL', conta:'3.3.5.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:60.0, vpago:60.0, status:'Pago'},
+  {id:'MGS-P134', forn:'HINOVA - SOLUCOES DIGITAIS LTDA', doc:'', desc:'LOCACAO DE SOFTWARE / SAAS', conta:'3.3.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(28,9), venc:d(28,9), pgto:d(28,9), vprev:554.15, vpago:554.15, status:'Pago'},
+  {id:'MGS-P135', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(28,9), vprev:39.38, vpago:39.38, status:'Pago'},
+  {id:'MGS-P136', forn:'TAXAS MUNICIPAIS E ESTADUAIS', doc:'', desc:'TAXAS MUNICIPAIS E ESTADUAIS', conta:'3.3.8.01', centro:'', banco:'', comp:'09/2026', emissao:d(29,9), venc:d(29,9), pgto:d(29,9), vprev:359.54, vpago:359.54, status:'Pago'},
+  {id:'MGS-P137', forn:'GUINCHO / REBOQUE', doc:'', desc:'GUINCHO / REBOQUE', conta:'2.2.01', centro:'', banco:'', comp:'09/2026', emissao:d(29,9), venc:d(29,9), pgto:d(29,9), vprev:170.0, vpago:170.0, status:'Pago'},
+  {id:'MGS-P138', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(29,9), vprev:4.95, vpago:4.95, status:'Pago'},
+  {id:'MGS-P139', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(29,9), vprev:12.53, vpago:12.53, status:'Pago'},
+  {id:'MGS-P140', forn:'MOREIRA FIGUEIREDO SOCIEDADE INDIVIDUAL DE ADVOCACIA', doc:'', desc:'CONSULTORIA JURIDICA', conta:'3.3.3.02', centro:'JURIDICO', banco:'', comp:'09/2026', emissao:d(10,9), venc:d(10,9), pgto:d(30,9), vprev:1600.0, vpago:1600.0, status:'Pago'},
+  {id:'MGS-P141', forn:'VERB CALL LTDA - BARBARA', doc:'', desc:'COMISSAO RECORRENTE', conta:'3.1.01', centro:'COMERCIAL', banco:'', comp:'09/2026', emissao:d(20,9), venc:d(20,9), pgto:d(30,9), vprev:255.11, vpago:255.11, status:'Pago'},
+  {id:'MGS-P142', forn:'TAXAS DE CARTORIO E REGISTRO', doc:'', desc:'TAXAS DE CARTORIO E REGISTRO', conta:'3.3.8.02', centro:'ADMINISTRATIVO', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:2380.43, vpago:2380.43, status:'Pago'},
+  {id:'MGS-P143', forn:'USE RASTREAMENTO', doc:'', desc:'CENTRAL DE MONITORAMENTO', conta:'2.3.04', centro:'RASTREADOR', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:137.0, vpago:137.0, status:'Pago'},
+  {id:'MGS-P144', forn:'FLOW SERVIÇOS ADMINISTRATIVOS', doc:'', desc:'CONSULTORIA OPERACIONAL', conta:'3.3.3.04', centro:'ADMINISTRATIVO', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:1750.0, vpago:1750.0, status:'Pago'},
+  {id:'MGS-P145', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:0.99, vpago:0.99, status:'Pago'},
+  {id:'MGS-P146', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:8.91, vpago:8.91, status:'Pago'},
+  {id:'MGS-P147', forn:'TARIFA DE BOLETO', doc:'', desc:'TARIFA DE BOLETO', conta:'5.03', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:48.33, vpago:48.33, status:'Pago'},
+  {id:'MGS-P148', forn:'VANESSA DO NASCIMENTO GREGÓRIO', doc:'', desc:'LIMPEZA E CONSERVACAO', conta:'3.3.1.09', centro:'', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:900.0, vpago:900.0, status:'Pago'},
+  {id:'MGS-P149', forn:'AJUDA DE CUSTO', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:1000.0, vpago:1000.0, status:'Pago'},
+  {id:'MGS-P150', forn:'VANESSA DO NASCIMENTO GREGÓRIO', doc:'', desc:'LIMPEZA E CONSERVACAO', conta:'3.3.1.09', centro:'', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:400.0, vpago:400.0, status:'Pago'},
+  {id:'MGS-P151', forn:'VERB CALL LTDA - BARBARA', doc:'', desc:'AJUDA DE CUSTO', conta:'3.1.04', centro:'COMERCIAL', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:4500.0, vpago:4500.0, status:'Pago'},
+  {id:'MGS-P152', forn:'MR GESTAO COMERCIAL LTDA', doc:'', desc:'CAPTAÇÃO POR PLACA', conta:'3.1.05', centro:'COMERCIAL', banco:'', comp:'09/2026', emissao:d(30,9), venc:d(30,9), pgto:d(30,9), vprev:4923.28, vpago:4923.28, status:'Pago'},
 ];
 const MGF_SET_RECEBER = [
   {id:'MGS-R001', cli:'Contribuição de Associados', doc:'', desc:'Contribuição de Associados', conta:'1.1.01', centro:'COBRANçA', banco:'', comp:'09/2026', emissao:d(30,8), venc:d(30,8), rec:d(1,9), vprev:498.33, vrec:511.62, status:'Recebido'},
