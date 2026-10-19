@@ -882,10 +882,10 @@ const USUARIOS = [
 const MODULOS_PERM = ['Dashboard','Fluxo de Caixa','DRE','Indicadores','Contas a Pagar','Contas a Receber','Administração'];
 const ACOES_PERM = ['visualizar','exportar','importar','configurar','operar'];
 const PERFIS = {
-  'Administrador': {mods:['dashboard','fluxo','dre','indicadores','pagar','receber','admin'], importar:true, configurar:true, exportar:true},
-  'Financeiro':    {mods:['dashboard','fluxo','dre','indicadores','pagar','receber'], importar:true, configurar:false, exportar:true},
-  'Diretoria':     {mods:['dashboard','fluxo','dre'], importar:false, configurar:false, exportar:true},
-  'Cliente':       {mods:['dashboard','dre','indicadores'], importar:false, configurar:false, exportar:true},
+  'Administrador': {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','receber','admin'], importar:true, configurar:true, exportar:true},
+  'Financeiro':    {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','receber'], importar:true, configurar:false, exportar:true},
+  'Diretoria':     {mods:['dashboard','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
+  'Cliente':       {mods:['dashboard','dre','cooperativas','indicadores'], importar:false, configurar:false, exportar:true},
   'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false}
 };
 const LOGS = [
@@ -1149,6 +1149,7 @@ const NAV = [
   {sec:'Análises', items:[
     {id:'fluxo', n:'Fluxo de Caixa', ic:'flow'},
     {id:'dre', n:'DRE', ic:'file'},
+    {id:'cooperativas', n:'Resultado por Cooperativa', ic:'users'},
     {id:'indicadores', n:'Indicadores', ic:'gauge'}]},
   {sec:'Financeiro', items:[
     {id:'pagar', n:'Contas a Pagar', ic:'payUp'},
@@ -1212,8 +1213,8 @@ async function setEmpresa(e){
   try{ await loadCentrosResultado(e); }catch(err){ console.error('Falha ao recarregar centros de resultado:', err); }
   try{ await loadDreConfig(e); }catch(err){ console.error('Falha ao recarregar configuração da DRE:', err); }
   try{ await loadDashLayouts(e); }catch(err){ console.error('Falha ao recarregar layout do dashboard:', err); }
-  if(e==='AGIBENS' && !AGIBENS_HYDRATED){
-    try{ await hydrateAgibensReal(); }catch(err){ console.error('Falha ao carregar dados reais da Agibens:', err); }
+  if(!HYDRATED[e]){
+    try{ await hydrateEmpresaReal(e); }catch(err){ console.error('Falha ao carregar dados reais da '+EMPRESAS[e].curto+':', err); }
   }
   if(state.empresa===e){ toast('Empresa alterada para '+EMPRESAS[e].curto+' — todos os módulos foram recalculados'); render(); }
 }
@@ -1288,16 +1289,16 @@ function drill(codes, m, reg, title){
   const pairs = Array.isArray(codes) ? codes : [[codes,1]];
   const total = pairs.reduce((t,[c,s])=>t+s*v(c,m,regEff),0);
   const label = title || (pairs.length===1 ? (acc(pairs[0][0])?acc(pairs[0][0]).n:pairs[0][0]) : 'Detalhamento');
-  const temBaseReal = state.empresa==='AGIBENS' && AGIBENS_HYDRATED;
-  const rows = temBaseReal ? composicaoLinha(pairs,m,regEff) : [];
+  const baseReal = temBaseReal();
+  const rows = baseReal ? composicaoLinha(pairs,m,regEff) : [];
   DRILL_ROWS=rows; DRILL_TITLE=label+' — '+MESES[m]+'/2026';
 
   let h=drawerHead(label, MESES[m]+'/2026 — '+(REGIME_LBL[reg]||'')+' — total '+money(total));
   h+='<div class="drawer-body">';
   if(!rows.length){
     h+='<div class="empty" style="padding:26px"><div class="t1">Não há lançamentos detalhados disponíveis para este valor.</div>'+
-       (state.empresa!=='AGIBENS'?'<div class="t2">'+esc(EMPRESAS[state.empresa].curto)+' ainda não possui base de títulos importada — os valores desta DRE são demonstrativos.</div>':
-        (!AGIBENS_HYDRATED?'<div class="t2">Não foi possível carregar a base real de títulos.</div>':'')) +'</div>';
+       (!baseReal && state.empresa!=='AGIBENS'?'<div class="t2">'+esc(EMPRESAS[state.empresa].curto)+' ainda não possui base de títulos importada — os valores desta DRE são demonstrativos.</div>':
+        (!baseReal?'<div class="t2">Não foi possível carregar a base real de títulos.</div>':'')) +'</div>';
   } else {
     h+='<table class="tbl"><thead><tr><th>Data</th><th>Conta</th><th>Fornecedor / Cliente</th><th>Documento</th><th>Centro</th><th>Status</th><th class="num">Valor</th></tr></thead><tbody>';
     rows.forEach(r=>{
@@ -1668,7 +1669,7 @@ function alertasHtml(list){
 /* =========================== PAGE HEAD / KPI =========================== */
 function pageHead(title, sub, extra){
   const e=EMPRESAS[state.empresa];
-  const demoTag = state.empresa==='AGIBENS' ? '' : '<span class="demo-tag">'+icon('alert',12)+' Dados demonstrativos</span>';
+  const demoTag = (state.empresa==='AGIBENS'||temBaseReal()) ? '' : '<span class="demo-tag">'+icon('alert',12)+' Dados demonstrativos</span>';
   return '<div class="page-head"><div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="page-title">'+title+'</span>'+
     demoTag+'</div>'+
     '<div class="page-sub">'+e.nome+' &middot; '+esc(state.periodoLabel)+'</div></div>'+
@@ -2226,13 +2227,187 @@ function renderDre(){
   h+='</tbody></table></div></div>';
   $('content').innerHTML=h;
 }
+/* =========================== RESULTADO POR COOPERATIVA =========================== */
+/* DRE simplificada por cooperativa/regional, montada direto dos títulos reais
+   (PAGAR/RECEBER) — cada título carrega a cooperativa e a regional do SGA.
+   Contas patrimoniais/transitórias (4.x) ficam fora: não são resultado.
+   Valores com sinal: receita positiva, custos e despesas negativos. */
+const COOP_GRUPOS = [
+  {id:'rec', nome:'RECEITA',                            raizes:['1'],          tipo:'g', cor:'var(--pos)'},
+  {id:'cus', nome:'CUSTOS OPERACIONAIS',                raizes:['2'],          tipo:'g', cor:'var(--neg)'},
+  {id:'mc',  nome:'MARGEM DE CONTRIBUIÇÃO',             soma:['rec','cus'],    tipo:'r'},
+  {id:'com', nome:'DESPESAS COMERCIAIS',                raizes:['3.1'],        tipo:'g', cor:'var(--neg)'},
+  {id:'rc',  nome:'RESULTADO COMERCIAL',                soma:['rec','cus','com'], tipo:'r', destaque:true},
+  {id:'adm', nome:'DESPESAS ADMINISTRATIVAS E PESSOAL', raizes:['3.2','3.3'],  tipo:'g', cor:'var(--neg)'},
+  {id:'fin', nome:'DESPESAS FINANCEIRAS E OUTRAS',      raizes:['3.4','5','6'], tipo:'g', cor:'var(--neg)'},
+  {id:'rl',  nome:'RESULTADO LÍQUIDO',                  soma:['rec','cus','com','adm','fin'], tipo:'r', final:true}
+];
+const COOP_SEM = 'Não identificado';
+expandState.coop = {};
+state.coopDim = 'regional';
+state.coopRegional = '';
+function coopNome(x){ const s=String(x||'').replace(/\s+/g,' ').trim(); return s ? s.toUpperCase() : COOP_SEM; }
+function coopRaiz(code){
+  for(const g of COOP_GRUPOS){ if(g.raizes && g.raizes.some(r=>code===r || code.startsWith(r+'.'))) return g.id; }
+  return null;
+}
+function coopChave(t){ return coopNome(state.coopDim==='regional' ? t.regional : t.coop); }
+/* Lançamentos do período selecionado, já com chave (cooperativa/regional),
+   grupo da DRE simplificada e valor com sinal. */
+function coopLancamentos(){
+  const emp=state.empresa, reg=state.regime==='pxr'?'proj':state.regime, meses=MSEL();
+  const out=[];
+  [['pagar',PAGAR[emp]||[]],['receber',RECEBER[emp]||[]]].forEach(([tipo,arr])=>{
+    arr.forEach(t=>{
+      if(!t.conta) return;
+      const g=coopRaiz(t.conta); if(!g) return;
+      if(state.coopDim==='cooperativa' && state.coopRegional && coopNome(t.regional)!==state.coopRegional) return;
+      meses.forEach(m=>{
+        const info=tituloInfoMes(t,tipo,m,reg); if(!info) return;
+        // receber soma, pagar subtrai
+        const val = tipo==='receber' ? info.valor : -info.valor;
+        out.push({t, tipo, m, g, conta:t.conta, chave:coopChave(t), valor:val, data:info.data, status:info.status});
+      });
+    });
+  });
+  return out;
+}
+function setCoopDim(d){ state.coopDim=d; state.coopRegional=''; render(); }
+function setCoopRegional(r){ state.coopRegional=r; render(); }
+let COOP_CACHE=null;
+function renderCooperativas(){
+  const dimSeg='<div class="seg">'+[['cooperativa','Cooperativa'],['regional','Regional']].map(([k,n])=>
+    '<button class="'+(state.coopDim===k?'on':'')+'" onclick="setCoopDim(\''+k+'\')">'+n+'</button>').join('')+'</div>';
+  const regionais=[...new Set([...(PAGAR[state.empresa]||[]),...(RECEBER[state.empresa]||[])].map(t=>coopNome(t.regional)))].sort();
+  const regSel = state.coopDim==='cooperativa' && regionais.length>1 ?
+    '<select class="btn sm" style="max-width:260px" onchange="setCoopRegional(this.value)"><option value="">Todas as regionais</option>'+
+    regionais.map(r=>'<option'+(r===state.coopRegional?' selected':'')+' value="'+esc(r)+'">'+esc(r)+'</option>').join('')+'</select>' : '';
+  let h=pageHead('Resultado por '+(state.coopDim==='regional'?'Regional':'Cooperativa'),'',regSel+dimSeg);
+
+  if(!temBaseReal()){
+    h+='<div class="card"><div class="empty" style="padding:30px"><div class="t1">'+esc(EMPRESAS[state.empresa].curto)+' ainda não possui base de títulos importada.</div>'+
+       '<div class="t2">O resultado por cooperativa é calculado a partir dos títulos reais (contas a pagar e a receber) com a cooperativa do SGA.</div></div></div>';
+    $('content').innerHTML=h; return;
+  }
+
+  const L=coopLancamentos();
+  COOP_CACHE=L;
+  // agrega: chave -> conta analítica -> valor
+  const porChave={}, total={}, contasUsadas=new Set();
+  L.forEach(x=>{
+    const c=porChave[x.chave]||(porChave[x.chave]={});
+    c[x.conta]=(c[x.conta]||0)+x.valor;
+    total[x.conta]=(total[x.conta]||0)+x.valor;
+    contasUsadas.add(x.conta);
+  });
+  const usadas=[...contasUsadas];
+  const sobConta=code=>c=>c===code||c.startsWith(code+'.');
+  const somaContas=(mapa,pred)=>Object.keys(mapa||{}).reduce((t,c)=>t+(pred(c)?mapa[c]:0),0);
+  const grupoVal=(mapa,g)=>g.soma
+    ? g.soma.reduce((t,id)=>t+grupoVal(mapa,COOP_GRUPOS.find(x=>x.id===id)),0)
+    : somaContas(mapa,c=>coopRaiz(c)===g.id);
+  const recG=COOP_GRUPOS.find(g=>g.id==='rec'), rcG=COOP_GRUPOS.find(g=>g.id==='rc');
+  // colunas ordenadas por receita (maior primeiro); "Não identificado" sempre por último
+  const chaves=Object.keys(porChave).sort((a,b)=>{
+    if(a===COOP_SEM) return 1; if(b===COOP_SEM) return -1;
+    return grupoVal(porChave[b],recG)-grupoVal(porChave[a],recG) || a.localeCompare(b);
+  });
+
+  const tRec=grupoVal(total,recG), tRc=grupoVal(total,rcG);
+  const ident=chaves.filter(k=>k!==COOP_SEM);
+  const positivas=ident.filter(k=>grupoVal(porChave[k],rcG)>0).length;
+  const negativas=ident.filter(k=>grupoVal(porChave[k],rcG)<0).length;
+  h+='<div class="kpi-grid" style="margin-bottom:16px">'+
+    kpi('Receita no período', money(tRec), null, '', 'pos')+
+    kpi('Resultado comercial', money(tRc), null, '', tRc>=0?'pos':'neg')+
+    kpi('Margem comercial', Math.abs(tRec)>0.005?pct(tRc/tRec*100):'—', null, '')+
+    kpi((state.coopDim==='regional'?'Regionais':'Cooperativas')+' positivas / negativas', positivas+' / '+negativas, null, '')+
+    '</div>';
+
+  // linhas = grupos (expansíveis até a conta analítica), colunas = cooperativas + total
+  const cols=chaves.concat(['__TOTAL__']);
+  const mapaDe=k=>k==='__TOTAL__'?total:porChave[k];
+  const jsq=s=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  const cell=(vv,click,strong)=>{
+    const cls=vv>0.005?'pos':vv<-0.005?'neg':'zero';
+    return '<td class="num mcol'+(click?' clickv':'')+'"'+(click?' onclick="'+click+'"':'')+(strong?' style="font-weight:'+strong+'"':'')+'>'+
+      '<span class="money '+cls+'">'+(Math.abs(vv)<0.005?'—':money(vv))+'</span></td>';
+  };
+  h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 330px)"><table class="tbl tbl-dre"><thead><tr><th style="min-width:280px">Descrição</th>';
+  cols.forEach(k=>h+='<th class="num mcol" style="min-width:130px;white-space:normal;line-height:1.25" title="'+esc(k==='__TOTAL__'?'Total':k)+'">'+esc(k==='__TOTAL__'?'TOTAL':k)+'</th>');
+  h+='</tr></thead><tbody>';
+  function contaLinhas(code, level, gid){
+    const a=acc(code); if(!a || !usadas.some(sobConta(code))) return '';
+    const kids=filhos(code).filter(f=>usadas.some(sobConta(f.c)));
+    const id=gid+':'+code, open=!!expandState.coop[id];
+    let r='<tr class="lvl'+Math.min(level,3)+'"><td><span class="tree-lbl">'+
+      (kids.length?'<button class="tree-toggle" onclick="toggleRow(\'coop\',\''+id+'\')">'+(open?'&minus;':'+')+'</button>':'<span style="width:26px;display:inline-block"></span>')+
+      esc(a.c+' '+a.n)+'</span></td>';
+    cols.forEach(k=>{ r+=cell(somaContas(mapaDe(k),sobConta(code)), "coopDrill('"+jsq(k)+"','"+code+"')"); });
+    r+='</tr>';
+    if(open) kids.forEach(f=>r+=contaLinhas(f.c,level+1,gid));
+    return r;
+  }
+  COOP_GRUPOS.forEach(g=>{
+    if(g.tipo==='g'){
+      const open=!!expandState.coop[g.id];
+      h+='<tr class="lvl0"><td><span class="tree-lbl"><button class="tree-toggle" onclick="toggleRow(\'coop\',\''+g.id+'\')">'+(open?'&minus;':'+')+'</button>'+
+         '<span style="color:'+g.cor+';font-weight:650">'+g.nome+'</span></span></td>';
+      cols.forEach(k=>h+=cell(grupoVal(mapaDe(k),g), "coopDrill('"+jsq(k)+"','@"+g.id+"')", 650));
+      h+='</tr>';
+      // grupo com uma raiz abre direto nos filhos dela; com várias, abre em cada raiz
+      if(open) (g.raizes.length>1 ? g.raizes.map(c=>({c})) : filhos(g.raizes[0])).forEach(f=>h+=contaLinhas(f.c,1,g.id));
+    } else {
+      h+='<tr class="row-result'+(g.final?' final':'')+'"><td>'+g.nome+'</td>';
+      cols.forEach(k=>h+=cell(grupoVal(mapaDe(k),g), null, g.destaque?700:600));
+      h+='</tr>';
+      if(g.destaque){
+        h+='<tr><td style="color:var(--text2);font-size:12.5px;padding-left:18px">% sobre a receita</td>';
+        cols.forEach(k=>{ const rec=grupoVal(mapaDe(k),recG), rc=grupoVal(mapaDe(k),g);
+          h+='<td class="num mcol" style="color:var(--text2);font-size:12.5px">'+(Math.abs(rec)>0.005?pct(rc/rec*100):'—')+'</td>'; });
+        h+='</tr>';
+      }
+    }
+  });
+  h+='</tbody></table></div></div>';
+  h+='<div style="color:var(--text2);font-size:12px;margin-top:10px">'+esc(REGIME_LBL[state.regime]||'')+' no período selecionado. '+
+     'Clique em qualquer valor para ver os lançamentos. "'+COOP_SEM+'" reúne os títulos sem '+(state.coopDim==='regional'?'regional':'cooperativa')+' informada no SGA. '+
+     'Contas patrimoniais e transferências entre contas (grupo 4) não entram no resultado.</div>';
+  $('content').innerHTML=h;
+}
+function coopDrill(chave, alvo){
+  const L=COOP_CACHE||coopLancamentos();
+  const pred = alvo[0]==='@' ? (x=>x.g===alvo.slice(1)) : (x=>x.conta===alvo||x.conta.startsWith(alvo+'.'));
+  const rows=L.filter(x=>(chave==='__TOTAL__'||x.chave===chave) && pred(x)).sort((a,b)=>a.data-b.data);
+  const g=COOP_GRUPOS.find(x=>'@'+x.id===alvo);
+  const label=(g?g.nome:(acc(alvo)?alvo+' '+acc(alvo).n:alvo))+' — '+(chave==='__TOTAL__'?'Total':chave);
+  DRILL_ROWS=rows.map(x=>({id:x.t.id, tipo:x.tipo, parte:x.t.forn||x.t.cli, doc:x.t.doc||'', centro:x.t.centro||'',
+    conta:x.conta, data:x.data, status:x.status, valor:x.valor}));
+  DRILL_TITLE=label;
+  const tot=rows.reduce((t,x)=>t+x.valor,0);
+  let h=drawerHead(label, (REGIME_LBL[state.regime]||'')+' — '+esc(state.periodoLabel)+' — '+rows.length+' lançamento(s) — total '+money(tot));
+  h+='<div class="drawer-body">';
+  if(!rows.length) h+='<div class="empty" style="padding:26px"><div class="t1">Sem lançamentos para este valor.</div></div>';
+  else{
+    const MAX=500;
+    h+='<table class="tbl"><thead><tr><th>Data</th><th>Conta</th><th>Fornecedor / Cliente</th><th>Status</th><th class="num">Valor</th></tr></thead><tbody>';
+    DRILL_ROWS.slice(0,MAX).forEach(r=>{
+      h+='<tr class="hoverable" onclick="detTitulo(\''+r.id+'\',\''+r.tipo+'\')"><td>'+fdate(r.data)+'</td><td style="color:var(--text2)">'+esc(r.conta)+'</td>'+
+         '<td>'+esc(r.parte||'—')+'</td><td><span class="status-badge '+(r.status==='Realizado'?'st-ok':'st-aberto')+'">'+r.status+'</span></td><td class="num">'+moneyHtml(r.valor)+'</td></tr>';
+    });
+    h+='</tbody><tfoot><tr class="row-total"><td colspan="4">Soma'+(rows.length>MAX?' (exibindo '+MAX+' de '+rows.length+' — exporte o CSV para ver todos)':'')+'</td><td class="num">'+moneyHtml(tot)+'</td></tr></tfoot></table>';
+  }
+  h+='</div><div class="drawer-foot"><button class="btn" '+(rows.length?'onclick="exportDrillCsv()"':'disabled')+'>'+icon('download',14)+' Exportar CSV</button></div>';
+  openDrawer(h);
+}
+
 /* =========================== CONTAS A PAGAR / RECEBER =========================== */
 function detTitulo(id, tipo){
   const lista = tipo==='pagar'?PAGAR[state.empresa]:RECEBER[state.empresa];
   const t=lista.find(x=>x.id===id); if(!t)return;
   const li=(k,vv)=>'<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--text2)">'+k+'</span><span style="font-weight:500;text-align:right;max-width:60%">'+vv+'</span></div>';
   let h=drawerHead((tipo==='pagar'?'Conta a pagar ':'Conta a receber ')+t.id, esc(t.forn||t.cli));
-  h+='<div class="drawer-body">'+(state.empresa==='AGIBENS'?'':'<div class="demo-tag" style="margin-bottom:14px">'+icon('alert',12)+' Dado demonstrativo</div>');
+  h+='<div class="drawer-body">'+((state.empresa==='AGIBENS'||temBaseReal())?'':'<div class="demo-tag" style="margin-bottom:14px">'+icon('alert',12)+' Dado demonstrativo</div>');
   h+=li('Status','<span class="status-badge '+stClass(t.status)+'">'+t.status+'</span>');
   h+=li('Competência',t.comp)+li('Emissão',fdate(t.emissao))+li('Vencimento',fdate(t.venc));
   h+=li(tipo==='pagar'?'Pagamento':'Recebimento',fdate(t.pgto||t.rec));
@@ -4185,7 +4360,7 @@ function render(){
   }
   applyBrand(); applyChrome();
   renderSidebar(); renderTopbar();
-  const views={dashboard:renderDashboard, fluxo:renderFluxo, dre:renderDre,
+  const views={dashboard:renderDashboard, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
     receber:()=>renderTitulos('receber'), admin:renderAdmin};
   (views[state.view]||renderDashboard)();
@@ -4197,7 +4372,8 @@ const SUPABASE_URL = 'https://vrmyhpnouuiskdwovdnc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybXlocG5vdXVpc2tkd292ZG5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NTE0NTQsImV4cCI6MjEwMTEyNzQ1NH0.teuD7j3-20c10IC7KV9EMpXGrYt4Dy5TSzvR4jmmEEw';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
-let AGIBENS_HYDRATED = false;
+const HYDRATED = {};
+function temBaseReal(emp){ return !!HYDRATED[emp||state.empresa]; }
 
 function initials(name){
   return (name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
@@ -4310,36 +4486,42 @@ async function fetchAllRows(query){
   }
   return all;
 }
-async function hydrateAgibensReal(){
+async function hydrateEmpresaReal(emp){
+  const EMP_ID = EMPRESA_IDS[emp];
+  if(!EMP_ID) return;
   const [pagarRows, receberRowsAll, contasRes, saldosRes] = await Promise.all([
-    fetchAllRows(sb.from('titulos_pagar').select('*').eq('empresa_id', AGIBENS_ID)),
-    fetchAllRows(sb.from('titulos_receber').select('*').eq('empresa_id', AGIBENS_ID)),
-    sb.from('contas_bancarias').select('*').eq('empresa_id', AGIBENS_ID).eq('ativa', true),
-    sb.from('saldos_bancarios').select('*').eq('empresa_id', AGIBENS_ID).order('data',{ascending:false})
+    fetchAllRows(sb.from('titulos_pagar').select('*').eq('empresa_id', EMP_ID)),
+    fetchAllRows(sb.from('titulos_receber').select('*').eq('empresa_id', EMP_ID)),
+    sb.from('contas_bancarias').select('*').eq('empresa_id', EMP_ID).eq('ativa', true),
+    sb.from('saldos_bancarios').select('*').eq('empresa_id', EMP_ID).order('data',{ascending:false})
   ]);
 
+  // Empresa sem nenhum título importado continua com a base demonstrativa.
+  if(emp!=='AGIBENS' && !pagarRows.length && !receberRowsAll.length) return;
   const receberRows = receberRowsAll.filter(r=>r.status!=='Cancelado');
   const contas = contasRes.data || [];
   const saldosRows = saldosRes.data || [];
 
-  PAGAR.AGIBENS = pagarRows.map(r=>{
+  PAGAR[emp] = pagarRows.map(r=>{
     const venc = parseYMD(r.vencimento), pgto = parseYMD(r.pagamento);
     let status = r.status;
     if(status==='Em aberto' && venc && venc < HOJE) status='Vencido';
     return {id:'CP-'+r.id.slice(0,8), forn:r.fornecedor, doc:'', desc:r.fornecedor,
       conta:r.conta_codigo, centro:r.centro||'', banco:r.banco||'',
       comp:compStr(venc), emissao:venc, venc, pgto,
-      vprev:Number(r.valor_previsto), vpago:Number(r.valor_pago||0), status};
+      vprev:Number(r.valor_previsto), vpago:Number(r.valor_pago||0), status,
+      coop:r.cooperativa||'', regional:r.regional||''};
   });
 
-  RECEBER.AGIBENS = receberRows.map(r=>{
+  RECEBER[emp] = receberRows.map(r=>{
     const venc = parseYMD(r.vencimento), rec = parseYMD(r.recebimento);
     let status = r.status;
     if(status==='Em aberto' && venc && venc < HOJE) status='Vencido';
     return {id:'CR-'+(r.codigo||r.id.slice(0,8)), cli:r.cliente, doc:r.codigo||'',
       desc:r.cliente, conta:r.conta_codigo, centro:'Receitas', banco:'',
       comp:compStr(venc), emissao:venc, venc, rec,
-      vprev:Number(r.valor_previsto), vrec:Number(r.valor_recebido||0), status};
+      vprev:Number(r.valor_previsto), vrec:Number(r.valor_recebido||0), status,
+      coop:r.cooperativa||'', regional:r.regional||''};
   });
 
   // DRE e Demonstrativo do Fluxo usam todos os títulos reais, de qualquer mês
@@ -4347,21 +4529,21 @@ async function hydrateAgibensReal(){
   // anchorM em saldos(), não a ausência de dados na DRE.
   const newVal = {};
   analiticas().forEach(a=>{ newVal[a.c] = {prev:Array(12).fill(0), real:Array(12).fill(0)}; });
-  PAGAR.AGIBENS.forEach(t=>{
+  PAGAR[emp].forEach(t=>{
     if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
     if(t.pgto && t.pgto.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.pgto.getMonth()] += t.vpago;
   });
-  RECEBER.AGIBENS.forEach(t=>{
+  RECEBER[emp].forEach(t=>{
     if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
     if(t.rec && t.rec.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += t.vrec;
   });
-  VAL.AGIBENS = newVal;
+  VAL[emp] = newVal;
 
   const saldoPorConta = {};
   saldosRows.forEach(s=>{ if(!(s.conta_bancaria_id in saldoPorConta)) saldoPorConta[s.conta_bancaria_id]=Number(s.saldo); });
   if(contas.length){
     const totalFinal = contas.reduce((t,c)=>t+(saldoPorConta[c.id] ?? Number(c.saldo_inicial)),0);
-    BASES.AGIBENS.bancos = contas.map(c=>({nome:c.nome, banco:c.banco,
+    BASES[emp].bancos = contas.map(c=>({nome:c.nome, banco:c.banco,
       prop: totalFinal>0 ? (saldoPorConta[c.id] ?? Number(c.saldo_inicial))/totalFinal : 1/contas.length}));
 
     // Saldo bancário real por mês: agrupa os snapshots de saldos_bancarios por
@@ -4395,18 +4577,18 @@ async function hydrateAgibensReal(){
       saldosMensais[m] = {ini:prevFim, fim};
       prevFim = fim;
     });
-    BASES.AGIBENS.saldosMensais = saldosMensais;
-    BASES.AGIBENS.saldoIni = prevFim;
-    BASES.AGIBENS.anchorM = mesesReais.length ? mesesReais[mesesReais.length-1]+1 : 0;
-    BASES.AGIBENS.saldoHoje = null;
+    BASES[emp].saldosMensais = saldosMensais;
+    BASES[emp].saldoIni = prevFim;
+    BASES[emp].anchorM = mesesReais.length ? mesesReais[mesesReais.length-1]+1 : 0;
+    BASES[emp].saldoHoje = null;
     if(dataHoje && !(dataHoje.getMonth() in porMes)){
       saldosRows.forEach(s=>{ const dt=parseYMD(s.data); if(dt && +dt===+dataHoje) hojePorConta[s.conta_bancaria_id]=Number(s.saldo); });
-      BASES.AGIBENS.saldoHoje = {data:dataHoje, m:dataHoje.getMonth(),
+      BASES[emp].saldoHoje = {data:dataHoje, m:dataHoje.getMonth(),
         valor: contas.reduce((t,c)=>t+(hojePorConta[c.id] ?? 0),0)};
     }
   }
-  aplicarReconciliacaoMGF();
-  AGIBENS_HYDRATED = true;
+  if(emp==='AGIBENS') aplicarReconciliacaoMGF();
+  HYDRATED[emp] = true;
 }
 
 /* ---------- Reconciliação MGF/DRE — Agosto e Setembro/2026 (Agibens) ----------
@@ -5861,10 +6043,8 @@ async function showApp(){
   try{ await loadCentrosResultado(state.empresa); } catch(e){ console.error('Falha ao carregar centros de resultado:', e); }
   try{ await loadDreConfig(state.empresa); } catch(e){ console.error('Falha ao carregar configuração da DRE:', e); }
   try{ await loadDashLayouts(state.empresa); } catch(e){ console.error('Falha ao carregar layout do dashboard:', e); }
-  if(state.empresa==='AGIBENS'){
-    try{ await hydrateAgibensReal(); }
-    catch(e){ console.error('Falha ao carregar dados reais da Agibens, mantendo demonstração:', e); }
-  }
+  try{ await hydrateEmpresaReal(state.empresa); }
+  catch(e){ console.error('Falha ao carregar dados reais de '+EMPRESAS[state.empresa].curto+', mantendo demonstração:', e); }
   try{ await loadBrandLogos(); } catch(e){ console.error('Falha ao carregar logos das empresas:', e); }
   try{ await loadConciliacaoResolvidas(); } catch(e){ console.error('Falha ao carregar conciliações resolvidas:', e); }
   render();
