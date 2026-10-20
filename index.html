@@ -241,19 +241,16 @@ body.dark .tbl-dre th.ah-col,body.dark .tbl-dre td.ah-col{color:#C4CCD8;border-l
 .tbl-dre tr.row-result td:first-child{background:#E8F1F3 !important}
 .tbl-dre tr.row-result.final td:first-child{background:#CFE4E8 !important}
 /* Leitura em apresentação: linhas zebradas, meses em faixas alternadas e destaque da linha
-   sob o mouse. Usa background-image/box-shadow (camadas) para não deixar transparente o
-   fundo opaco da 1ª coluna fixa. */
+   sob o mouse. Zebra/destaque via background-image (camada) para não deixar transparente o
+   fundo opaco da 1ª coluna fixa; faixas de mês só em células não fixas, fora das linhas de resultado. */
 .tbl-dre tbody tr:nth-child(even) > td{background-image:linear-gradient(rgba(16,24,40,.035),rgba(16,24,40,.035))}
-.tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+5),.tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+6),.tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+7),
-.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+4),.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+5),.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+6),
+.tbl-dre:not(.tbl-coop) tbody tr:not(.row-result) td:nth-child(6n+5),.tbl-dre:not(.tbl-coop) tbody tr:not(.row-result) td:nth-child(6n+6),.tbl-dre:not(.tbl-coop) tbody tr:not(.row-result) td:nth-child(6n+7),
+.tbl-coop tbody tr:not(.row-result) td:nth-child(odd):not(:first-child){background-color:rgba(14,92,110,.06)}
 .tbl-dre thead th.band,
-.tbl-coop tbody td:nth-child(odd):not(:first-child),.tbl-coop thead th:nth-child(odd):not(:first-child){box-shadow:inset 0 0 0 9999px rgba(14,92,110,.07)}
+.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+4),.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+5),.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+6),
+.tbl-coop thead th:nth-child(odd):not(:first-child){background-image:linear-gradient(rgba(14,92,110,.09),rgba(14,92,110,.09))}
 .tbl-dre tbody tr:hover > td,.tbl-dre tbody tr:hover > td:first-child{background-image:linear-gradient(rgba(250,190,0,.24),rgba(250,190,0,.24)) !important}
 body.dark .tbl-dre tbody tr:nth-child(even) > td{background-image:linear-gradient(rgba(255,255,255,.035),rgba(255,255,255,.035))}
-body.dark .tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+5),body.dark .tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+6),body.dark .tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+7),
-body.dark .tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+4),body.dark .tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+5),body.dark .tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+6),
-body.dark .tbl-dre thead th.band,
-body.dark .tbl-coop tbody td:nth-child(odd):not(:first-child),body.dark .tbl-coop thead th:nth-child(odd):not(:first-child){box-shadow:inset 0 0 0 9999px rgba(120,190,205,.08)}
 /* Modo apresentação (tela cheia): esconde menu e barra superior, tabela ocupa a tela */
 body.modo-apres #sidebar,body.modo-apres #topbar,body.modo-apres .chips{display:none !important}
 body.modo-apres #content{padding:14px 18px}
