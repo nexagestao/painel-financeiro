@@ -1768,7 +1768,7 @@ function renderFluxo(){
   const sp=spTotais();
   const sAtual=saldoAtual();
 
-  let h=pageHead('Fluxo de Caixa','');
+  let h=pageHead('Fluxo de Caixa','', PERFIS[state.role].importar ? '<button class="btn sm" onclick="openLancarSaldo()">'+icon('wallet',14)+' Lançar saldo</button>' : '');
   h+='<div class="kpi-grid">';
   const shF = BASES[state.empresa].saldoHoje;
   h+=kpi('Saldo Atual',money(sAtual,true),null,'consolidado bancário'+(shF?' em '+shF.data.toLocaleDateString('pt-BR'):''),sAtual<0?'neg':sAtual>0?'pos':'zero');
@@ -2236,14 +2236,17 @@ function renderDre(){
    Contas patrimoniais/transitórias (4.x) ficam fora: não são resultado.
    Valores com sinal: receita positiva, custos e despesas negativos. */
 const COOP_GRUPOS = [
-  {id:'rec', nome:'RECEITA',                            raizes:['1'],          tipo:'g', cor:'var(--pos)'},
+  {id:'rec', nome:'RECEITA BRUTA',                      raizes:['1'],          tipo:'g', cor:'var(--pos)'},
+  {id:'ded', nome:'(-) DEDUÇÕES DA RECEITA',            raizes:['5'],          tipo:'g', cor:'var(--neg)'},
+  {id:'liq', nome:'RECEITA LÍQUIDA',                    soma:['rec','ded'],    tipo:'r'},
+  // custos incluem as redutoras (recuperação de sinistro, cota de participação), que entram com sinal positivo
   {id:'cus', nome:'CUSTOS OPERACIONAIS',                raizes:['2'],          tipo:'g', cor:'var(--neg)'},
-  {id:'mc',  nome:'MARGEM DE CONTRIBUIÇÃO',             soma:['rec','cus'],    tipo:'r'},
+  {id:'mc',  nome:'MARGEM DE CONTRIBUIÇÃO',             soma:['rec','ded','cus'], tipo:'r'},
   {id:'com', nome:'DESPESAS COMERCIAIS',                raizes:['3.1'],        tipo:'g', cor:'var(--neg)'},
-  {id:'rc',  nome:'RESULTADO COMERCIAL',                soma:['rec','cus','com'], tipo:'r', destaque:true},
+  {id:'rc',  nome:'RESULTADO COMERCIAL',                soma:['rec','ded','cus','com'], tipo:'r', destaque:true},
   {id:'adm', nome:'DESPESAS ADMINISTRATIVAS E PESSOAL', raizes:['3.2','3.3'],  tipo:'g', cor:'var(--neg)'},
-  {id:'fin', nome:'DESPESAS FINANCEIRAS E OUTRAS',      raizes:['3.4','5','6'], tipo:'g', cor:'var(--neg)'},
-  {id:'rl',  nome:'RESULTADO LÍQUIDO',                  soma:['rec','cus','com','adm','fin'], tipo:'r', final:true}
+  {id:'fin', nome:'DESPESAS FINANCEIRAS E OUTRAS',      raizes:['3.4','6'],    tipo:'g', cor:'var(--neg)'},
+  {id:'rl',  nome:'RESULTADO LÍQUIDO',                  soma:['rec','ded','cus','com','adm','fin'], tipo:'r', final:true}
 ];
 const COOP_SEM = 'Não identificado';
 expandState.coop = {};
@@ -2679,7 +2682,7 @@ const ADMIN_CARDS=[
   {id:'plano',       ic:'layers',  t:'Plano de Contas',    d:'Contas sintéticas e analíticas por empresa.'},
   {id:'dre',         ic:'sliders', t:'Configuração da DRE',d:'Estrutura, classificação, sinais e fórmulas da DRE.'},
   {id:'dashboard',   ic:'home',    t:'Configuração do Dashboard', d:'Editor visual: cards, gráficos, filtros e layouts por perfil.'},
-  {id:'bancos',      ic:'wallet',  t:'Contas Bancárias',   d:'Contas correntes e saldos consolidados.'},
+  {id:'bancos',      ic:'wallet',  t:'Contas Bancárias',   d:'Contas correntes e lançamento manual de saldos.'},
   {id:'centros',     ic:'target',  t:'Centros de Resultado',d:'Agrupadores gerenciais de receitas e gastos.'},
   {id:'usuarios',    ic:'users',   t:'Usuários',           d:'Pessoas com acesso e empresas autorizadas.'},
   {id:'perfis',      ic:'shield',  t:'Perfis e Permissões',d:'Matriz de permissões por módulo e ação.'},
@@ -2736,13 +2739,7 @@ function renderAdminPage(p){
   else if(p==='plano'){ h=renderPlanoContas(); }
   else if(p==='dre'){ h=renderDreConfig(); }
   else if(p==='dashboard'){ h=renderDashEditorPage(); }
-  else if(p==='bancos'){
-    const sA=saldoAtual();
-    h=adminShell('Contas Bancárias',EMPRESAS[state.empresa].curto+' — clique em uma conta para editar',
-      tbl([['Banco'],['Conta'],['Saldo consolidado',1],['Participação',1],['Status']],
-        BASES[state.empresa].bancos.map((b,i)=>'<tr class="hoverable" onclick="editBanco('+i+')"><td style="font-weight:600">'+esc(b.banco)+'</td><td>'+esc(b.nome)+'</td><td class="num">'+money(Math.round(sA*b.prop))+'</td><td class="num">'+pct(b.prop*100,0)+'</td><td><span class="status-badge st-ok">Conciliada</span></td></tr>').join(''))+
-      '<div style="margin-top:14px"><button class="btn" onclick="editBanco(-1)">'+icon('wallet',15)+' Adicionar conta bancária</button></div>');
-  }
+  else if(p==='bancos'){ h=renderBancosSaldos(); }
   else if(p==='centros'){
     h=adminShell('Centros de Resultado',EMPRESAS[state.empresa].curto+' — clique em um centro para editar',
       tbl([['Centro'],['Vínculo típico'],['Status'],['']],
@@ -3041,22 +3038,112 @@ function saveUsuario(i){
   if(i>=0)USUARIOS[i]=u; else USUARIOS.push(u);
   closeDrawer(); toast('Usuário salvo'); render();
 }
-function editBanco(i){
-  const bs=BASES[state.empresa].bancos;
-  const b=i>=0?bs[i]:{banco:'',nome:'',prop:0};
-  openDrawer(drawerHead(i>=0?'Editar conta bancária':'Nova conta bancária',EMPRESAS[state.empresa].curto)+'<div class="drawer-body">'+
-    fld('cbBanco','Banco',b.banco)+fld('cbNome','Nome da conta',b.nome)+
-    fld('cbProp','Participação no saldo (%)',Math.round(b.prop*100),'number')+
-    '</div>'+crudFoot('saveBanco('+i+')'));
+/* ---------- Contas bancárias e saldos manuais (Supabase: contas_bancarias / saldos_bancarios) ----------
+   Saldo lançado no último dia do mês fecha aquele mês no Fluxo de Caixa; saldo de qualquer
+   outro dia vira o "saldo de hoje" (ponto de partida da previsão) — ver hydrateEmpresaReal(). */
+const BANCOS_REAL = {};
+async function loadBancosReal(emp){
+  const id=EMPRESA_IDS[emp];
+  const [c,s]=await Promise.all([
+    sb.from('contas_bancarias').select('*').eq('empresa_id',id).order('banco'),
+    sb.from('saldos_bancarios').select('*').eq('empresa_id',id).order('data',{ascending:false}).limit(300)
+  ]);
+  if(c.error||s.error) throw (c.error||s.error);
+  BANCOS_REAL[emp]={contas:c.data||[], saldos:s.data||[]};
 }
-function saveBanco(i){
-  const bs=BASES[state.empresa].bancos;
-  const b={banco:$('cbBanco').value,nome:$('cbNome').value,prop:(parseFloat($('cbProp').value)||0)/100};
-  if(!b.banco){ toast('Informe o banco'); return; }
-  if(i>=0)bs[i]=b; else bs.push(b);
-  const tot=bs.reduce((t,x)=>t+x.prop,0)||1;
-  bs.forEach(x=>x.prop=x.prop/tot);
-  closeDrawer(); toast('Conta salva — participações normalizadas'); render();
+function parseValorBR(txt){
+  let s=String(txt||'').replace(/[R$\s]/g,'');
+  if(!s) return null;
+  if(s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
+  const n=Number(s);
+  return isFinite(n) ? n : NaN;
+}
+function renderBancosSaldos(){
+  const emp=state.empresa, br=BANCOS_REAL[emp];
+  if(!br){
+    loadBancosReal(emp).then(render).catch(err=>{ console.error(err); toast('Falha ao carregar contas bancárias'); });
+    return adminShell('Contas Bancárias e Saldos',EMPRESAS[emp].curto,'<div class="card"><div class="empty" style="padding:30px"><div class="t1">Carregando…</div></div></div>');
+  }
+  const ultimo=id=>br.saldos.find(s=>s.conta_bancaria_id===id);
+  const nomeConta=id=>{ const c=br.contas.find(x=>x.id===id); return c?c.banco+' — '+c.nome:'—'; };
+  const ativas=br.contas.filter(c=>c.ativa);
+  const totalUlt=ativas.reduce((t,c)=>{ const u=ultimo(c.id); return t+(u?Number(u.saldo):Number(c.saldo_inicial)); },0);
+  let inner='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
+    '<button class="btn primary" onclick="openLancarSaldo()"'+(ativas.length?'':' disabled')+'>'+icon('wallet',15)+' Lançar saldo</button>'+
+    '<button class="btn" onclick="editContaBanc(null)">'+icon('building',15)+' Adicionar conta bancária</button></div>';
+  inner+=tbl([['Banco'],['Conta'],['Último saldo',1],['Data do saldo'],['Status']],
+    br.contas.map(c=>{ const u=ultimo(c.id);
+      return '<tr class="hoverable" onclick="editContaBanc(\''+c.id+'\')"><td style="font-weight:600">'+esc(c.banco)+'</td><td>'+esc(c.nome)+'</td>'+
+        '<td class="num">'+(u?moneyHtml(Number(u.saldo),true):'<span style="color:var(--text2)">sem saldo lançado</span>')+'</td>'+
+        '<td>'+(u?fdate(parseYMD(u.data)):'—')+'</td>'+
+        '<td><span class="status-badge '+(c.ativa?'st-ok':'st-neutro')+'">'+(c.ativa?'Ativa':'Inativa')+'</span></td></tr>'; }).join('')+
+    '<tr class="row-total"><td colspan="2">Total das contas ativas (último saldo de cada uma)</td><td class="num">'+moneyHtml(totalUlt,true)+'</td><td colspan="2"></td></tr>');
+  inner+='<div class="card-title" style="margin:22px 0 10px">Histórico de saldos lançados</div>';
+  inner+=br.saldos.length ? tbl([['Data'],['Conta'],['Saldo',1],['']],
+    br.saldos.map(s=>'<tr><td>'+fdate(parseYMD(s.data))+'</td><td>'+esc(nomeConta(s.conta_bancaria_id))+'</td><td class="num">'+moneyHtml(Number(s.saldo),true)+'</td>'+
+      '<td style="text-align:right">'+(currentUser&&currentUser.perfil==='Administrador'?'<button class="btn sm ghost" onclick="excluirSaldo(\''+s.id+'\')">'+icon('x',13)+' Excluir</button>':'')+'</td></tr>').join(''))
+    : '<div class="card"><div class="empty" style="padding:22px"><div class="t2">Nenhum saldo lançado ainda.</div></div></div>';
+  inner+='<div style="color:var(--text2);font-size:12px;margin-top:10px">Saldo lançado no último dia do mês fecha o mês no Fluxo de Caixa. Saldo de qualquer outro dia vira o saldo atual (ponto de partida da previsão).</div>';
+  return adminShell('Contas Bancárias e Saldos',EMPRESAS[emp].curto+' — saldos lançados manualmente',inner);
+}
+async function openLancarSaldo(){
+  const emp=state.empresa;
+  if(!BANCOS_REAL[emp]){ try{ await loadBancosReal(emp); }catch(e){ toast('Falha ao carregar contas bancárias'); return; } }
+  const br=BANCOS_REAL[emp], ativas=br.contas.filter(c=>c.ativa);
+  if(!ativas.length){ toast('Cadastre uma conta bancária primeiro'); goAdmin('bancos'); return; }
+  let h=drawerHead('Lançar saldo bancário',EMPRESAS[emp].curto+' — deixe em branco as contas que não quer atualizar')+'<div class="drawer-body">';
+  h+=fld('lsData','Data do saldo',isoDate(hojeReal()),'date');
+  ativas.forEach(c=>{ const u=br.saldos.find(s=>s.conta_bancaria_id===c.id);
+    h+='<div class="field"><label>'+esc(c.banco+' — '+c.nome)+'</label><input type="text" inputmode="decimal" id="ls_'+c.id+'" placeholder="'+(u?'último: '+money(Number(u.saldo),true)+' em '+fdate(parseYMD(u.data)):'ex.: 12.345,67')+'"></div>'; });
+  h+='</div>'+crudFoot('salvarSaldos()');
+  openDrawer(h);
+}
+async function salvarSaldos(){
+  const emp=state.empresa, empId=EMPRESA_IDS[emp], data=$('lsData').value;
+  if(!data){ toast('Informe a data do saldo'); return; }
+  const rows=[];
+  for(const c of BANCOS_REAL[emp].contas.filter(x=>x.ativa)){
+    const el=$('ls_'+c.id); if(!el) continue;
+    const v=parseValorBR(el.value);
+    if(v===null) continue;
+    if(isNaN(v)){ toast('Valor inválido em '+c.banco); el.focus(); return; }
+    rows.push({empresa_id:empId, conta_bancaria_id:c.id, data, saldo:Math.round(v*100)/100});
+  }
+  if(!rows.length){ toast('Preencha o saldo de ao menos uma conta'); return; }
+  const { error } = await sb.from('saldos_bancarios').upsert(rows,{onConflict:'empresa_id,conta_bancaria_id,data'});
+  if(error){ console.error(error); toast('Falha ao salvar o saldo — tente novamente'); return; }
+  await sb.from('logs').insert({empresa_id:empId, acao:'Saldo bancário lançado', detalhe:rows.length+' conta(s) em '+data, usuario_id:currentUser?currentUser.id:null});
+  closeDrawer(); toast('Saldo salvo — recalculando o Fluxo de Caixa');
+  await recarregarBaseReal(emp);
+}
+async function recarregarBaseReal(emp){
+  delete BANCOS_REAL[emp]; HYDRATED[emp]=false;
+  try{ await loadBancosReal(emp); await hydrateEmpresaReal(emp); }catch(e){ console.error(e); }
+  render();
+}
+function excluirSaldo(id){
+  confirmDialog({title:'Excluir saldo lançado', msg:'Tem certeza que deseja excluir este saldo? O Fluxo de Caixa será recalculado.', confirmLabel:'Excluir',
+    onConfirm: async function(){
+      const { error } = await sb.from('saldos_bancarios').delete().eq('id',id);
+      if(error){ toast('Falha ao excluir — apenas administradores podem excluir'); throw error; }
+      toast('Saldo excluído'); await recarregarBaseReal(state.empresa);
+    }});
+}
+function editContaBanc(id){
+  const emp=state.empresa, c=id ? BANCOS_REAL[emp].contas.find(x=>x.id===id) : {banco:'',nome:'',saldo_inicial:0,ativa:true};
+  openDrawer(drawerHead(id?'Editar conta bancária':'Nova conta bancária',EMPRESAS[emp].curto)+'<div class="drawer-body">'+
+    fld('cbBanco','Banco',c.banco)+fld('cbNome','Nome da conta',c.nome)+
+    fld('cbIni','Saldo inicial (antes do primeiro saldo lançado)',String(Number(c.saldo_inicial||0)).replace('.',','))+
+    fldSel('cbAtiva','Status',['Ativa','Inativa'],c.ativa?'Ativa':'Inativa')+
+    '</div>'+crudFoot('saveContaBanc('+(id?'\''+id+'\'':'null')+')'));
+}
+async function saveContaBanc(id){
+  const emp=state.empresa, ini=parseValorBR($('cbIni').value);
+  const row={empresa_id:EMPRESA_IDS[emp], banco:$('cbBanco').value.trim(), nome:$('cbNome').value.trim(), saldo_inicial:ini&&!isNaN(ini)?ini:0, ativa:$('cbAtiva').value==='Ativa'};
+  if(!row.banco||!row.nome){ toast('Informe o banco e o nome da conta'); return; }
+  const { error } = id ? await sb.from('contas_bancarias').update(row).eq('id',id) : await sb.from('contas_bancarias').insert(row);
+  if(error){ console.error(error); toast('Falha ao salvar a conta'); return; }
+  closeDrawer(); toast('Conta bancária salva'); await recarregarBaseReal(emp);
 }
 function editCentro(i){
   const cs=CENTROS[state.empresa];
