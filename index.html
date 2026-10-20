@@ -4710,8 +4710,11 @@ async function hydrateEmpresaReal(emp){
     if(t.pgto && t.pgto.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.pgto.getMonth()] += t.vpago;
   });
   RECEBER[emp].forEach(t=>{
-    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += t.vprev;
-    if(t.rec && t.rec.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += t.vrec;
+    // entrada em conta redutora de custo (ex.: 2.1.99 cota de participação, 2.1.06 recuperação
+    // de sinistro) abate o custo: entra negativa, senão a sintética (2.1 Sinistro) somaria
+    const a=acc(t.conta), sg=(a && a.red) ? -1 : 1;
+    if(t.venc && t.venc.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].prev[t.venc.getMonth()] += sg*t.vprev;
+    if(t.rec && t.rec.getFullYear()===ANO && newVal[t.conta]) newVal[t.conta].real[t.rec.getMonth()] += sg*t.vrec;
   });
   VAL[emp] = newVal;
 
