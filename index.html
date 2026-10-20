@@ -2249,6 +2249,8 @@ const COOP_SEM = 'Não identificado';
 expandState.coop = {};
 state.coopDim = 'regional';
 state.coopRegional = '';
+state.coopSel = {cooperativa:null, regional:null};   // null = todas; array = só as escolhidas
+state.coopCols = 'chaves';                            // 'chaves' (uma coluna por coop/regional) | 'meses'
 function coopNome(x){ const s=String(x||'').replace(/\s+/g,' ').trim(); return s ? s.toUpperCase() : COOP_SEM; }
 function coopRaiz(code){
   for(const g of COOP_GRUPOS){ if(g.raizes && g.raizes.some(r=>code===r || code.startsWith(r+'.'))) return g.id; }
@@ -2265,11 +2267,13 @@ function coopLancamentos(){
       if(!t.conta) return;
       const g=coopRaiz(t.conta); if(!g) return;
       if(state.coopDim==='cooperativa' && state.coopRegional && coopNome(t.regional)!==state.coopRegional) return;
+      const chave=coopChave(t), sel=state.coopSel[state.coopDim];
+      if(sel && !sel.includes(chave)) return;
       meses.forEach(m=>{
         const info=tituloInfoMes(t,tipo,m,reg); if(!info) return;
         // receber soma, pagar subtrai
         const val = tipo==='receber' ? info.valor : -info.valor;
-        out.push({t, tipo, m, g, conta:t.conta, chave:coopChave(t), valor:val, data:info.data, status:info.status});
+        out.push({t, tipo, m, g, conta:t.conta, chave, col:state.coopCols==='meses'?'M'+m:chave, valor:val, data:info.data, status:info.status});
       });
     });
   });
@@ -2277,6 +2281,25 @@ function coopLancamentos(){
 }
 function setCoopDim(d){ state.coopDim=d; state.coopRegional=''; render(); }
 function setCoopRegional(r){ state.coopRegional=r; render(); }
+function setCoopCols(c){ state.coopCols=c; render(); }
+/* Menu suspenso de seleção: marca/desmarca localmente e só aplica no botão "Aplicar". */
+function toggleCoopMenu(ev){ ev.stopPropagation(); const m=$('coopMenu'); m.style.display = m.style.display==='none' ? 'block' : 'none'; }
+function coopMenuFiltro(txt){
+  const q=txt.trim().toUpperCase();
+  document.querySelectorAll('#coopMenu label[data-k]').forEach(l=>{ l.style.display = !q || l.dataset.k.includes(q) ? 'flex' : 'none'; });
+}
+function coopMenuMarcar(on){ document.querySelectorAll('#coopMenu label[data-k]').forEach(l=>{ if(l.style.display!=='none') l.querySelector('input').checked=on; }); }
+function coopMenuAplicar(){
+  const boxes=[...document.querySelectorAll('#coopMenu label[data-k] input')];
+  const marcadas=boxes.filter(b=>b.checked).map(b=>b.closest('label').dataset.k);
+  if(!marcadas.length){ toast('Selecione ao menos uma '+(state.coopDim==='regional'?'regional':'cooperativa')); return; }
+  state.coopSel[state.coopDim] = marcadas.length===boxes.length ? null : marcadas;
+  render();
+}
+document.addEventListener('click', e=>{
+  const m=document.getElementById('coopMenu');
+  if(m && m.style.display!=='none' && !e.target.closest('.coop-dd')) m.style.display='none';
+});
 let COOP_CACHE=null;
 function renderCooperativas(){
   const dimSeg='<div class="seg">'+[['cooperativa','Cooperativa'],['regional','Regional']].map(([k,n])=>
@@ -2285,7 +2308,26 @@ function renderCooperativas(){
   const regSel = state.coopDim==='cooperativa' && regionais.length>1 ?
     '<select class="btn sm" style="max-width:260px" onchange="setCoopRegional(this.value)"><option value="">Todas as regionais</option>'+
     regionais.map(r=>'<option'+(r===state.coopRegional?' selected':'')+' value="'+esc(r)+'">'+esc(r)+'</option>').join('')+'</select>' : '';
-  let h=pageHead('Resultado por '+(state.coopDim==='regional'?'Regional':'Cooperativa'),'',regSel+dimSeg);
+  const nomeDim = state.coopDim==='regional' ? 'regional' : 'cooperativa', nomeDimPl = state.coopDim==='regional' ? 'regionais' : 'cooperativas';
+  // opções do menu: todas as chaves da dimensão atual (respeitando o filtro de regional)
+  const opcoes=[...new Set([...(PAGAR[state.empresa]||[]),...(RECEBER[state.empresa]||[])]
+    .filter(t=>t.conta && coopRaiz(t.conta) && !(state.coopDim==='cooperativa' && state.coopRegional && coopNome(t.regional)!==state.coopRegional))
+    .map(coopChave))].sort((a,b)=>a===COOP_SEM?1:b===COOP_SEM?-1:a.localeCompare(b));
+  const sel=state.coopSel[state.coopDim];
+  const nSel = sel ? sel.filter(k=>opcoes.includes(k)).length : opcoes.length;
+  const ddLbl = !sel ? 'Todas as '+nomeDimPl+' ('+opcoes.length+')' : nSel+' de '+opcoes.length+' '+nomeDimPl;
+  const menu='<div class="coop-dd" style="position:relative;display:inline-block">'+
+    '<button class="btn sm" onclick="toggleCoopMenu(event)">'+icon('filter',14)+' '+esc(ddLbl)+' '+icon('chevD',12)+'</button>'+
+    '<div id="coopMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:60;width:360px;max-width:80vw;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(16,24,40,.18);padding:10px">'+
+      '<input type="text" placeholder="Buscar '+nomeDim+'..." oninput="coopMenuFiltro(this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:inherit;font:inherit;font-size:13px">'+
+      '<div style="display:flex;gap:6px;margin:8px 0"><button class="btn sm ghost" onclick="coopMenuMarcar(true)">Marcar todas</button><button class="btn sm ghost" onclick="coopMenuMarcar(false)">Desmarcar todas</button></div>'+
+      '<div style="max-height:300px;overflow:auto;border-top:1px solid var(--border);padding-top:4px">'+
+      opcoes.map(k=>'<label data-k="'+esc(k)+'" style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:12.5px;cursor:pointer"><input type="checkbox"'+(!sel||sel.includes(k)?' checked':'')+'>'+esc(k)+'</label>').join('')+
+      '</div><div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn sm primary" onclick="coopMenuAplicar()">Aplicar</button></div>'+
+    '</div></div>';
+  const colSeg='<div class="seg">'+[['chaves','Por '+nomeDim],['meses','Mês a mês']].map(([k,n])=>
+    '<button class="'+(state.coopCols===k?'on':'')+'" onclick="setCoopCols(\''+k+'\')">'+n+'</button>').join('')+'</div>';
+  let h=pageHead('Resultado por '+(state.coopDim==='regional'?'Regional':'Cooperativa'),'',regSel+menu+colSeg+dimSeg);
 
   if(!temBaseReal()){
     h+='<div class="card"><div class="empty" style="padding:30px"><div class="t1">'+esc(EMPRESAS[state.empresa].curto)+' ainda não possui base de títulos importada.</div>'+
@@ -2298,7 +2340,7 @@ function renderCooperativas(){
   // agrega: chave -> conta analítica -> valor
   const porChave={}, total={}, contasUsadas=new Set();
   L.forEach(x=>{
-    const c=porChave[x.chave]||(porChave[x.chave]={});
+    const c=porChave[x.col]||(porChave[x.col]={});
     c[x.conta]=(c[x.conta]||0)+x.valor;
     total[x.conta]=(total[x.conta]||0)+x.valor;
     contasUsadas.add(x.conta);
@@ -2311,25 +2353,27 @@ function renderCooperativas(){
     : somaContas(mapa,c=>coopRaiz(c)===g.id);
   const recG=COOP_GRUPOS.find(g=>g.id==='rec'), rcG=COOP_GRUPOS.find(g=>g.id==='rc');
   // colunas ordenadas por receita (maior primeiro); "Não identificado" sempre por último
-  const chaves=Object.keys(porChave).sort((a,b)=>{
+  const porMes = state.coopCols==='meses';
+  const chaves = porMes ? MSEL().map(m=>'M'+m) : Object.keys(porChave).sort((a,b)=>{
     if(a===COOP_SEM) return 1; if(b===COOP_SEM) return -1;
     return grupoVal(porChave[b],recG)-grupoVal(porChave[a],recG) || a.localeCompare(b);
   });
 
   const tRec=grupoVal(total,recG), tRc=grupoVal(total,rcG);
-  const ident=chaves.filter(k=>k!==COOP_SEM);
+  const ident=chaves.filter(k=>k!==COOP_SEM && porChave[k]);
   const positivas=ident.filter(k=>grupoVal(porChave[k],rcG)>0).length;
   const negativas=ident.filter(k=>grupoVal(porChave[k],rcG)<0).length;
   h+='<div class="kpi-grid" style="margin-bottom:16px">'+
     kpi('Receita no período', money(tRec), null, '', 'pos')+
     kpi('Resultado comercial', money(tRc), null, '', tRc>=0?'pos':'neg')+
     kpi('Margem comercial', Math.abs(tRec)>0.005?pct(tRc/tRec*100):'—', null, '')+
-    kpi((state.coopDim==='regional'?'Regionais':'Cooperativas')+' positivas / negativas', positivas+' / '+negativas, null, '')+
+    kpi(porMes ? 'Meses positivos / negativos' : (state.coopDim==='regional'?'Regionais':'Cooperativas')+' positivas / negativas', positivas+' / '+negativas, null, '')+
     '</div>';
 
   // linhas = grupos (expansíveis até a conta analítica), colunas = cooperativas + total
   const cols=chaves.concat(['__TOTAL__']);
-  const mapaDe=k=>k==='__TOTAL__'?total:porChave[k];
+  const mapaDe=k=>k==='__TOTAL__'?total:(porChave[k]||{});
+  const colLbl=k=>k==='__TOTAL__'?'TOTAL':(porMes?MESES[+k.slice(1)]+'/'+ANO:k);
   const jsq=s=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
   const cell=(vv,click,strong)=>{
     const cls=vv>0.005?'pos':vv<-0.005?'neg':'zero';
@@ -2337,7 +2381,7 @@ function renderCooperativas(){
       '<span class="money '+cls+'">'+(Math.abs(vv)<0.005?'—':money(vv))+'</span></td>';
   };
   h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 330px)"><table class="tbl tbl-dre tbl-coop"><thead><tr><th style="min-width:280px">Descrição</th>';
-  cols.forEach(k=>h+='<th class="num mcol" style="min-width:130px;white-space:normal;line-height:1.25" title="'+esc(k==='__TOTAL__'?'Total':k)+'">'+esc(k==='__TOTAL__'?'TOTAL':k)+'</th>');
+  cols.forEach(k=>h+='<th class="num mcol" style="min-width:130px;white-space:normal;line-height:1.25" title="'+esc(colLbl(k))+'">'+esc(colLbl(k))+'</th>');
   h+='</tr></thead><tbody>';
   function contaLinhas(code, level, gid){
     const a=acc(code); if(!a || !usadas.some(sobConta(code))) return '';
@@ -2373,7 +2417,8 @@ function renderCooperativas(){
     }
   });
   h+='</tbody></table></div></div>';
-  h+='<div style="color:var(--text2);font-size:12px;margin-top:10px">'+esc(REGIME_LBL[state.regime]||'')+' no período selecionado. '+
+  h+='<div style="color:var(--text2);font-size:12px;margin-top:10px">'+esc(REGIME_LBL[state.regime]||'')+' no período selecionado'+
+     (porMes?', somando '+(sel?nSel+' '+nomeDimPl+' selecionada(s)':'todas as '+nomeDimPl):'')+'. '+
      'Clique em qualquer valor para ver os lançamentos. "'+COOP_SEM+'" reúne os títulos sem '+(state.coopDim==='regional'?'regional':'cooperativa')+' informada no SGA. '+
      'Contas patrimoniais e transferências entre contas (grupo 4) não entram no resultado.</div>';
   $('content').innerHTML=h;
@@ -2381,9 +2426,10 @@ function renderCooperativas(){
 function coopDrill(chave, alvo){
   const L=COOP_CACHE||coopLancamentos();
   const pred = alvo[0]==='@' ? (x=>x.g===alvo.slice(1)) : (x=>x.conta===alvo||x.conta.startsWith(alvo+'.'));
-  const rows=L.filter(x=>(chave==='__TOTAL__'||x.chave===chave) && pred(x)).sort((a,b)=>a.data-b.data);
+  const rows=L.filter(x=>(chave==='__TOTAL__'||x.col===chave) && pred(x)).sort((a,b)=>a.data-b.data);
   const g=COOP_GRUPOS.find(x=>'@'+x.id===alvo);
-  const label=(g?g.nome:(acc(alvo)?alvo+' '+acc(alvo).n:alvo))+' — '+(chave==='__TOTAL__'?'Total':chave);
+  const colNome = chave==='__TOTAL__' ? 'Total' : (state.coopCols==='meses' ? MESES[+chave.slice(1)]+'/'+ANO : chave);
+  const label=(g?g.nome:(acc(alvo)?alvo+' '+acc(alvo).n:alvo))+' — '+colNome;
   DRILL_ROWS=rows.map(x=>({id:x.t.id, tipo:x.tipo, parte:x.t.forn||x.t.cli, doc:x.t.doc||'', centro:x.t.centro||'',
     conta:x.conta, data:x.data, status:x.status, valor:x.valor}));
   DRILL_TITLE=label;
@@ -4476,7 +4522,8 @@ function compStr(dt){ return dt ? String(dt.getMonth()+1).padStart(2,'0')+'/'+dt
 // linhas por requisição configurado no servidor (comumente 1000), e pedir um
 // .range() maior que esse teto não o contorna: ele é simplesmente truncado de
 // volta ao máximo do servidor, sem erro. Paginar em loop funciona com
-// qualquer teto.
+// qualquer teto. A query precisa de ORDER BY estável (ex.: .order('id')):
+// sem ordem, o Postgres pode repetir/pular linhas entre páginas.
 async function fetchAllRows(query){
   const PAGE = 1000;
   let all = [], offset = 0;
@@ -4493,8 +4540,8 @@ async function hydrateEmpresaReal(emp){
   const EMP_ID = EMPRESA_IDS[emp];
   if(!EMP_ID) return;
   const [pagarRows, receberRowsAll, contasRes, saldosRes] = await Promise.all([
-    fetchAllRows(sb.from('titulos_pagar').select('*').eq('empresa_id', EMP_ID)),
-    fetchAllRows(sb.from('titulos_receber').select('*').eq('empresa_id', EMP_ID)),
+    fetchAllRows(sb.from('titulos_pagar').select('*').eq('empresa_id', EMP_ID).order('id')),
+    fetchAllRows(sb.from('titulos_receber').select('*').eq('empresa_id', EMP_ID).order('id')),
     sb.from('contas_bancarias').select('*').eq('empresa_id', EMP_ID).eq('ativa', true),
     sb.from('saldos_bancarios').select('*').eq('empresa_id', EMP_ID).order('data',{ascending:false})
   ]);
