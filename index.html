@@ -240,6 +240,27 @@ body.dark .tbl-dre th.ah-col,body.dark .tbl-dre td.ah-col{color:#C4CCD8;border-l
 .tbl-dre thead tr:last-child th:first-child{left:auto;box-shadow:none;z-index:2}
 .tbl-dre tr.row-result td:first-child{background:#E8F1F3 !important}
 .tbl-dre tr.row-result.final td:first-child{background:#CFE4E8 !important}
+/* Leitura em apresentação: linhas zebradas, meses em faixas alternadas e destaque da linha
+   sob o mouse. Usa background-image/box-shadow (camadas) para não deixar transparente o
+   fundo opaco da 1ª coluna fixa. */
+.tbl-dre tbody tr:nth-child(even) > td{background-image:linear-gradient(rgba(16,24,40,.035),rgba(16,24,40,.035))}
+.tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+5),.tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+6),.tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+7),
+.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+4),.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+5),.tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+6),
+.tbl-dre thead th.band,
+.tbl-coop tbody td:nth-child(odd):not(:first-child),.tbl-coop thead th:nth-child(odd):not(:first-child){box-shadow:inset 0 0 0 9999px rgba(14,92,110,.07)}
+.tbl-dre tbody tr:hover > td,.tbl-dre tbody tr:hover > td:first-child{background-image:linear-gradient(rgba(250,190,0,.24),rgba(250,190,0,.24)) !important}
+body.dark .tbl-dre tbody tr:nth-child(even) > td{background-image:linear-gradient(rgba(255,255,255,.035),rgba(255,255,255,.035))}
+body.dark .tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+5),body.dark .tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+6),body.dark .tbl-dre:not(.tbl-coop) tbody td:nth-child(6n+7),
+body.dark .tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+4),body.dark .tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+5),body.dark .tbl-dre:not(.tbl-coop) thead tr:last-child th:nth-child(6n+6),
+body.dark .tbl-dre thead th.band,
+body.dark .tbl-coop tbody td:nth-child(odd):not(:first-child),body.dark .tbl-coop thead th:nth-child(odd):not(:first-child){box-shadow:inset 0 0 0 9999px rgba(120,190,205,.08)}
+/* Modo apresentação (tela cheia): esconde menu e barra superior, tabela ocupa a tela */
+body.modo-apres #sidebar,body.modo-apres #topbar,body.modo-apres .chips{display:none !important}
+body.modo-apres #content{padding:14px 18px}
+body.modo-apres .tbl-wrap{max-height:calc(100vh - 110px) !important}
+body.modo-apres .tbl-dre{font-size:14.5px}
+body.modo-apres .tbl-dre td,body.modo-apres .tbl-dre th{padding-top:9px;padding-bottom:9px}
+body.modo-apres .kpi-grid{display:none}
 /* Resultado por Cooperativa: cabeçalho de uma linha só (a DRE tem duas) */
 .tbl-coop thead tr:last-child th{top:0}
 .tbl-coop thead tr:last-child th:first-child{left:0;z-index:3;box-shadow:2px 0 4px -2px rgba(16,24,40,.12)}
@@ -2168,11 +2189,11 @@ function renderDre(){
   const rbLine = cfg.find(l=>l.nome==='RECEITA BRUTA');
   const rbPorMes = meses.map(m=>rbLine?dreLinhaVal(rbLine,m,reg):0);
   const rbTotal = rbPorMes.reduce((t,x)=>t+x,0);
-  let h=pageHead('DRE Gerencial','',
-    PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':'');
+  let h=pageHead('DRE Gerencial','', '<button class="btn sm ghost" onclick="toggleApresentacao()">'+icon('eye',14)+(document.body.classList.contains('modo-apres')?' Sair da tela cheia':' Tela cheia')+'</button>'+
+    (PERFIS[state.role].configurar?'<button class="btn sm ghost" onclick="goAdmin(\'dre\')">'+icon('sliders',14)+' Configurar DRE</button>':''));
   h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 235px)"><table class="tbl tbl-dre"><thead>';
   h+='<tr><th rowspan="2" style="min-width:250px">Descrição</th>';
-  meses.forEach(m=>h+='<th colspan="3" class="mcol" style="text-align:center">'+MESES[m]+'</th>');
+  meses.forEach((m,i)=>h+='<th colspan="3" class="mcol'+(i%2?' band':'')+'" style="text-align:center">'+MESES[m]+'</th>');
   h+='<th colspan="2" class="mcol" style="text-align:center">Total</th></tr><tr>';
   meses.forEach(m=>h+='<th class="num mcol">R$</th><th class="num av-col">AV %</th><th class="num ah-col"'+tip(m>0?'Variação sobre '+MESES[m-1]:'Sem mês anterior')+'>AH %</th>');
   h+='<th class="num mcol">R$</th><th class="num av-col">AV %</th></tr></thead><tbody>';
@@ -2260,6 +2281,9 @@ function coopRaiz(code){
   return null;
 }
 function coopChave(t){ return coopNome(state.coopDim==='regional' ? t.regional : t.coop); }
+/* Chaves do título: na visão por cooperativa, um título com várias cooperativas no SGA
+   (cooperativa_rateio) aparece em todas elas, com o valor dividido igualmente. */
+function coopChaves(t){ return state.coopDim==='cooperativa' && t.coopRateio && t.coopRateio.length>1 ? t.coopRateio.map(coopNome) : [coopChave(t)]; }
 /* Lançamentos do período selecionado, já com chave (cooperativa/regional),
    grupo da DRE simplificada e valor com sinal. */
 function coopLancamentos(){
@@ -2270,13 +2294,17 @@ function coopLancamentos(){
       if(!t.conta) return;
       const g=coopRaiz(t.conta); if(!g) return;
       if(state.coopDim==='cooperativa' && state.coopRegional && coopNome(t.regional)!==state.coopRegional) return;
-      const chave=coopChave(t), sel=state.coopSel[state.coopDim];
-      if(sel && !sel.includes(chave)) return;
+      const sel=state.coopSel[state.coopDim];
+      const chaves=coopChaves(t), parte=1/chaves.length;
       meses.forEach(m=>{
         const info=tituloInfoMes(t,tipo,m,reg); if(!info) return;
-        // receber soma, pagar subtrai
-        const val = tipo==='receber' ? info.valor : -info.valor;
-        out.push({t, tipo, m, g, conta:t.conta, chave, col:state.coopCols==='meses'?'M'+m:chave, valor:val, data:info.data, status:info.status});
+        // receber soma, pagar subtrai; com rateio, o valor é dividido igualmente entre as cooperativas
+        const val = (tipo==='receber' ? info.valor : -info.valor) * parte;
+        chaves.forEach(chave=>{
+          if(sel && !sel.includes(chave)) return;
+          out.push({t, tipo, m, g, conta:t.conta, chave, col:state.coopCols==='meses'?'M'+m:chave, valor:val,
+            rateio:chaves.length>1?chaves.length:0, data:info.data, status:info.status});
+        });
       });
     });
   });
@@ -2285,6 +2313,20 @@ function coopLancamentos(){
 function setCoopDim(d){ state.coopDim=d; state.coopRegional=''; render(); }
 function setCoopRegional(r){ state.coopRegional=r; render(); }
 function setCoopCols(c){ state.coopCols=c; render(); }
+/* Modo apresentação: tela cheia do navegador + esconde menu/topo. A classe fica no body,
+   então sobrevive aos re-renders (expandir linhas não sai da tela cheia). Esc sai. */
+function toggleApresentacao(){
+  const on=!document.body.classList.contains('modo-apres');
+  document.body.classList.toggle('modo-apres',on);
+  try{
+    if(on && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+    if(!on && document.fullscreenElement) document.exitFullscreen();
+  }catch(e){}
+  render();
+}
+document.addEventListener('fullscreenchange',()=>{
+  if(!document.fullscreenElement && document.body.classList.contains('modo-apres')){ document.body.classList.remove('modo-apres'); render(); }
+});
 /* Menu suspenso de seleção: marca/desmarca localmente e só aplica no botão "Aplicar". */
 function toggleCoopMenu(ev){ ev.stopPropagation(); const m=$('coopMenu'); m.style.display = m.style.display==='none' ? 'block' : 'none'; }
 function coopMenuFiltro(txt){
@@ -2315,7 +2357,7 @@ function renderCooperativas(){
   // opções do menu: todas as chaves da dimensão atual (respeitando o filtro de regional)
   const opcoes=[...new Set([...(PAGAR[state.empresa]||[]),...(RECEBER[state.empresa]||[])]
     .filter(t=>t.conta && coopRaiz(t.conta) && !(state.coopDim==='cooperativa' && state.coopRegional && coopNome(t.regional)!==state.coopRegional))
-    .map(coopChave))].sort((a,b)=>a===COOP_SEM?1:b===COOP_SEM?-1:a.localeCompare(b));
+    .flatMap(coopChaves))].sort((a,b)=>a===COOP_SEM?1:b===COOP_SEM?-1:a.localeCompare(b));
   const sel=state.coopSel[state.coopDim];
   const nSel = sel ? sel.filter(k=>opcoes.includes(k)).length : opcoes.length;
   const ddLbl = !sel ? 'Todas as '+nomeDimPl+' ('+opcoes.length+')' : nSel+' de '+opcoes.length+' '+nomeDimPl;
@@ -2330,7 +2372,7 @@ function renderCooperativas(){
     '</div></div>';
   const colSeg='<div class="seg">'+[['chaves','Por '+nomeDim],['meses','Mês a mês']].map(([k,n])=>
     '<button class="'+(state.coopCols===k?'on':'')+'" onclick="setCoopCols(\''+k+'\')">'+n+'</button>').join('')+'</div>';
-  let h=pageHead('Resultado por '+(state.coopDim==='regional'?'Regional':'Cooperativa'),'',regSel+menu+colSeg+dimSeg);
+  let h=pageHead('Resultado por '+(state.coopDim==='regional'?'Regional':'Cooperativa'),'',regSel+menu+colSeg+dimSeg+'<button class="btn sm ghost" onclick="toggleApresentacao()">'+icon('eye',14)+(document.body.classList.contains('modo-apres')?' Sair da tela cheia':' Tela cheia')+'</button>');
 
   if(!temBaseReal()){
     h+='<div class="card"><div class="empty" style="padding:30px"><div class="t1">'+esc(EMPRESAS[state.empresa].curto)+' ainda não possui base de títulos importada.</div>'+
@@ -2433,7 +2475,7 @@ function coopDrill(chave, alvo){
   const g=COOP_GRUPOS.find(x=>'@'+x.id===alvo);
   const colNome = chave==='__TOTAL__' ? 'Total' : (state.coopCols==='meses' ? MESES[+chave.slice(1)]+'/'+ANO : chave);
   const label=(g?g.nome:(acc(alvo)?alvo+' '+acc(alvo).n:alvo))+' — '+colNome;
-  DRILL_ROWS=rows.map(x=>({id:x.t.id, tipo:x.tipo, parte:x.t.forn||x.t.cli, doc:x.t.doc||'', centro:x.t.centro||'',
+  DRILL_ROWS=rows.map(x=>({id:x.t.id, tipo:x.tipo, parte:(x.t.forn||x.t.cli||'')+(x.rateio?' (rateio 1/'+x.rateio+')':''), doc:x.t.doc||'', centro:x.t.centro||'',
     conta:x.conta, data:x.data, status:x.status, valor:x.valor}));
   DRILL_TITLE=label;
   const tot=rows.reduce((t,x)=>t+x.valor,0);
@@ -4647,7 +4689,7 @@ async function hydrateEmpresaReal(emp){
       conta:r.conta_codigo, centro:r.centro||'', banco:r.banco||'',
       comp:compStr(venc), emissao:venc, venc, pgto,
       vprev:Number(r.valor_previsto), vpago:Number(r.valor_pago||0), status,
-      coop:r.cooperativa||'', regional:r.regional||''};
+      coop:r.cooperativa||'', regional:r.regional||'', coopRateio:r.cooperativa_rateio||null};
   });
 
   RECEBER[emp] = receberRows.map(r=>{
@@ -4658,7 +4700,7 @@ async function hydrateEmpresaReal(emp){
       desc:r.cliente, conta:r.conta_codigo, centro:'Receitas', banco:'',
       comp:compStr(venc), emissao:venc, venc, rec,
       vprev:Number(r.valor_previsto), vrec:Number(r.valor_recebido||0), status,
-      coop:r.cooperativa||'', regional:r.regional||''};
+      coop:r.cooperativa||'', regional:r.regional||'', coopRateio:r.cooperativa_rateio||null};
   });
 
   // DRE e Demonstrativo do Fluxo usam todos os títulos reais, de qualquer mês
