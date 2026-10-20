@@ -240,6 +240,9 @@ body.dark .tbl-dre th.ah-col,body.dark .tbl-dre td.ah-col{color:#C4CCD8;border-l
 .tbl-dre thead tr:last-child th:first-child{left:auto;box-shadow:none;z-index:2}
 .tbl-dre tr.row-result td:first-child{background:#E8F1F3 !important}
 .tbl-dre tr.row-result.final td:first-child{background:#CFE4E8 !important}
+/* Resultado por Cooperativa: cabeçalho de uma linha só (a DRE tem duas) */
+.tbl-coop thead tr:last-child th{top:0}
+.tbl-coop thead tr:last-child th:first-child{left:0;z-index:3;box-shadow:2px 0 4px -2px rgba(16,24,40,.12)}
 body.dark .tbl-dre tr.row-result td:first-child{background:#123138 !important}
 body.dark .tbl-dre tr.row-result.final td:first-child{background:#173F47 !important}
 tr.row-sub td{font-weight:600;background:var(--bg)}
@@ -2333,7 +2336,7 @@ function renderCooperativas(){
     return '<td class="num mcol'+(click?' clickv':'')+'"'+(click?' onclick="'+click+'"':'')+(strong?' style="font-weight:'+strong+'"':'')+'>'+
       '<span class="money '+cls+'">'+(Math.abs(vv)<0.005?'—':money(vv))+'</span></td>';
   };
-  h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 330px)"><table class="tbl tbl-dre"><thead><tr><th style="min-width:280px">Descrição</th>';
+  h+='<div class="card"><div class="tbl-wrap" style="max-height:calc(100vh - 330px)"><table class="tbl tbl-dre tbl-coop"><thead><tr><th style="min-width:280px">Descrição</th>';
   cols.forEach(k=>h+='<th class="num mcol" style="min-width:130px;white-space:normal;line-height:1.25" title="'+esc(k==='__TOTAL__'?'Total':k)+'">'+esc(k==='__TOTAL__'?'TOTAL':k)+'</th>');
   h+='</tr></thead><tbody>';
   function contaLinhas(code, level, gid){
