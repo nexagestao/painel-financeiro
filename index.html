@@ -1796,6 +1796,10 @@ function renderFluxo(){
   h+=kpi('Saídas Previstas',money(sp.sai,true),null,'títulos em aberto a partir de hoje','neg');
   h+=kpi('Saldo Final Previsto',money(sp.saldoFinal,true),null,'até '+esc(state.periodoLabel),sp.saldoFinal<0?'neg':sp.saldoFinal>0?'pos':'zero');
   h+='</div>';
+  const fora=BASES[state.empresa].foraFluxo||[];
+  if(fora.length) h+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin:-4px 0 14px;font-size:12px;color:var(--text2)">'+
+    fora.map(c=>'<span>'+icon('wallet',12)+' '+esc(c.nome)+': <b style="color:var(--text)">'+money(c.saldo,true)+'</b> '+
+      (c.data?'em '+c.data.toLocaleDateString('pt-BR'):'(sem saldo lançado)')+' — fora do fluxo, apenas informativo</span>').join('')+'</div>';
 
   h+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center">';
   h+='<div class="seg">'+[['proj','Previsto'],['real','Realizado'],['pxr','Previsto x Realizado']].map(r=>
@@ -4731,16 +4735,22 @@ async function carregarEmpresaReal(emp){
   const [pagarRows, receberRowsAll, contasRes, saldosRes] = await Promise.all([
     fetchAllRows(o=>sb.from('titulos_pagar').select(COLS_PAGAR, o).eq('empresa_id', EMP_ID).order('id')),
     fetchAllRows(o=>sb.from('titulos_receber').select(COLS_RECEBER, o).eq('empresa_id', EMP_ID).order('id')),
-    // conta com considerar_fluxo=false (ex.: investimento) fica fora do saldo do Fluxo de Caixa
-    sb.from('contas_bancarias').select('*').eq('empresa_id', EMP_ID).eq('ativa', true).neq('considerar_fluxo', false),
+    sb.from('contas_bancarias').select('*').eq('empresa_id', EMP_ID).eq('ativa', true),
     sb.from('saldos_bancarios').select('*').eq('empresa_id', EMP_ID).order('data',{ascending:false})
   ]);
 
   // Empresa sem nenhum título importado continua com a base demonstrativa.
   if(emp!=='AGIBENS' && !pagarRows.length && !receberRowsAll.length) return;
   const receberRows = receberRowsAll.filter(r=>r.status!=='Cancelado');
-  const contas = contasRes.data || [];
+  // conta com considerar_fluxo=false (ex.: investimento) fica fora do saldo do
+  // Fluxo de Caixa — só o último saldo dela é guardado, para exibição informativa
+  const contasAtivas = contasRes.data || [];
+  const contas = contasAtivas.filter(c=>c.considerar_fluxo!==false);
   const saldosRows = saldosRes.data || [];
+  BASES[emp].foraFluxo = contasAtivas.filter(c=>c.considerar_fluxo===false).map(c=>{
+    const u=saldosRows.find(s=>s.conta_bancaria_id===c.id);
+    return {nome:c.banco+' — '+c.nome, saldo:u?Number(u.saldo):Number(c.saldo_inicial), data:u?parseYMD(u.data):null};
+  });
 
   PAGAR[emp] = pagarRows.map(r=>{
     const venc = parseYMD(r.vencimento), pgto = parseYMD(r.pagamento);
