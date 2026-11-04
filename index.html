@@ -3108,17 +3108,21 @@ function renderBancosSaldos(){
   const ultimo=id=>br.saldos.find(s=>s.conta_bancaria_id===id);
   const nomeConta=id=>{ const c=br.contas.find(x=>x.id===id); return c?c.banco+' — '+c.nome:'—'; };
   const ativas=br.contas.filter(c=>c.ativa);
-  const totalUlt=ativas.reduce((t,c)=>{ const u=ultimo(c.id); return t+(u?Number(u.saldo):Number(c.saldo_inicial)); },0);
+  const noFluxo=ativas.filter(c=>c.considerar_fluxo!==false), foraFluxo=ativas.filter(c=>c.considerar_fluxo===false);
+  const somaUlt=cs=>cs.reduce((t,c)=>{ const u=ultimo(c.id); return t+(u?Number(u.saldo):Number(c.saldo_inicial)); },0);
+  const totalUlt=somaUlt(noFluxo);
   let inner='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
     '<button class="btn primary" onclick="openLancarSaldo()"'+(ativas.length?'':' disabled')+'>'+icon('wallet',15)+' Lançar saldo</button>'+
     '<button class="btn" onclick="editContaBanc(null)">'+icon('building',15)+' Adicionar conta bancária</button></div>';
-  inner+=tbl([['Banco'],['Conta'],['Último saldo',1],['Data do saldo'],['Status']],
+  inner+=tbl([['Banco'],['Conta'],['Último saldo',1],['Data do saldo'],['Fluxo de Caixa'],['Status']],
     br.contas.map(c=>{ const u=ultimo(c.id);
       return '<tr class="hoverable" onclick="editContaBanc(\''+c.id+'\')"><td style="font-weight:600">'+esc(c.banco)+'</td><td>'+esc(c.nome)+'</td>'+
         '<td class="num">'+(u?moneyHtml(Number(u.saldo),true):'<span style="color:var(--text2)">sem saldo lançado</span>')+'</td>'+
         '<td>'+(u?fdate(parseYMD(u.data)):'—')+'</td>'+
+        '<td>'+(c.considerar_fluxo!==false?'Considera':'<span style="color:var(--text2)">Não considera</span>')+'</td>'+
         '<td><span class="status-badge '+(c.ativa?'st-ok':'st-neutro')+'">'+(c.ativa?'Ativa':'Inativa')+'</span></td></tr>'; }).join('')+
-    '<tr class="row-total"><td colspan="2">Total das contas ativas (último saldo de cada uma)</td><td class="num">'+moneyHtml(totalUlt,true)+'</td><td colspan="2"></td></tr>');
+    '<tr class="row-total"><td colspan="2">Total no Fluxo de Caixa (contas ativas consideradas, último saldo)</td><td class="num">'+moneyHtml(totalUlt,true)+'</td><td colspan="3"></td></tr>'+
+    (foraFluxo.length?'<tr><td colspan="2" style="color:var(--text2)">Fora do fluxo ('+esc(foraFluxo.map(c=>c.banco+' — '+c.nome).join(', '))+')</td><td class="num">'+moneyHtml(somaUlt(foraFluxo),true)+'</td><td colspan="3"></td></tr>':''));
   inner+='<div class="card-title" style="margin:22px 0 10px">Histórico de saldos lançados</div>';
   inner+=br.saldos.length ? tbl([['Data'],['Conta'],['Saldo',1],['']],
     br.saldos.map(s=>'<tr><td>'+fdate(parseYMD(s.data))+'</td><td>'+esc(nomeConta(s.conta_bancaria_id))+'</td><td class="num">'+moneyHtml(Number(s.saldo),true)+'</td>'+
@@ -3171,16 +3175,17 @@ function excluirSaldo(id){
     }});
 }
 function editContaBanc(id){
-  const emp=state.empresa, c=id ? BANCOS_REAL[emp].contas.find(x=>x.id===id) : {banco:'',nome:'',saldo_inicial:0,ativa:true};
+  const emp=state.empresa, c=id ? BANCOS_REAL[emp].contas.find(x=>x.id===id) : {banco:'',nome:'',saldo_inicial:0,ativa:true,considerar_fluxo:true};
   openDrawer(drawerHead(id?'Editar conta bancária':'Nova conta bancária',EMPRESAS[emp].curto)+'<div class="drawer-body">'+
     fld('cbBanco','Banco',c.banco)+fld('cbNome','Nome da conta',c.nome)+
     fld('cbIni','Saldo inicial (antes do primeiro saldo lançado)',String(Number(c.saldo_inicial||0)).replace('.',','))+
+    fldSel('cbFluxo','Considerar no Fluxo de Caixa',['Sim','Não'],c.considerar_fluxo!==false?'Sim':'Não')+
     fldSel('cbAtiva','Status',['Ativa','Inativa'],c.ativa?'Ativa':'Inativa')+
     '</div>'+crudFoot('saveContaBanc('+(id?'\''+id+'\'':'null')+')'));
 }
 async function saveContaBanc(id){
   const emp=state.empresa, ini=parseValorBR($('cbIni').value);
-  const row={empresa_id:EMPRESA_IDS[emp], banco:$('cbBanco').value.trim(), nome:$('cbNome').value.trim(), saldo_inicial:ini&&!isNaN(ini)?ini:0, ativa:$('cbAtiva').value==='Ativa'};
+  const row={empresa_id:EMPRESA_IDS[emp], banco:$('cbBanco').value.trim(), nome:$('cbNome').value.trim(), saldo_inicial:ini&&!isNaN(ini)?ini:0, ativa:$('cbAtiva').value==='Ativa', considerar_fluxo:$('cbFluxo').value==='Sim'};
   if(!row.banco||!row.nome){ toast('Informe o banco e o nome da conta'); return; }
   const { error } = id ? await sb.from('contas_bancarias').update(row).eq('id',id) : await sb.from('contas_bancarias').insert(row);
   if(error){ console.error(error); toast('Falha ao salvar a conta'); return; }
@@ -4693,7 +4698,8 @@ async function carregarEmpresaReal(emp){
   const [pagarRows, receberRowsAll, contasRes, saldosRes] = await Promise.all([
     fetchAllRows(o=>sb.from('titulos_pagar').select(COLS_PAGAR, o).eq('empresa_id', EMP_ID).order('id')),
     fetchAllRows(o=>sb.from('titulos_receber').select(COLS_RECEBER, o).eq('empresa_id', EMP_ID).order('id')),
-    sb.from('contas_bancarias').select('*').eq('empresa_id', EMP_ID).eq('ativa', true),
+    // conta com considerar_fluxo=false (ex.: investimento) fica fora do saldo do Fluxo de Caixa
+    sb.from('contas_bancarias').select('*').eq('empresa_id', EMP_ID).eq('ativa', true).neq('considerar_fluxo', false),
     sb.from('saldos_bancarios').select('*').eq('empresa_id', EMP_ID).order('data',{ascending:false})
   ]);
 
