@@ -1229,7 +1229,9 @@ function cycleEmpresa(){
 }
 async function setEmpresa(e){
   if(!empresaAutorizada(e)){ toast('Acesso negado: empresa não autorizada para o seu usuário'); return; }
-  state.empresa=e; render(); // troca imediata com o que já está em cache; recarrega o plano de contas real em seguida
+  state.empresa=e;
+  if(!HYDRATED[e] && EMPRESA_IDS[e]) CARREGANDO[e]=true; // tela de carregamento, não a base demonstrativa
+  render(); // troca imediata com o que já está em cache; recarrega o plano de contas real em seguida
   try{ await loadPlanoContas(e); }catch(err){ console.error('Falha ao recarregar plano de contas:', err); }
   try{ await loadCentrosResultado(e); }catch(err){ console.error('Falha ao recarregar centros de resultado:', err); }
   try{ await loadDreConfig(e); }catch(err){ console.error('Falha ao recarregar configuração da DRE:', err); }
@@ -4535,6 +4537,12 @@ function render(){
   }
   applyBrand(); applyChrome();
   renderSidebar(); renderTopbar();
+  if(CARREGANDO[state.empresa] && !HYDRATED[state.empresa]){
+    $('content').innerHTML='<div class="card" style="margin:40px auto;max-width:440px;text-align:center;padding:32px">'+
+      '<div class="card-title" style="margin-bottom:8px">Carregando dados reais da '+esc(EMPRESAS[state.empresa].curto)+'…</div>'+
+      '<div class="t2">Buscando os títulos a pagar e a receber no banco de dados.</div></div>';
+    return;
+  }
   const views={dashboard:renderDashboard, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
     receber:()=>renderTitulos('receber'), admin:renderAdmin};
@@ -4650,24 +4658,41 @@ function compStr(dt){ return dt ? String(dt.getMonth()+1).padStart(2,'0')+'/'+dt
 // volta ao máximo do servidor, sem erro. Paginar em loop funciona com
 // qualquer teto. A query precisa de ORDER BY estável (ex.: .order('id')):
 // sem ordem, o Postgres pode repetir/pular linhas entre páginas.
-async function fetchAllRows(query){
-  const PAGE = 1000;
-  let all = [], offset = 0;
-  while(true){
-    const { data, error } = await query.range(offset, offset+PAGE-1);
-    if(error) throw error;
-    all = all.concat(data||[]);
-    if(!data || data.length < PAGE) break;
-    offset += PAGE;
+// Recebe uma fábrica (o builder do supabase-js não é reutilizável entre
+// requisições): a 1ª página traz o total (count), as demais vão em paralelo
+// em lotes — a Dunorte tem ~47 mil títulos, e em série levava ~10 s.
+async function fetchAllRows(makeQuery){
+  const PAGE = 1000, PARALELO = 8;
+  const first = await makeQuery({count:'exact'}).range(0, PAGE-1);
+  if(first.error) throw first.error;
+  let all = first.data || [];
+  const total = first.count ?? all.length;
+  const offsets = [];
+  for(let o = PAGE; o < total; o += PAGE) offsets.push(o);
+  for(let i = 0; i < offsets.length; i += PARALELO){
+    const pages = await Promise.all(offsets.slice(i, i+PARALELO).map(o=>makeQuery().range(o, o+PAGE-1)));
+    pages.forEach(p=>{ if(p.error) throw p.error; all = all.concat(p.data||[]); });
   }
   return all;
 }
+// Enquanto os títulos reais carregam, render() mostra "Carregando dados reais"
+// em vez da base demonstrativa (antes a tela exibia os valores de
+// demonstração por vários segundos e parecia que os dados reais não vieram).
+const CARREGANDO = {};
 async function hydrateEmpresaReal(emp){
+  if(!EMPRESA_IDS[emp]) return;
+  CARREGANDO[emp] = true;
+  try{ await carregarEmpresaReal(emp); }
+  finally{ delete CARREGANDO[emp]; }
+}
+const COLS_PAGAR = 'id,fornecedor,conta_codigo,centro,banco,vencimento,pagamento,valor_previsto,valor_pago,status,cooperativa,regional,cooperativa_rateio';
+const COLS_RECEBER = 'id,codigo,cliente,conta_codigo,vencimento,recebimento,valor_previsto,valor_recebido,status,cooperativa,regional,cooperativa_rateio';
+async function carregarEmpresaReal(emp){
   const EMP_ID = EMPRESA_IDS[emp];
   if(!EMP_ID) return;
   const [pagarRows, receberRowsAll, contasRes, saldosRes] = await Promise.all([
-    fetchAllRows(sb.from('titulos_pagar').select('*').eq('empresa_id', EMP_ID).order('id')),
-    fetchAllRows(sb.from('titulos_receber').select('*').eq('empresa_id', EMP_ID).order('id')),
+    fetchAllRows(o=>sb.from('titulos_pagar').select(COLS_PAGAR, o).eq('empresa_id', EMP_ID).order('id')),
+    fetchAllRows(o=>sb.from('titulos_receber').select(COLS_RECEBER, o).eq('empresa_id', EMP_ID).order('id')),
     sb.from('contas_bancarias').select('*').eq('empresa_id', EMP_ID).eq('ativa', true),
     sb.from('saldos_bancarios').select('*').eq('empresa_id', EMP_ID).order('data',{ascending:false})
   ]);
