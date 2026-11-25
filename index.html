@@ -349,6 +349,32 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
 .mini-sel{padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--surface);color:var(--text2)}
 .perm-check{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
 @media print{#sidebar,#topbar,.page-actions{display:none}}
+/* ---------- Borderô de Pagamentos ---------- */
+.st-bdagu{color:#B45309;background:#FEF3C7}
+.kpi .vl.amber{color:#B45309}
+.bd-filtros{margin-bottom:16px}
+.bd-fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.bd-fgrid label{display:flex;flex-direction:column;gap:4px}
+.bd-fgrid .select{width:100%}
+.bd-fin{display:flex;flex-direction:column;gap:12px}
+.bd-fin-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:16px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:12px}
+.bd-fin-conta{display:flex;gap:10px;align-items:center;color:var(--text)}
+.bd-fin-val .lb{font-size:11.5px;color:var(--text2);font-weight:600}
+.bd-fin-val .vl{font-family:var(--font-display);font-size:19px;font-weight:700;margin-top:2px}
+.bd-fin-val .vl.pos{color:var(--pos)} .bd-fin-val .vl.neg{color:var(--neg)}
+.bd-fin-val .sub{font-size:11.5px;color:var(--text2);margin-top:3px}
+.bd-ausente{display:inline-flex;align-items:center;gap:4px;color:#B45309;font-size:12.5px;font-weight:600}
+.bd-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.bd-sort{cursor:pointer;user-select:none;white-space:nowrap}
+.bd-tbl td{vertical-align:middle}
+tr.bd-on td{background:var(--accent-soft)}
+.bd-pick-resumo{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 12px}
+.bd-pick-resumo div{background:var(--bg);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.bd-pick-resumo span{font-size:11px;color:var(--text2);font-weight:600}
+.bd-pick-resumo b{font-size:14px} .bd-pick-resumo b.neg{color:var(--neg)} .bd-pick-resumo b.pos{color:var(--pos)}
+@media(max-width:900px){.bd-charts{grid-template-columns:1fr}.bd-fin-row{grid-template-columns:1fr 1fr}.bd-fin-conta{grid-column:1/-1}}
+@media(max-width:520px){.bd-fin-row{grid-template-columns:1fr}.bd-fgrid{grid-template-columns:1fr 1fr}}
+body.dark .st-bdagu{color:#FBBF24;background:#33260A}
 </style>
 </head>
 <body>
@@ -442,6 +468,8 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
 
 /* ---------- Ícones (traço estilo Lucide) ---------- */
 const ICON_PATHS = {
+  plus:'M12 5v14M5 12h14',
+  bordero:'M9 3.5h6v3H9zM8 5H6a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 6 21h12a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 18 5h-2M8 11.5h8M8 15.5h5',
   home:'M3 10.5 12 3l9 7.5M5.5 8.8V20h13V8.8',
   flow:'M3 17l5-6 4 3 6-8M15 6h3v3',
   file:'M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6',
@@ -900,11 +928,11 @@ const USUARIOS = [
   {nome:'Paulo Andrade', email:'paulo@dunorte.com.br', perfil:'Cliente', empresas:'Dunorte', status:'Ativo'},
   {nome:'Auditoria Externa', email:'auditoria@parceiro.com', perfil:'Visualização', empresas:'Agibens', status:'Suspenso'}
 ];
-const MODULOS_PERM = ['Dashboard','Fluxo de Caixa','DRE','Indicadores','Contas a Pagar','Contas a Receber','Administração'];
+const MODULOS_PERM = ['Dashboard','Fluxo de Caixa','DRE','Indicadores','Contas a Pagar','Borderô de Pagamentos','Contas a Receber','Administração'];
 const ACOES_PERM = ['visualizar','exportar','importar','configurar','operar'];
 const PERFIS = {
-  'Administrador': {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','receber','admin'], importar:true, configurar:true, exportar:true},
-  'Financeiro':    {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','receber'], importar:true, configurar:false, exportar:true},
+  'Administrador': {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
+  'Financeiro':    {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber'], importar:true, configurar:false, exportar:true},
   'Diretoria':     {mods:['dashboard','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
   'Cliente':       {mods:['dashboard','dre','cooperativas','indicadores'], importar:false, configurar:false, exportar:true},
   'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false}
@@ -1174,6 +1202,7 @@ const NAV = [
     {id:'indicadores', n:'Indicadores', ic:'gauge'}]},
   {sec:'Financeiro', items:[
     {id:'pagar', n:'Contas a Pagar', ic:'payUp'},
+    {id:'bordero', n:'Borderô de Pagamentos', ic:'bordero'},
     {id:'receber', n:'Contas a Receber', ic:'payDown'}]},
   {sec:'Administração', items:[{id:'admin', n:'Administração', ic:'settings'}]}
 ];
@@ -2660,6 +2689,451 @@ function renderTitulos(tipo){
   $('content').innerHTML=h;
 }
 
+/* =========================== BORDERÔ DE PAGAMENTOS ===========================
+   Fonte: tabelas borderos (cabeçalho: número, data, conta pagadora) e
+   bordero_itens (vínculo com titulos_pagar + liberação). Nada de valor é
+   copiado para o borderô: fornecedor, vencimento, categoria, valor e baixa
+   vêm sempre do próprio título em titulos_pagar (PAGAR[emp]) — por isso não
+   há duplicidade com Contas a Pagar, DRE ou Fluxo de Caixa. Um título só pode
+   estar em UM borderô (unique em bordero_itens.titulo_pagar_id).
+   Regras de status (mutuamente exclusivos):
+     Pago       = título baixado (status 'Pago' em titulos_pagar, com data de pagamento)
+     Liberado   = liberado para pagamento no borderô, ainda sem baixa
+     Aguardando = incluído no borderô, sem liberação e sem baixa
+   "Vencido" é um marcador adicional: não pago e vencimento < hoje (data real). */
+const BORDERO = {};
+state.bd = state.bd || {num:'', vIni:'', vFim:'', status:'Todos', conta:'', pIni:'', pFim:'', busca:'', cat:'', dir:'asc', sel:{}};
+async function loadBorderos(emp){
+  const id = EMPRESA_IDS[emp];
+  const [b, i] = await Promise.all([
+    sb.from('borderos').select('*').eq('empresa_id', id).order('numero', {ascending:false}),
+    fetchAllRows(o=>sb.from('bordero_itens').select('*', o).eq('empresa_id', id).order('id'))
+  ]);
+  if(b.error) throw b.error;
+  if(!BANCOS_REAL[emp]) await loadBancosReal(emp);
+  BORDERO[emp] = {borderos:b.data||[], itens:i||[]};
+}
+function bdPodeEditar(){ return !!PERFIS[state.role].importar; }
+function bdContaNome(emp, id){
+  const c = (BANCOS_REAL[emp]&&BANCOS_REAL[emp].contas||[]).find(x=>x.id===id);
+  return c ? c.banco+' — '+c.nome : '—';
+}
+function bdUltimoSaldo(emp, contaId){
+  const s = (BANCOS_REAL[emp]&&BANCOS_REAL[emp].saldos||[]).find(x=>x.conta_bancaria_id===contaId);
+  return s ? {valor:Number(s.saldo), data:parseYMD(s.data)} : null;
+}
+function bdTituloMap(emp){
+  const m = {}; (PAGAR[emp]||[]).forEach(t=>{ if(t.uid) m[t.uid]=t; }); return m;
+}
+// Linhas do borderô = item + título real + cabeçalho
+function bdLinhas(emp){
+  const B = BORDERO[emp]; if(!B) return [];
+  const tm = bdTituloMap(emp), bm = {}; B.borderos.forEach(b=>bm[b.id]=b);
+  const hoje = hojeReal();
+  return B.itens.map(it=>{
+    const t = tm[it.titulo_pagar_id], b = bm[it.bordero_id];
+    if(!t || !b) return null;
+    const pago = t.status==='Pago' && !!t.pgto;
+    const status = pago ? 'Pago' : (it.liberacao==='Liberado' ? 'Liberado' : 'Aguardando');
+    const a = acc(t.conta);
+    return {it, t, b, numero:b.numero, venc:t.venc, forn:t.forn||'—',
+      cat:a ? a.n : (t.conta||'Sem categoria'), catCod:t.conta||'',
+      valor:t.vprev, vpago:pago ? (t.vpago||t.vprev) : 0, pgto:pago ? t.pgto : null,
+      contaId:b.conta_bancaria_id, contaNome:bdContaNome(emp, b.conta_bancaria_id),
+      status, vencido:!pago && t.venc && t.venc < hoje};
+  }).filter(Boolean);
+}
+function bdFiltrar(linhas){
+  const f = state.bd;
+  const d = (s,end)=> s ? new Date(s+(end?'T23:59:59':'T00:00:00')) : null;
+  const vI=d(f.vIni), vF=d(f.vFim,1), pI=d(f.pIni), pF=d(f.pFim,1);
+  const q = f.busca.trim().toLowerCase();
+  return linhas.filter(r=>
+    (!f.num || String(r.numero)===String(f.num)) &&
+    (!vI || (r.venc && r.venc>=vI)) && (!vF || (r.venc && r.venc<=vF)) &&
+    (!pI || (r.pgto && r.pgto>=pI)) && (!pF || (r.pgto && r.pgto<=pF)) &&
+    (!f.conta || r.contaId===f.conta) &&
+    (!f.cat || r.cat===f.cat) &&
+    (f.status==='Todos' || (f.status==='Vencido' ? r.vencido : r.status===f.status)) &&
+    (!q || r.forn.toLowerCase().includes(q)));
+}
+function bdSet(k, v){ state.bd[k]=v; if(k!=='busca') state.bd.sel={}; render(); }
+function bdBusca(v){
+  state.bd.busca=v; render();
+  const el=$('bdBusca'); if(el){ el.focus(); el.setSelectionRange(v.length, v.length); }
+}
+function bdLimpar(){ state.bd = {num:'', vIni:'', vFim:'', status:'Todos', conta:'', pIni:'', pFim:'', busca:'', cat:'', dir:'asc', sel:{}}; render(); }
+const BD_ST_CLASS = {'Pago':'st-pago', 'Liberado':'st-aberto', 'Aguardando':'st-bdagu'};
+const BD_CORES = {'Pago':'var(--pos)', 'Liberado':'var(--accent)', 'Aguardando':'#D97706'};
+
+function renderBordero(){
+  const emp = state.empresa;
+  if(!EMPRESA_IDS[emp] || !temBaseReal(emp)){
+    $('content').innerHTML = pageHead('Borderô de Pagamentos','')+'<div class="card"><div class="empty"><div class="t1">Módulo disponível apenas com a base real da empresa</div></div></div>';
+    return;
+  }
+  if(!BORDERO[emp]){
+    $('content').innerHTML = pageHead('Borderô de Pagamentos','')+'<div class="card"><div class="empty"><div class="t1">Carregando borderôs…</div></div></div>';
+    loadBorderos(emp).then(render).catch(err=>{ console.error(err);
+      $('content').innerHTML = pageHead('Borderô de Pagamentos','')+'<div class="card"><div class="empty"><div class="t1">Falha ao carregar os borderôs</div><div class="t2">'+esc(err.message||err)+'</div></div></div>'; });
+    return;
+  }
+  const B = BORDERO[emp], f = state.bd;
+  const todas = bdLinhas(emp), L = bdFiltrar(todas);
+  const soma = (a,k)=>a.reduce((t,r)=>t+(r[k||'valor']||0),0);
+  const pagos = L.filter(r=>r.status==='Pago'), lib = L.filter(r=>r.status==='Liberado'),
+        agu = L.filter(r=>r.status==='Aguardando'), venc = L.filter(r=>r.vencido);
+  const editar = bdPodeEditar();
+  const bSel = f.num ? B.borderos.find(b=>String(b.numero)===String(f.num)) : null;
+
+  let acoes = '';
+  if(editar){
+    acoes += '<button class="btn sm primary" onclick="bdNovo()">'+icon('plus',14)+' Novo borderô</button>';
+    if(bSel) acoes += '<button class="btn sm" onclick="bdAbrirPicker(\''+bSel.id+'\')">'+icon('plus',14)+' Adicionar títulos</button>';
+  }
+  if(PERFIS[state.role].exportar && L.length)
+    acoes += '<button class="btn sm ghost" onclick="bdExportar(\'xlsx\')">'+icon('download',14)+' Excel</button><button class="btn sm ghost" onclick="bdExportar(\'csv\')">'+icon('download',14)+' CSV</button>';
+  let h = pageHead('Borderô de Pagamentos'+(bSel?' nº '+bSel.numero:''), '', acoes);
+
+  // ---------- filtros ----------
+  const contas = (BANCOS_REAL[emp].contas||[]);
+  const cats = [...new Set(todas.map(r=>r.cat))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const opt = (v,lb,cur)=>'<option value="'+esc(v).replace(/"/g,'&quot;')+'"'+(String(v)===String(cur)?' selected':'')+'>'+esc(lb)+'</option>';
+  const lbl = t=>'<span style="font-size:11.5px;font-weight:600;color:var(--text2)">'+t+'</span>';
+  const ativo = f.num||f.vIni||f.vFim||f.status!=='Todos'||f.conta||f.pIni||f.pFim||f.busca||f.cat;
+  h += '<div class="card bd-filtros"><div class="card-body" style="padding:12px 16px">'+
+    '<div class="bd-fgrid">'+
+    '<label>'+lbl('Borderô')+'<select class="select" onchange="bdSet(\'num\',this.value)">'+opt('','Todos os borderôs',f.num)+
+      B.borderos.map(b=>opt(b.numero,'Nº '+b.numero+' — '+fdate(parseYMD(b.data_bordero)),f.num)).join('')+'</select></label>'+
+    '<label>'+lbl('Vencimento de')+'<input type="date" class="select" value="'+esc(f.vIni)+'" onchange="bdSet(\'vIni\',this.value)"></label>'+
+    '<label>'+lbl('Vencimento até')+'<input type="date" class="select" value="'+esc(f.vFim)+'" onchange="bdSet(\'vFim\',this.value)"></label>'+
+    '<label>'+lbl('Status')+'<select class="select" onchange="bdSet(\'status\',this.value)">'+['Todos','Aguardando','Liberado','Pago','Vencido'].map(s=>opt(s,s==='Vencido'?'Vencido (não pago)':s,f.status)).join('')+'</select></label>'+
+    '<label>'+lbl('Conta pagadora')+'<select class="select" onchange="bdSet(\'conta\',this.value)">'+opt('','Todas',f.conta)+contas.map(c=>opt(c.id,c.banco+' — '+c.nome,f.conta)).join('')+'</select></label>'+
+    '<label>'+lbl('Pagamento de')+'<input type="date" class="select" value="'+esc(f.pIni)+'" onchange="bdSet(\'pIni\',this.value)"></label>'+
+    '<label>'+lbl('Pagamento até')+'<input type="date" class="select" value="'+esc(f.pFim)+'" onchange="bdSet(\'pFim\',this.value)"></label>'+
+    '<label>'+lbl('Categoria')+'<select class="select" onchange="bdSet(\'cat\',this.value)">'+opt('','Todas',f.cat)+cats.map(c=>opt(c,c,f.cat)).join('')+'</select></label>'+
+    '</div>'+
+    (ativo?'<div style="margin-top:8px"><button class="btn sm ghost" onclick="bdLimpar()">'+icon('x',12)+' Limpar filtros</button></div>':'')+
+    '</div></div>';
+
+  if(!B.borderos.length){
+    h += '<div class="card"><div class="empty"><div class="ic">'+icon('bordero',22)+'</div><div class="t1">Nenhum borderô criado para a '+esc(EMPRESAS[emp].curto)+'</div>'+
+      '<div class="t2">'+(editar?'Clique em “Novo borderô”, escolha a conta pagadora e selecione os títulos em aberto de Contas a Pagar.':'Ainda não há borderôs cadastrados.')+'</div></div></div>';
+    $('content').innerHTML = h; return;
+  }
+
+  // ---------- KPIs ----------
+  h += '<div class="kpi-grid bd-kpis">';
+  h += kpi('Quantidade de pagamentos', L.length.toLocaleString('pt-BR'), null, 'lançamentos no borderô');
+  h += kpi('Total do borderô', money(soma(L),true), null, 'soma dos valores incluídos');
+  h += kpi('Liberado para pagamento', money(soma(lib),true), null, lib.length+' lançamento(s) — ainda não pagos');
+  h += kpi('Aguardando liberação', money(soma(agu),true), null, agu.length+' lançamento(s) sem status', agu.length?'amber':'');
+  h += kpi('Total efetivamente pago', money(soma(pagos,'vpago'),true), null, pagos.length+' com baixa confirmada', 'pos');
+  h += kpi('Pagamentos vencidos', money(soma(venc),true), null, venc.length+' vencido(s) e pendente(s)', venc.length?'neg':'');
+  h += '</div>';
+
+  // ---------- situação financeira por conta pagadora ----------
+  const porConta = {};
+  L.forEach(r=>{ (porConta[r.contaId||'']=porConta[r.contaId||'']||[]).push(r); });
+  h += '<div class="card" style="margin-bottom:16px"><div class="card-head"><div class="card-title">Situação financeira do borderô</div>'+
+    '<div style="color:var(--text2);font-size:12px">Saldo após o borderô = saldo atual da conta pagadora − total comprometido</div></div><div class="card-body bd-fin">';
+  Object.entries(porConta).forEach(([cid, rs])=>{
+    const s = cid ? bdUltimoSaldo(emp, cid) : null;
+    // compromisso = lançamentos não pagos + pagos DEPOIS da data do saldo (o saldo
+    // lançado ainda contém esse dinheiro). Pagos até a data do saldo já saíram
+    // do saldo bancário e não são descontados de novo (evita duplicidade).
+    const comp = rs.filter(r=>r.status!=='Pago' || (s && r.pgto && r.pgto > s.data));
+    const vComp = soma(comp);
+    const proj = s ? s.valor - vComp : null;
+    const sit = !s ? ['Sem saldo bancário','st-neutro'] : (proj>=0 ? ['OK','st-ok'] : ['Saldo insuficiente','st-vencido']);
+    h += '<div class="bd-fin-row"><div class="bd-fin-conta">'+icon('wallet',16)+'<div><div style="font-weight:650">'+esc(cid?bdContaNome(emp,cid):'Sem conta pagadora')+'</div>'+
+      '<div style="font-size:11.5px;color:var(--text2)">'+rs.length+' lançamento(s) no filtro</div></div></div>'+
+      '<div class="bd-fin-val"><div class="lb">Saldo atual</div><div class="vl">'+(s?money(s.valor,true):'<span class="bd-ausente">'+icon('alert',12)+' não informado</span>')+'</div>'+
+        '<div class="sub">'+(s?'lançado em '+fdate(s.data):'lance em Fluxo de Caixa › Lançar saldo')+'</div></div>'+
+      '<div class="bd-fin-val"><div class="lb">Total comprometido</div><div class="vl">'+money(vComp,true)+'</div><div class="sub">'+comp.length+' lançamento(s) a sair do saldo</div></div>'+
+      '<div class="bd-fin-val"><div class="lb">Saldo após o borderô</div><div class="vl '+(proj==null?'':proj<0?'neg':'pos')+'">'+(proj==null?'—':money(proj,true))+'</div>'+
+        '<div class="sub"><span class="status-badge '+sit[1]+'">'+sit[0]+'</span></div></div></div>';
+  });
+  if(!L.length) h += '<div class="t2" style="color:var(--text2);font-size:12.5px">Nenhum lançamento com os filtros atuais.</div>';
+  h += '</div></div>';
+
+  // ---------- gráficos ----------
+  if(L.length){
+    const agrupa = key=>{ const g={}; L.forEach(r=>{ g[r[key]]=(g[r[key]]||0)+r.valor; }); return Object.entries(g).sort((a,b)=>b[1]-a[1]); };
+    const catG = agrupa('cat'); let catItens = catG.slice(0,6).map(([n,v])=>({name:n,value:v}));
+    if(catG.length>6) catItens.push({name:'Outras ('+(catG.length-6)+')', value:catG.slice(6).reduce((t,x)=>t+x[1],0)});
+    const fornItens = agrupa('forn').slice(0,10).map(([n,v])=>({name:n,value:v}));
+    // período: por dia quando o intervalo de vencimentos cabe em 31 dias, senão por mês
+    const vs = L.filter(r=>r.venc).map(r=>+r.venc), span = vs.length ? (Math.max(...vs)-Math.min(...vs))/86400000 : 0;
+    const porDia = span<=31;
+    const chave = d=> porDia ? isoDate(d) : d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const rotulo = k=>{ const p=k.split('-'); return porDia ? p[2]+'/'+p[1] : MESES[+p[1]-1]+'/'+p[0].slice(2); };
+    const per = {};
+    L.forEach(r=>{ if(!r.venc) return; const k=chave(r.venc); per[k]=per[k]||{Pago:0,Liberado:0,Aguardando:0}; per[k][r.status]+=r.valor; });
+    const ks = Object.keys(per).sort();
+    const comp = [['Pago',soma(pagos,'vpago')],['Liberado',soma(lib)],['Aguardando',soma(agu)]].map(([n,v])=>({name:n, value:v, color:BD_CORES[n]}));
+    h += '<div class="bd-charts">';
+    h += '<div class="card"><div class="card-head"><div class="card-title">Pagamentos por categoria</div></div><div class="card-body">'+pcDonut('bdcat', catItens, {h:230})+'</div></div>';
+    h += '<div class="card"><div class="card-head"><div class="card-title">Liberado × pendente × pago</div></div><div class="card-body">'+chartRanking(comp, v=>money(v,true))+
+      '<div style="font-size:11.5px;color:var(--text2);margin-top:8px">Liberado não é pago: só conta como pago o título com baixa confirmada.</div></div></div>';
+    h += '<div class="card"><div class="card-head"><div class="card-title">Volume por fornecedor</div><div style="color:var(--text2);font-size:12px">10 maiores</div></div><div class="card-body">'+chartRanking(fornItens)+'</div></div>';
+    h += '<div class="card"><div class="card-head"><div class="card-title">Pagamentos por período</div><div style="color:var(--text2);font-size:12px">por '+(porDia?'dia':'mês')+' de vencimento</div></div><div class="card-body">'+
+      chartBars(ks.map(rotulo), ['Pago','Liberado','Aguardando'].map(s=>({name:s, color:BD_CORES[s], values:ks.map(k=>per[k][s])})), 220)+
+      legend(['Pago','Liberado','Aguardando'].map(s=>({name:s, color:BD_CORES[s]})))+'</div></div>';
+    h += '</div>';
+  }
+
+  // ---------- tabela detalhada ----------
+  const ord = [...L].sort((a,b)=>((a.venc||0)-(b.venc||0))*(f.dir==='asc'?1:-1) || a.forn.localeCompare(b.forn,'pt-BR'));
+  const selN = Object.keys(f.sel).filter(k=>f.sel[k]).length;
+  const LIM = 600;
+  h += '<div class="card" style="margin-top:16px"><div class="card-head" style="flex-wrap:wrap;gap:10px"><div class="card-title">Lançamentos do borderô</div>'+
+    '<input id="bdBusca" class="select" style="margin-left:auto;min-width:220px" placeholder="Pesquisar fornecedor…" value="'+esc(f.busca).replace(/"/g,'&quot;')+'" oninput="bdBusca(this.value)">'+
+    (editar && selN ? '<button class="btn sm primary" onclick="bdLiberarSel(\'Liberado\')">'+icon('check',13)+' Liberar '+selN+'</button><button class="btn sm" onclick="bdLiberarSel(\'Aguardando\')">Voltar p/ aguardando</button>' : '')+
+    '</div><div class="tbl-wrap"><table class="tbl bd-tbl"><thead><tr>'+
+    (editar?'<th style="width:28px"><input type="checkbox" title="Selecionar não pagos" onclick="bdSelTodos(this.checked)"></th>':'')+
+    '<th>Nº</th><th class="bd-sort" onclick="bdSet(\'dir\',\''+(f.dir==='asc'?'desc':'asc')+'\')">Vencimento '+(f.dir==='asc'?'▲':'▼')+'</th><th>Fornecedor / Favorecido</th><th>Categoria</th><th>Status</th><th class="num">Valor a pagar</th><th>Data do pagamento</th><th>Conta pagadora</th></tr></thead><tbody>';
+  ord.slice(0,LIM).forEach((r,i)=>{
+    h += '<tr class="hoverable" onclick="bdDetalhe(\''+r.it.id+'\')">'+
+      (editar?'<td onclick="event.stopPropagation()">'+(r.status!=='Pago'?'<input type="checkbox"'+(f.sel[r.it.id]?' checked':'')+' onchange="bdSelUm(\''+r.it.id+'\',this.checked)">':'')+'</td>':'')+
+      '<td style="color:var(--text2)">'+(i+1)+(f.num?'':'<div style="font-size:10.5px">B'+r.numero+'</div>')+'</td>'+
+      '<td>'+fdate(r.venc)+(r.vencido?' <span class="status-badge st-vencido" style="margin-left:4px">Vencido</span>':'')+'</td>'+
+      '<td style="font-weight:550">'+esc(r.forn)+'</td><td style="color:var(--text2)">'+esc(r.cat)+'</td>'+
+      '<td><span class="status-badge '+BD_ST_CLASS[r.status]+'">'+r.status+'</span></td>'+
+      '<td class="num">'+money(r.valor,true)+'</td>'+
+      '<td>'+(r.pgto?fdate(r.pgto):'<span style="color:var(--text2)">sem confirmação</span>')+'</td>'+
+      '<td style="color:var(--text2)">'+esc(r.contaNome)+'</td></tr>';
+  });
+  if(!ord.length) h += '<tr><td colspan="9" style="text-align:center;color:var(--text2);padding:22px">Nenhum lançamento com os filtros atuais.</td></tr>';
+  else h += '<tr class="row-total">'+(editar?'<td></td>':'')+'<td colspan="5">Total ('+ord.length+' lançamento(s))</td><td class="num">'+money(soma(ord),true)+'</td><td colspan="2"></td></tr>';
+  h += '</tbody></table></div>'+(ord.length>LIM?'<div style="padding:10px 16px;font-size:12px;color:var(--text2)">Exibindo os primeiros '+LIM+' de '+ord.length+'. Use os filtros ou exporte para ver todos.</div>':'')+'</div>';
+
+  // ---------- histórico de borderôs ----------
+  const porB = {}; todas.forEach(r=>{ (porB[r.b.id]=porB[r.b.id]||[]).push(r); });
+  h += '<div class="card" style="margin-top:16px"><div class="card-head"><div class="card-title">Histórico de borderôs</div></div><div class="tbl-wrap"><table class="tbl"><thead><tr>'+
+    '<th>Nº</th><th>Data</th><th>Conta pagadora</th><th class="num">Lançamentos</th><th class="num">Total</th><th class="num">Pago</th><th>Situação</th><th></th></tr></thead><tbody>';
+  B.borderos.forEach(b=>{
+    const rs = porB[b.id]||[], tot = soma(rs), pg = rs.filter(r=>r.status==='Pago');
+    const sit = !rs.length ? ['Vazio','st-neutro'] : pg.length===rs.length ? ['Concluído','st-ok'] : pg.length ? ['Parcialmente pago','st-parcial'] : ['Em aberto','st-aberto'];
+    h += '<tr class="hoverable'+(String(f.num)===String(b.numero)?' bd-on':'')+'" onclick="bdSet(\'num\',\''+b.numero+'\')"><td style="font-weight:650">'+b.numero+'</td><td>'+fdate(parseYMD(b.data_bordero))+'</td>'+
+      '<td>'+esc(bdContaNome(emp,b.conta_bancaria_id))+'</td><td class="num">'+rs.length+'</td><td class="num">'+money(tot,true)+'</td><td class="num">'+money(soma(pg,'vpago'),true)+'</td>'+
+      '<td><span class="status-badge '+sit[1]+'">'+sit[0]+'</span></td>'+
+      '<td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()">'+(editar&&!pg.length?'<button class="btn sm ghost" onclick="bdExcluir(\''+b.id+'\')">'+icon('x',12)+' Excluir</button>':'')+'</td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  $('content').innerHTML = h;
+}
+
+function bdSelUm(id, on){ state.bd.sel[id]=on; render(); }
+function bdSelTodos(on){
+  state.bd.sel = {};
+  if(on) bdFiltrar(bdLinhas(state.empresa)).forEach(r=>{ if(r.status!=='Pago') state.bd.sel[r.it.id]=true; });
+  render();
+}
+async function bdLog(acao, detalhe){
+  try{ await sb.from('logs').insert({empresa_id:EMPRESA_IDS[state.empresa], acao, detalhe, usuario_id:currentUser?currentUser.id:null}); }catch(e){}
+}
+async function bdLiberarSel(valor){
+  const emp = state.empresa, ids = Object.keys(state.bd.sel).filter(k=>state.bd.sel[k]);
+  if(!ids.length) return;
+  const patch = valor==='Liberado' ? {liberacao:'Liberado', liberado_por:currentUser?currentUser.id:null, liberado_em:new Date().toISOString()} : {liberacao:'Aguardando', liberado_por:null, liberado_em:null};
+  const { error } = await sb.from('bordero_itens').update(patch).in('id', ids);
+  if(error){ console.error(error); toast('Falha ao atualizar a liberação'); return; }
+  BORDERO[emp].itens.forEach(it=>{ if(ids.includes(it.id)) Object.assign(it, patch); });
+  state.bd.sel = {};
+  await bdLog(valor==='Liberado'?'Borderô — pagamentos liberados':'Borderô — liberação desfeita', ids.length+' lançamento(s)');
+  toast(ids.length+' lançamento(s) '+(valor==='Liberado'?'liberado(s) para pagamento':'voltaram para aguardando'));
+  render();
+}
+
+function bdDetalhe(itemId){
+  const emp = state.empresa, r = bdLinhas(emp).find(x=>x.it.id===itemId); if(!r) return;
+  const li = (k,v)=>'<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--text2)">'+k+'</span><span style="font-weight:500;text-align:right;max-width:62%">'+v+'</span></div>';
+  let h = drawerHead('Lançamento do borderô nº '+r.numero, esc(r.forn));
+  h += '<div class="drawer-body">';
+  h += li('Status','<span class="status-badge '+BD_ST_CLASS[r.status]+'">'+r.status+'</span>'+(r.vencido?' <span class="status-badge st-vencido">Vencido</span>':''));
+  h += li('Fornecedor / favorecido', esc(r.forn));
+  h += li('Categoria', esc((r.catCod?r.catCod+' — ':'')+r.cat));
+  h += li('Centro de resultado', esc(r.t.centro||'—'));
+  h += li('Cooperativa', esc(r.t.coop||'—'));
+  h += li('Vencimento', fdate(r.venc));
+  h += li('Valor a pagar', money(r.valor,true));
+  h += li('Conta pagadora', esc(r.contaNome));
+  h += li('Liberação', r.it.liberacao==='Liberado' ? 'Liberado em '+new Date(r.it.liberado_em).toLocaleString('pt-BR') : 'Aguardando');
+  h += li('Pagamento confirmado', r.pgto ? fdate(r.pgto)+' — '+money(r.vpago,true) : '<span class="bd-ausente">'+icon('alert',12)+' sem confirmação de pagamento</span>');
+  h += li('Título em Contas a Pagar', esc(r.t.id));
+  if(bdPodeEditar() && r.status!=='Pago'){
+    h += '<div class="card-title" style="margin:20px 0 8px">Confirmar pagamento</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">Dá baixa no título em Contas a Pagar (status Pago). Reflete na DRE realizada e no Fluxo de Caixa.</div>'+
+      fld('bdPgData','Data do pagamento', isoDate(hojeReal()), 'date')+
+      '<div class="field"><label>Valor pago</label><input type="text" inputmode="decimal" id="bdPgValor" value="'+r.valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'"></div>';
+  }
+  h += '</div><div class="drawer-foot" style="flex-wrap:wrap">';
+  if(bdPodeEditar() && r.status!=='Pago'){
+    h += '<button class="btn ghost" onclick="bdRemoverItem(\''+r.it.id+'\')">'+icon('x',13)+' Remover do borderô</button>';
+    h += r.it.liberacao==='Liberado'
+      ? '<button class="btn" onclick="state.bd.sel={\''+r.it.id+'\':true};closeDrawer();bdLiberarSel(\'Aguardando\')">Voltar p/ aguardando</button>'
+      : '<button class="btn" onclick="state.bd.sel={\''+r.it.id+'\':true};closeDrawer();bdLiberarSel(\'Liberado\')">'+icon('check',13)+' Liberar</button>';
+    h += '<button class="btn primary" onclick="bdConfirmarPagamento(\''+r.it.id+'\')">Confirmar pagamento</button>';
+  } else h += '<button class="btn" onclick="closeDrawer()">Fechar</button>';
+  h += '</div>';
+  openDrawer(h);
+}
+async function bdConfirmarPagamento(itemId){
+  const emp = state.empresa, r = bdLinhas(emp).find(x=>x.it.id===itemId); if(!r) return;
+  const data = $('bdPgData').value, v = parseValorBR($('bdPgValor').value);
+  if(!data){ toast('Informe a data do pagamento'); return; }
+  if(v===null || isNaN(v) || v<=0){ toast('Valor pago inválido'); return; }
+  const c = (BANCOS_REAL[emp].contas||[]).find(x=>x.id===r.contaId);
+  const patch = {status:'Pago', pagamento:data, valor_pago:Math.round(v*100)/100};
+  if(c && !r.t.banco) patch.banco = c.banco+' — '+c.nome;
+  const { error } = await sb.from('titulos_pagar').update(patch).eq('id', r.it.titulo_pagar_id);
+  if(error){ console.error(error); toast('Falha ao confirmar o pagamento'); return; }
+  await bdLog('Borderô — pagamento confirmado', 'Borderô '+r.numero+': '+r.forn+' — '+money(v,true)+' em '+data);
+  closeDrawer(); toast('Pagamento confirmado — atualizando a base');
+  await recarregarBaseReal(emp);
+}
+function bdRemoverItem(itemId){
+  confirmDialog({title:'Remover do borderô', msg:'O título volta a ficar disponível em Contas a Pagar e pode ser incluído em outro borderô. Nada é apagado do título.', confirmLabel:'Remover',
+    onConfirm: async function(){
+      const emp = state.empresa;
+      const { error } = await sb.from('bordero_itens').delete().eq('id', itemId);
+      if(error){ toast('Falha ao remover'); throw error; }
+      BORDERO[emp].itens = BORDERO[emp].itens.filter(i=>i.id!==itemId);
+      await bdLog('Borderô — lançamento removido', itemId);
+      closeDrawer(); toast('Lançamento removido do borderô'); render();
+    }});
+}
+function bdExcluir(bid){
+  const emp = state.empresa, b = BORDERO[emp].borderos.find(x=>x.id===bid); if(!b) return;
+  confirmDialog({title:'Excluir borderô nº '+b.numero, msg:'O borderô e seus vínculos serão excluídos; os títulos continuam em Contas a Pagar, sem alteração.', confirmLabel:'Excluir',
+    onConfirm: async function(){
+      const { error } = await sb.from('borderos').delete().eq('id', bid);
+      if(error){ toast('Falha ao excluir o borderô'); throw error; }
+      BORDERO[emp].borderos = BORDERO[emp].borderos.filter(x=>x.id!==bid);
+      BORDERO[emp].itens = BORDERO[emp].itens.filter(i=>i.bordero_id!==bid);
+      if(String(state.bd.num)===String(b.numero)) state.bd.num='';
+      await bdLog('Borderô excluído', 'Nº '+b.numero);
+      toast('Borderô nº '+b.numero+' excluído'); render();
+    }});
+}
+
+// ---------- criação / inclusão de títulos ----------
+let BD_PICK = null; // {borderoId|null, contaId, data, obs, vIni, vFim, busca, sel:{uid:true}}
+async function bdNovo(){
+  const emp = state.empresa;
+  if(!BANCOS_REAL[emp]) await loadBancosReal(emp);
+  const ativas = BANCOS_REAL[emp].contas.filter(c=>c.ativa);
+  if(!ativas.length){ toast('Cadastre uma conta bancária primeiro (Administração › Contas Bancárias)'); return; }
+  const hoje = hojeReal(), sem = new Date(hoje); sem.setDate(sem.getDate()+7);
+  BD_PICK = {borderoId:null, contaId:ativas[0].id, data:isoDate(hoje), obs:'', vIni:isoDate(hoje), vFim:isoDate(sem), busca:'', sel:{}};
+  bdPickerDrawer();
+}
+function bdAbrirPicker(bid){
+  const b = BORDERO[state.empresa].borderos.find(x=>x.id===bid); if(!b) return;
+  const hoje = hojeReal(), sem = new Date(hoje); sem.setDate(sem.getDate()+7);
+  BD_PICK = {borderoId:bid, contaId:b.conta_bancaria_id, data:b.data_bordero, obs:b.observacao||'', vIni:isoDate(hoje), vFim:isoDate(sem), busca:'', sel:{}};
+  bdPickerDrawer();
+}
+function bdDisponiveis(){
+  const emp = state.empresa, usados = new Set(BORDERO[emp].itens.map(i=>i.titulo_pagar_id));
+  const P = BD_PICK, ini = P.vIni?new Date(P.vIni+'T00:00:00'):null, fim = P.vFim?new Date(P.vFim+'T23:59:59'):null, q = P.busca.trim().toLowerCase();
+  return (PAGAR[emp]||[]).filter(t=>t.uid && t.status!=='Pago' && !t.pgto && !usados.has(t.uid) &&
+    (!ini || (t.venc && t.venc>=ini)) && (!fim || (t.venc && t.venc<=fim)) && (!q || (t.forn||'').toLowerCase().includes(q)))
+    .sort((a,b)=>(a.venc||0)-(b.venc||0));
+}
+function bdPickerDrawer(){
+  const emp = state.empresa, P = BD_PICK, novo = !P.borderoId;
+  const b = novo ? null : BORDERO[emp].borderos.find(x=>x.id===P.borderoId);
+  const ativas = BANCOS_REAL[emp].contas.filter(c=>c.ativa);
+  let h = drawerHead(novo?'Novo borderô de pagamentos':'Adicionar títulos ao borderô nº '+b.numero, 'Selecione títulos em aberto de Contas a Pagar');
+  h += '<div class="drawer-body">';
+  if(novo){
+    h += '<div class="field"><label>Conta pagadora</label><select id="bdpConta" onchange="BD_PICK.contaId=this.value;bdPickResumo()">'+
+      ativas.map(c=>'<option value="'+c.id+'"'+(c.id===P.contaId?' selected':'')+'>'+esc(c.banco+' — '+c.nome)+'</option>').join('')+'</select></div>';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+fld('bdpData','Data do borderô',P.data,'date')+fld('bdpObs','Observação',P.obs)+'</div>';
+  }
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+    '<div class="field"><label>Vencimento de</label><input type="date" value="'+P.vIni+'" onchange="BD_PICK.vIni=this.value;bdPickLista()"></div>'+
+    '<div class="field"><label>Vencimento até</label><input type="date" value="'+P.vFim+'" onchange="BD_PICK.vFim=this.value;bdPickLista()"></div></div>';
+  h += '<div class="field"><input type="text" placeholder="Pesquisar fornecedor…" oninput="BD_PICK.busca=this.value;bdPickLista()" style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface)"></div>';
+  h += '<div id="bdpResumo" class="bd-pick-resumo"></div><div id="bdpLista"></div></div>';
+  h += '<div class="drawer-foot"><button class="btn" onclick="closeDrawer()">Cancelar</button><button class="btn primary" id="bdpSalvar" onclick="bdSalvarPicker()">'+(novo?'Criar borderô':'Adicionar')+'</button></div>';
+  openDrawer(h);
+  bdPickLista();
+}
+function bdPickLista(){
+  const lista = bdDisponiveis(), LIM = 400, P = BD_PICK;
+  let h = '<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 6px;font-size:12px;color:var(--text2)"><span>'+lista.length+' título(s) em aberto disponível(is)</span>'+
+    (lista.length?'<span><button class="btn sm ghost" onclick="bdPickTodos(true)">Marcar todos</button><button class="btn sm ghost" onclick="bdPickTodos(false)">Limpar</button></span>':'')+'</div>';
+  if(!lista.length) h += '<div class="empty" style="padding:20px"><div class="t2">Nenhum título em aberto (fora de outro borderô) nesse período.</div></div>';
+  else {
+    h += '<table class="tbl"><tbody>';
+    lista.slice(0,LIM).forEach(t=>{
+      h += '<tr class="hoverable" onclick="bdPickToggle(\''+t.uid+'\')"><td style="width:26px"><input type="checkbox" '+(P.sel[t.uid]?'checked':'')+' onclick="event.stopPropagation();bdPickToggle(\''+t.uid+'\')"></td>'+
+        '<td style="width:84px">'+fdate(t.venc)+'</td><td><div style="font-weight:550">'+esc(t.forn||'—')+'</div><div style="font-size:11px;color:var(--text2)">'+esc(acc(t.conta)?acc(t.conta).n:t.conta)+'</div></td>'+
+        '<td class="num">'+money(t.vprev,true)+'</td></tr>';
+    });
+    h += '</tbody></table>'+(lista.length>LIM?'<div style="font-size:12px;color:var(--text2);padding:8px 0">Mostrando '+LIM+' de '+lista.length+' — refine o período.</div>':'');
+  }
+  $('bdpLista').innerHTML = h;
+  bdPickResumo();
+}
+function bdPickToggle(uid){ BD_PICK.sel[uid]=!BD_PICK.sel[uid]; bdPickLista(); }
+function bdPickTodos(on){ if(on) bdDisponiveis().slice(0,400).forEach(t=>BD_PICK.sel[t.uid]=true); else BD_PICK.sel={}; bdPickLista(); }
+function bdPickResumo(){
+  const emp = state.empresa, P = BD_PICK, tm = bdTituloMap(emp);
+  const sel = Object.keys(P.sel).filter(k=>P.sel[k] && tm[k]);
+  const tot = sel.reduce((t,k)=>t+tm[k].vprev,0);
+  const s = bdUltimoSaldo(emp, P.contaId);
+  // no borderô existente, o compromisso já assumido entra no cálculo
+  const jaComp = P.borderoId ? bdLinhas(emp).filter(r=>r.b.id===P.borderoId && r.status!=='Pago').reduce((t,r)=>t+r.valor,0) : 0;
+  const proj = s ? s.valor - jaComp - tot : null;
+  $('bdpResumo').innerHTML = '<div><span>Selecionados</span><b>'+sel.length+' — '+money(tot,true)+'</b></div>'+
+    (jaComp?'<div><span>Já no borderô (não pagos)</span><b>'+money(jaComp,true)+'</b></div>':'')+
+    '<div><span>Saldo atual da conta</span><b>'+(s?money(s.valor,true)+' <small>('+fdate(s.data)+')</small>':'<span class="bd-ausente">não informado</span>')+'</b></div>'+
+    '<div><span>Saldo após o borderô</span><b class="'+(proj==null?'':proj<0?'neg':'pos')+'">'+(proj==null?'—':money(proj,true))+'</b></div>';
+  const btn = $('bdpSalvar'); if(btn) btn.disabled = !sel.length;
+}
+async function bdSalvarPicker(){
+  const emp = state.empresa, empId = EMPRESA_IDS[emp], P = BD_PICK;
+  const uids = Object.keys(P.sel).filter(k=>P.sel[k]);
+  if(!uids.length){ toast('Selecione ao menos um título'); return; }
+  const btn = $('bdpSalvar'); btn.disabled = true; btn.textContent = 'Salvando…';
+  let bid = P.borderoId, numero;
+  if(!bid){
+    const data = $('bdpData').value;
+    if(!data){ toast('Informe a data do borderô'); btn.disabled=false; btn.textContent='Criar borderô'; return; }
+    const { data:nb, error } = await sb.from('borderos').insert({empresa_id:empId, data_bordero:data, conta_bancaria_id:P.contaId,
+      observacao:$('bdpObs').value.trim()||null, created_by:currentUser?currentUser.id:null}).select().single();
+    if(error){ console.error(error); toast('Falha ao criar o borderô'); btn.disabled=false; btn.textContent='Criar borderô'; return; }
+    bid = nb.id; numero = nb.numero;
+  } else numero = BORDERO[emp].borderos.find(x=>x.id===bid).numero;
+  const rows = uids.map(u=>({bordero_id:bid, empresa_id:empId, titulo_pagar_id:u}));
+  const { error:e2 } = await sb.from('bordero_itens').insert(rows);
+  if(e2){
+    console.error(e2);
+    toast(e2.code==='23505' ? 'Algum título já está em outro borderô — recarregue e tente de novo' : 'Falha ao incluir os títulos');
+    if(!P.borderoId) await sb.from('borderos').delete().eq('id', bid);
+    btn.disabled=false; btn.textContent=P.borderoId?'Adicionar':'Criar borderô'; return;
+  }
+  await bdLog(P.borderoId?'Borderô — títulos incluídos':'Borderô criado', 'Nº '+numero+': '+uids.length+' título(s)');
+  closeDrawer(); BD_PICK = null;
+  await loadBorderos(emp);
+  state.bd.num = String(numero); state.bd.sel = {};
+  toast(P.borderoId ? uids.length+' título(s) incluído(s) no borderô nº '+numero : 'Borderô nº '+numero+' criado com '+uids.length+' título(s)');
+  render();
+}
+function bdExportar(fmt){
+  const emp = state.empresa, f = state.bd;
+  const L = bdFiltrar(bdLinhas(emp)).sort((a,b)=>((a.venc||0)-(b.venc||0))*(f.dir==='asc'?1:-1));
+  const rep = {title:'Borderô de Pagamentos', filename:'Bordero_'+EMPRESAS[emp].curto+(f.num?'_n'+f.num:'')+'_'+isoDate(hojeReal()),
+    sections:[{heading:'Borderô de Pagamentos', cols:['Nº','Borderô','Vencimento','Fornecedor/Favorecido','Categoria','Código conta','Status','Vencido','Valor a pagar','Data do pagamento','Valor pago','Conta pagadora'],
+      rows:L.map((r,i)=>[i+1, r.numero, fdate(r.venc), r.forn, r.cat, r.catCod, r.status, r.vencido?'Sim':'Não', r.valor, r.pgto?fdate(r.pgto):'', r.vpago||'', r.contaNome])}]};
+  if(fmt==='xlsx' && typeof XLSX!=='undefined') exportXLSX(rep); else exportCSV(rep);
+  bdLog('Exportação', 'Borderô de Pagamentos — '+L.length+' lançamento(s) ('+fmt+')');
+}
+
 /* =========================== INDICADORES =========================== */
 function renderIndicadores(){
   const reg=state.regime==='pxr'?'proj':state.regime;
@@ -3062,7 +3536,7 @@ async function fmSave(){
 }
 
 /* =========================== PERFIS E PERMISSÕES =========================== */
-const MODMAP={'Dashboard':'dashboard','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Contas a Receber':'receber','Administração':'admin'};
+const MODMAP={'Dashboard':'dashboard','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Borderô de Pagamentos':'bordero','Contas a Receber':'receber','Administração':'admin'};
 function renderPermissoes(){
   let rows='';
   MODULOS_PERM.forEach(mod=>{
@@ -4587,7 +5061,7 @@ function render(){
   }
   const views={dashboard:renderDashboard, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
-    receber:()=>renderTitulos('receber'), admin:renderAdmin};
+    receber:()=>renderTitulos('receber'), bordero:renderBordero, admin:renderAdmin};
   (views[state.view]||renderDashboard)();
 }
 </script>
@@ -4756,7 +5230,7 @@ async function carregarEmpresaReal(emp){
     const venc = parseYMD(r.vencimento), pgto = parseYMD(r.pagamento);
     let status = r.status;
     if(status==='Em aberto' && venc && venc < HOJE) status='Vencido';
-    return {id:'CP-'+r.id.slice(0,8), forn:r.fornecedor, doc:'', desc:r.fornecedor,
+    return {id:'CP-'+r.id.slice(0,8), uid:r.id, forn:r.fornecedor, doc:'', desc:r.fornecedor,
       conta:r.conta_codigo, centro:r.centro||'', banco:r.banco||'',
       comp:compStr(venc), emissao:venc, venc, pgto,
       vprev:Number(r.valor_previsto), vpago:Number(r.valor_pago||0), status,
