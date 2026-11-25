@@ -367,6 +367,10 @@ td.clickv:hover{background:var(--accent-soft);color:var(--accent)}
 .bd-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .bd-sort{cursor:pointer;user-select:none;white-space:nowrap}
 .bd-tbl td{vertical-align:middle}
+.bd-tbl td.bd-forn{min-width:200px;white-space:normal}
+.bd-pick-tbl{table-layout:fixed;width:100%}
+.bd-pick-tbl td{white-space:normal;overflow-wrap:anywhere}
+.bd-pick-tbl td.num{width:110px}
 tr.bd-on td{background:var(--accent-soft)}
 .bd-pick-resumo{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 12px}
 .bd-pick-resumo div{background:var(--bg);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
@@ -2825,11 +2829,11 @@ function renderBordero(){
   // ---------- KPIs ----------
   h += '<div class="kpi-grid bd-kpis">';
   h += kpi('Quantidade de pagamentos', L.length.toLocaleString('pt-BR'), null, 'lançamentos no borderô');
-  h += kpi('Total do borderô', money(soma(L),true), null, 'soma dos valores incluídos');
-  h += kpi('Liberado para pagamento', money(soma(lib),true), null, lib.length+' lançamento(s) — ainda não pagos');
-  h += kpi('Aguardando liberação', money(soma(agu),true), null, agu.length+' lançamento(s) sem status', agu.length?'amber':'');
-  h += kpi('Total efetivamente pago', money(soma(pagos,'vpago'),true), null, pagos.length+' com baixa confirmada', 'pos');
-  h += kpi('Pagamentos vencidos', money(soma(venc),true), null, venc.length+' vencido(s) e pendente(s)', venc.length?'neg':'');
+  h += kpi('Total do borderô', money(soma(L)), null, 'soma dos valores incluídos');
+  h += kpi('Liberado para pagamento', money(soma(lib)), null, lib.length+' lançamento(s) — ainda não pagos');
+  h += kpi('Aguardando liberação', money(soma(agu)), null, agu.length+' lançamento(s) sem status', agu.length?'amber':'');
+  h += kpi('Total efetivamente pago', money(soma(pagos,'vpago')), null, pagos.length+' com baixa confirmada', 'pos');
+  h += kpi('Pagamentos vencidos', money(soma(venc)), null, venc.length+' vencido(s) e pendente(s)', venc.length?'neg':'');
   h += '</div>';
 
   // ---------- situação financeira por conta pagadora ----------
@@ -2898,7 +2902,7 @@ function renderBordero(){
       (editar?'<td onclick="event.stopPropagation()">'+(r.status!=='Pago'?'<input type="checkbox"'+(f.sel[r.it.id]?' checked':'')+' onchange="bdSelUm(\''+r.it.id+'\',this.checked)">':'')+'</td>':'')+
       '<td style="color:var(--text2)">'+(i+1)+(f.num?'':'<div style="font-size:10.5px">B'+r.numero+'</div>')+'</td>'+
       '<td>'+fdate(r.venc)+(r.vencido?' <span class="status-badge st-vencido" style="margin-left:4px">Vencido</span>':'')+'</td>'+
-      '<td style="font-weight:550">'+esc(r.forn)+'</td><td style="color:var(--text2)">'+esc(r.cat)+'</td>'+
+      '<td class="bd-forn" style="font-weight:550">'+esc(r.forn)+'</td><td style="color:var(--text2)">'+esc(r.cat)+'</td>'+
       '<td><span class="status-badge '+BD_ST_CLASS[r.status]+'">'+r.status+'</span></td>'+
       '<td class="num">'+money(r.valor,true)+'</td>'+
       '<td>'+(r.pgto?fdate(r.pgto):'<span style="color:var(--text2)">sem confirmação</span>')+'</td>'+
@@ -3068,7 +3072,7 @@ function bdPickLista(){
     (lista.length?'<span><button class="btn sm ghost" onclick="bdPickTodos(true)">Marcar todos</button><button class="btn sm ghost" onclick="bdPickTodos(false)">Limpar</button></span>':'')+'</div>';
   if(!lista.length) h += '<div class="empty" style="padding:20px"><div class="t2">Nenhum título em aberto (fora de outro borderô) nesse período.</div></div>';
   else {
-    h += '<table class="tbl"><tbody>';
+    h += '<table class="tbl bd-pick-tbl"><tbody>';
     lista.slice(0,LIM).forEach(t=>{
       h += '<tr class="hoverable" onclick="bdPickToggle(\''+t.uid+'\')"><td style="width:26px"><input type="checkbox" '+(P.sel[t.uid]?'checked':'')+' onclick="event.stopPropagation();bdPickToggle(\''+t.uid+'\')"></td>'+
         '<td style="width:84px">'+fdate(t.venc)+'</td><td><div style="font-weight:550">'+esc(t.forn||'—')+'</div><div style="font-size:11px;color:var(--text2)">'+esc(acc(t.conta)?acc(t.conta).n:t.conta)+'</div></td>'+
