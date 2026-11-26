@@ -4506,6 +4506,32 @@ body.dark .rp-tbl tfoot td{background:#0F1720}
   body.rp-resumo .rs-grid{gap:14px}
   body.rp-resumo .rp-foot{margin-top:8px}
 }
+
+/* ---------- Login no visual novo (Geist, petróleo, verde-água) ---------- */
+#loginGate,#accessBlocked{--ln-navy:#0F1B2D;--ln-blue:#0E6B7E;--ln-gray:#DDE3EA}
+#loginGate,#loginGate *:not(svg):not(path):not(circle):not(polygon),#accessBlocked{font-family:'Geist',system-ui,-apple-system,sans-serif !important}
+.login-visual{background:linear-gradient(160deg,#0B1E2B 0%,#0F2736 55%,#0A2A33 100%)}
+.login-visual::before{background-image:radial-gradient(circle at 85% 15%,rgba(20,163,168,.22),transparent 45%),radial-gradient(circle at 10% 90%,rgba(14,107,126,.25),transparent 50%);inset:0}
+.login-visual-overlay{background:linear-gradient(180deg,rgba(11,30,43,0) 0%,rgba(11,30,43,.55) 100%)}
+.login-visual-mid h2{font-weight:500;font-size:34px;letter-spacing:-.03em;line-height:1.18}
+.login-visual-mid>p{color:rgba(220,235,240,.72);font-size:14.5px}
+.login-pillar svg{stroke:#5FD3D6}
+.login-pillar strong{font-weight:500;letter-spacing:.1em;font-size:11px;color:#E6F4F5}
+.login-pillar span{color:rgba(200,220,228,.62)}
+.login-visual-foot{color:rgba(200,220,228,.4)}
+.login-panel{background:#F7F9FA}
+.login-card{background:#fff;border:1px solid #E6EAF0;border-radius:18px;padding:34px 32px 28px;box-shadow:0 1px 2px rgba(15,27,45,.04),0 18px 48px -20px rgba(15,27,45,.18);width:400px}
+.login-logo{height:24px;margin-bottom:28px}
+.login-card h1{font-weight:500;font-size:23px;letter-spacing:-.025em}
+.login-card p{color:#64748B}
+.login-field label{font-weight:500;color:#475569}
+.login-field input{border-radius:10px;padding:11px 13px;border-color:var(--ln-gray)}
+.login-field input:focus{border-color:#14A3A8;box-shadow:0 0 0 3px rgba(20,163,168,.15)}
+.login-pwd-toggle:hover{color:#0E6B7E}
+.login-link{color:#0E6B7E}
+#loginGate .btn.primary{background:linear-gradient(135deg,#14A3A8,#0E6B7E);border-color:transparent;border-radius:10px;font-weight:500;box-shadow:0 6px 16px -6px rgba(14,107,126,.55)}
+#loginGate .btn.primary:hover{background:linear-gradient(135deg,#14A3A8,#0E6B7E);filter:brightness(1.06)}
+.login-error.ok{color:#0E6B7E}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
