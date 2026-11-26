@@ -473,6 +473,8 @@ body.dark .st-bdagu{color:#FBBF24;background:#33260A}
 
 /* ---------- Ícones (traço estilo Lucide) ---------- */
 const ICON_PATHS = {
+  spark:'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
+  report:'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6M10 9h2',
   plus:'M12 5v14M5 12h14',
   bordero:'M9 3.5h6v3H9zM8 5H6a1.5 1.5 0 0 0-1.5 1.5v13A1.5 1.5 0 0 0 6 21h12a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 18 5h-2M8 11.5h8M8 15.5h5',
   home:'M3 10.5 12 3l9 7.5M5.5 8.8V20h13V8.8',
@@ -936,9 +938,9 @@ const USUARIOS = [
 const MODULOS_PERM = ['Dashboard','Fluxo de Caixa','DRE','Indicadores','Contas a Pagar','Borderô de Pagamentos','Contas a Receber','Administração'];
 const ACOES_PERM = ['visualizar','exportar','importar','configurar','operar'];
 const PERFIS = {
-  'Administrador': {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
-  'Financeiro':    {mods:['dashboard','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber'], importar:true, configurar:false, exportar:true},
-  'Diretoria':     {mods:['dashboard','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
+  'Administrador': {mods:['dashboard','reports','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
+  'Financeiro':    {mods:['dashboard','reports','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber'], importar:true, configurar:false, exportar:true},
+  'Diretoria':     {mods:['dashboard','reports','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
   'Cliente':       {mods:['dashboard','dre','cooperativas','indicadores'], importar:false, configurar:false, exportar:true},
   'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false}
 };
@@ -1199,7 +1201,7 @@ function legend(items){
 
 /* =========================== SHELL: SIDEBAR / TOPBAR =========================== */
 const NAV = [
-  {sec:'Visão Geral', items:[{id:'dashboard', n:'Dashboard', ic:'home'}]},
+  {sec:'Visão Geral', items:[{id:'dashboard', n:'Dashboard', ic:'home'},{id:'reports', n:'Reports', ic:'report'}]},
   {sec:'Análises', items:[
     {id:'fluxo', n:'Fluxo de Caixa', ic:'flow'},
     {id:'dre', n:'DRE', ic:'file'},
@@ -3643,7 +3645,7 @@ async function fmSave(){
 }
 
 /* =========================== PERFIS E PERMISSÕES =========================== */
-const MODMAP={'Dashboard':'dashboard','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Borderô de Pagamentos':'bordero','Contas a Receber':'receber','Administração':'admin'};
+const MODMAP={'Dashboard':'dashboard','Reports':'reports','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Borderô de Pagamentos':'bordero','Contas a Receber':'receber','Administração':'admin'};
 function renderPermissoes(){
   let rows='';
   MODULOS_PERM.forEach(mod=>{
@@ -4336,6 +4338,48 @@ body.dark .grid-line{stroke:#1C2633}
 body.dark{--c-neg:#B86464}
 .kpi-leg{font-size:11.5px;color:var(--text2);font-weight:400}
 .kpi .dl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:16px}
+
+/* ---------- Reports ---------- */
+.rp-tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px;width:max-content;max-width:100%;overflow-x:auto;margin-bottom:16px}
+.rp-tabs button{padding:7px 14px;border-radius:9px;font-size:13px;color:var(--text2);white-space:nowrap}
+.rp-tabs button.on{background:var(--accent-soft);color:var(--accent);font-weight:500}
+.rp-doc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:28px 32px;max-width:1100px}
+.rp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:20px}
+.rp-t{font-size:22px;font-weight:500;letter-spacing:-.02em}
+.rp-s{color:var(--text2);font-size:13px;margin-top:3px}
+.rp-emit{color:var(--text2);font-size:12px;white-space:nowrap}
+.rp-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px}
+.rp-kpi{border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.rp-kpi .lb{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text2)}
+.rp-kpi .vl{font-size:21px;font-weight:500;letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums}
+.rp-kpi .leg{font-size:11.5px;color:var(--text2);margin-top:2px}
+.rp-kpi .vl.neg{color:var(--neg)} .rp-kpi .vl.pos{color:var(--pos)}
+.rp-sec{margin-bottom:22px}
+.rp-sec h3{font-size:14px;font-weight:500;margin-bottom:8px;color:var(--text)}
+.rp-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.rp-tbl tfoot td{font-weight:600;border-top:1px solid var(--border);padding:9px 14px}
+.rp-tbl tr.rp-res td{font-weight:600;background:var(--accent-soft)}
+.rp-tbl tr.rp-neg td{color:var(--neg)}
+.rp-vazio{color:var(--text2);font-size:12.5px;padding:10px 2px}
+.rp-aviso{background:var(--neg-soft);color:var(--neg);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:18px}
+.rp-p{font-size:13px;color:var(--text)}
+.rp-mesbar{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:12.5px;color:var(--text2)}
+.rp-mesbar select{padding:6px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.rp-ia{border:1px solid #CFE7E9;background:linear-gradient(180deg,#F2FAFA,#FFFFFF);border-radius:12px;padding:16px 20px;margin-bottom:22px;font-size:13.5px;line-height:1.6}
+body.dark .rp-ia{background:#0F2026;border-color:#1D3B42}
+.rp-ia-h{display:flex;align-items:center;gap:7px;font-weight:500;color:var(--accent);margin-bottom:8px}
+.rp-ia-h span{margin-left:auto;font-weight:400;font-size:11px;color:var(--text2)}
+.rp-ia p{margin:0 0 8px} .rp-ia ul{margin:0 0 8px 18px}
+.rp-ia-load{color:var(--text2)}
+.rp-foot{margin-top:24px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);text-align:center}
+@media print{
+  body{background:#fff}
+  #sidebar,#topbar,.page-head,.no-print,.chips,#ctip{display:none !important}
+  #app,#main,#content{display:block !important;height:auto !important;overflow:visible !important;padding:0 !important}
+  .rp-doc{border:none;box-shadow:none;max-width:none;padding:0}
+  .rp-sec,.rp-kpis,.rp-ia{break-inside:avoid}
+  .tbl th{position:static}
+}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -5296,6 +5340,263 @@ function renderChartFull(){
 }
 
 /* =========================== ROUTER / INIT =========================== */
+/* =========================== REPORTS ===========================
+   Quatro relatórios prontos para enviar/imprimir: do dia, fluxo de caixa,
+   borderôs e prestação de contas mensal (diretoria). Cada um monta um objeto
+   "dados" com os números do relatório — é ele que vai para o resumo com IA
+   (Edge Function resumo-ia), nunca a base inteira. PDF = impressão do
+   próprio relatório (CSS @media print esconde o resto da tela). */
+const RP = {aba:'dia', mes:null, ia:{}, iaLoading:{}};
+const RP_ABAS = [['dia','Report do dia'],['fluxo','Fluxo de caixa'],['bordero','Borderôs'],['mensal','Prestação de contas']];
+function rpDia(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function rpMesmoDia(a,b){ return a && b && rpDia(a).getTime()===rpDia(b).getTime(); }
+function rpSaldosBancos(emp){
+  const B = BANCOS_REAL[emp]; if(!B) return [];
+  return B.contas.filter(c=>c.ativa!==false && c.considerar_fluxo!==false).map(c=>{
+    const s = B.saldos.find(x=>x.conta_bancaria_id===c.id);
+    return {nome:c.banco, conta:c.nome, saldo:s?Number(s.saldo):Number(c.saldo_inicial||0), data:s?parseYMD(s.data):null};
+  });
+}
+function rpTabela(cols, rows, opts){
+  opts = opts||{};
+  if(!rows.length) return '<div class="rp-vazio">'+(opts.vazio||'Nada a mostrar.')+'</div>';
+  return '<table class="tbl rp-tbl"><thead><tr>'+cols.map((c,i)=>'<th'+(opts.num&&opts.num.includes(i)?' class="num"':'')+'>'+c+'</th>').join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr'+(r.cls?' class="'+r.cls+'"':'')+'>'+(r.cells||r).map((v,i)=>'<td'+(opts.num&&opts.num.includes(i)?' class="num"':'')+'>'+v+'</td>').join('')+'</tr>').join('')+
+    '</tbody>'+(opts.foot?'<tfoot><tr>'+opts.foot.map((v,i)=>'<td'+(opts.num&&opts.num.includes(i)?' class="num"':'')+'>'+v+'</td>').join('')+'</tr></tfoot>':'')+'</table>';
+}
+function rpKpis(items){
+  return '<div class="rp-kpis">'+items.map(([lb,vl,leg,cor])=>'<div class="rp-kpi"><div class="lb">'+lb+'</div><div class="vl '+(cor||'')+'">'+vl+'</div>'+(leg?'<div class="leg">'+leg+'</div>':'')+'</div>').join('')+'</div>';
+}
+function rpSec(t, body){ return '<section class="rp-sec"><h3>'+t+'</h3>'+body+'</section>'; }
+const rpM = x=>money(x,true);
+
+/* ---------- previsão diária a partir do saldo de hoje ---------- */
+function rpPrevisaoDiaria(ateDia){
+  const emp = state.empresa, hoje = rpDia(hojeReal());
+  const ini = saldoAtual();
+  const dias = []; const idx = {};
+  for(let d=new Date(hoje); d<=ateDia; d.setDate(d.getDate()+1)){ const k=isoDate(d); idx[k]=dias.length; dias.push({data:new Date(d), ent:0, sai:0, itensS:[], itensE:[]}); }
+  const lanc = (t, tipo)=>{
+    if(!t.venc) return;
+    let d = rpDia(t.venc); if(d<hoje) d = hoje;                 // vencidos rolam para hoje
+    const k = isoDate(d); if(!(k in idx)) return;
+    const o = dias[idx[k]];
+    if(tipo==='p'){ o.sai += t.vprev; o.itensS.push(t); } else { o.ent += t.vprev; o.itensE.push(t); }
+  };
+  (PAGAR[emp]||[]).filter(t=>t.status!=='Pago' && t.uid).forEach(t=>lanc(t,'p'));
+  (RECEBER[emp]||[]).filter(t=>t.status!=='Recebido' && t.status!=='Cancelado' && t.venc && t.venc>=new Date(ANO,REAL_M,1)).forEach(t=>lanc(t,'r'));
+  let s = ini;
+  dias.forEach(o=>{ o.ini=s; s += o.ent - o.sai; o.fim=s; });
+  return {ini, dias};
+}
+
+/* ---------- 1) report do dia ---------- */
+function rpDadosDia(){
+  const emp = state.empresa, hoje = rpDia(hojeReal());
+  const fim7 = new Date(hoje); fim7.setDate(fim7.getDate()+7);
+  const bancos = rpSaldosBancos(emp);
+  const pagosHoje = (PAGAR[emp]||[]).filter(t=>t.status==='Pago' && rpMesmoDia(t.pgto,hoje));
+  const recHoje = (RECEBER[emp]||[]).filter(t=>t.status==='Recebido' && rpMesmoDia(t.rec,hoje));
+  const abertos = (PAGAR[emp]||[]).filter(t=>t.status!=='Pago' && t.uid);
+  const vencidos = abertos.filter(t=>t.venc && t.venc<hoje);
+  const hojeVence = abertos.filter(t=>rpMesmoDia(t.venc,hoje));
+  const prox7 = abertos.filter(t=>t.venc && t.venc>hoje && t.venc<=fim7).sort((a,b)=>a.venc-b.venc);
+  const bd = (BORDERO[emp] ? bdLinhas(emp) : []).filter(r=>r.status!=='Pago' && (rpMesmoDia(parseYMD(r.b.data_bordero),hoje) || (r.venc && r.venc<=hoje)));
+  const prev = rpPrevisaoDiaria(fim7);
+  const menor = prev.dias.reduce((m,o)=>o.fim<m.fim?o:m, prev.dias[0]||{fim:prev.ini,data:hoje});
+  const soma = a=>a.reduce((t,x)=>t+x.vprev,0);
+  return {data:fdate(hoje), empresa:EMPRESAS[emp].nome,
+    saldo_total:saldoAtual(), bancos:bancos.map(b=>({banco:b.nome, saldo:b.saldo, data:b.data?fdate(b.data):''})),
+    entradas_hoje:soma(recHoje), saidas_hoje:pagosHoje.reduce((t,x)=>t+(x.vpago||x.vprev),0),
+    vence_hoje:{qtd:hojeVence.length, total:soma(hojeVence)}, vencidos:{qtd:vencidos.length, total:soma(vencidos)},
+    bordero_do_dia:{qtd:bd.length, total:bd.reduce((t,r)=>t+r.valor,0), liberado:bd.filter(r=>r.status==='Liberado').reduce((t,r)=>t+r.valor,0), aguardando:bd.filter(r=>r.status==='Aguardando').reduce((t,r)=>t+r.valor,0)},
+    proximos_7_dias:{qtd:prox7.length, total:soma(prox7), maiores:prox7.slice().sort((a,b)=>b.vprev-a.vprev).slice(0,5).map(t=>({fornecedor:t.forn, venc:fdate(t.venc), valor:t.vprev}))},
+    menor_saldo_7_dias:{valor:menor.fim, data:fdate(menor.data)},
+    alertas:alertas().map(a=>a.t),
+    _lin:{bancos, pagosHoje, recHoje, hojeVence, vencidos, prox7, bd, prev}};
+}
+function rpHtmlDia(D){
+  const L = D._lin;
+  let h = rpKpis([
+    ['Saldo em bancos', rpM(D.saldo_total), L.bancos[0]&&L.bancos[0].data?'em '+fdate(L.bancos[0].data):''],
+    ['Vence hoje', rpM(D.vence_hoje.total), D.vence_hoje.qtd+' conta(s)'],
+    ['Próximos 7 dias', rpM(D.proximos_7_dias.total), D.proximos_7_dias.qtd+' conta(s)'],
+    ['Menor saldo (7 dias)', rpM(D.menor_saldo_7_dias.valor), 'em '+D.menor_saldo_7_dias.data, D.menor_saldo_7_dias.valor<0?'neg':'']]);
+  h += rpSec('Saldo por banco', rpTabela(['Banco','Conta','Saldo','Data'], L.bancos.map(b=>[esc(b.nome), esc(b.conta), rpM(b.saldo), b.data?fdate(b.data):'—']), {num:[2], foot:['Total','',rpM(D.saldo_total),'']}));
+  h += rpSec('Movimento de hoje', rpTabela(['Tipo','Favorecido / Origem','Valor'],
+    L.recHoje.map(t=>['Entrada', esc(t.cli||t.desc||''), rpM(t.vrec||t.vprev)]).concat(L.pagosHoje.map(t=>['Saída', esc(t.forn||''), rpM(t.vpago||t.vprev)])),
+    {num:[2], vazio:'Nenhuma baixa registrada hoje no sistema.'}));
+  h += rpSec('Borderô do dia', rpTabela(['Nº','Vencimento','Fornecedor','Status','Valor'],
+    L.bd.map(r=>[r.numero, fdate(r.venc), esc(r.forn), r.status==='Liberado'?'Liberado':'Aguardando liberação', rpM(r.valor)]),
+    {num:[4], vazio:'Nenhum borderô pendente para hoje.', foot:L.bd.length?['','','','Total',rpM(D.bordero_do_dia.total)]:null}));
+  if(L.vencidos.length) h += rpSec('Contas vencidas em aberto', rpTabela(['Vencimento','Fornecedor','Categoria','Valor'],
+    L.vencidos.sort((a,b)=>a.venc-b.venc).map(t=>[fdate(t.venc), esc(t.forn||''), esc(acc(t.conta)?acc(t.conta).n:t.conta), rpM(t.vprev)]), {num:[3]}));
+  h += rpSec('Vencimentos dos próximos 7 dias', rpTabela(['Vencimento','Fornecedor','Categoria','Valor'],
+    L.prox7.map(t=>[fdate(t.venc), esc(t.forn||''), esc(acc(t.conta)?acc(t.conta).n:t.conta), rpM(t.vprev)]), {num:[3], vazio:'Sem vencimentos nos próximos 7 dias.', foot:L.prox7.length?['','','Total',rpM(D.proximos_7_dias.total)]:null}));
+  return h;
+}
+
+/* ---------- 2) fluxo de caixa ---------- */
+function rpDadosFluxo(){
+  const hoje = rpDia(hojeReal());
+  const ate = new Date(hoje.getFullYear(), hoje.getMonth()+2, 0);   // fim do mês seguinte
+  const prev = rpPrevisaoDiaria(ate);
+  const sem = [];
+  prev.dias.forEach((o,i)=>{
+    const w = Math.floor(i/7);
+    if(!sem[w]) sem[w] = {de:o.data, ate:o.data, ini:o.ini, ent:0, sai:0, fim:o.fim, menor:o.fim};
+    const s = sem[w]; s.ate=o.data; s.ent+=o.ent; s.sai+=o.sai; s.fim=o.fim; s.menor=Math.min(s.menor,o.fim);
+  });
+  const menor = prev.dias.reduce((m,o)=>o.fim<m.fim?o:m, prev.dias[0]);
+  const neg = prev.dias.filter(o=>o.fim<0);
+  const maiores = prev.dias.flatMap(o=>o.itensS.map(t=>({t,d:o.data}))).sort((a,b)=>b.t.vprev-a.t.vprev).slice(0,8);
+  return {periodo:fdate(hoje)+' a '+fdate(ate), saldo_hoje:prev.ini,
+    entradas_previstas:prev.dias.reduce((t,o)=>t+o.ent,0), saidas_previstas:prev.dias.reduce((t,o)=>t+o.sai,0),
+    saldo_final:prev.dias.length?prev.dias[prev.dias.length-1].fim:prev.ini,
+    menor_saldo:{valor:menor?menor.fim:prev.ini, data:menor?fdate(menor.data):''},
+    dias_negativos:neg.length, primeiro_dia_negativo:neg.length?fdate(neg[0].data):null,
+    semanas:sem.map(s=>({de:fdate(s.de), ate:fdate(s.ate), entradas:s.ent, saidas:s.sai, saldo_final:s.fim, menor_saldo:s.menor})),
+    maiores_saidas:maiores.map(x=>({data:fdate(x.d), fornecedor:x.t.forn, valor:x.t.vprev})),
+    _lin:{prev, sem, maiores}};
+}
+function rpHtmlFluxo(D){
+  const L = D._lin;
+  let h = rpKpis([
+    ['Saldo hoje', rpM(D.saldo_hoje)],
+    ['Entradas previstas', rpM(D.entradas_previstas), D.periodo],
+    ['Saídas previstas', rpM(D.saidas_previstas), D.periodo],
+    ['Menor saldo', rpM(D.menor_saldo.valor), 'em '+D.menor_saldo.data, D.menor_saldo.valor<0?'neg':'']]);
+  if(D.dias_negativos) h += '<div class="rp-aviso">Caixa fica negativo em '+D.dias_negativos+' dia(s) do período — o primeiro é '+D.primeiro_dia_negativo+'.</div>';
+  h += rpSec('Visão semanal', rpTabela(['Semana','Saldo inicial','Entradas','Saídas','Saldo final','Menor saldo'],
+    L.sem.map(s=>({cls:s.menor<0?'rp-neg':'', cells:[fdate(s.de)+' – '+fdate(s.ate), rpM(s.ini), rpM(s.ent), rpM(s.sai), rpM(s.fim), rpM(s.menor)]})), {num:[1,2,3,4,5]}));
+  h += rpSec('Maiores saídas previstas', rpTabela(['Data','Fornecedor','Valor'], L.maiores.map(x=>[fdate(x.d), esc(x.t.forn||''), rpM(x.t.vprev)]), {num:[2]}));
+  h += rpSec('Dia a dia', rpTabela(['Data','Entradas','Saídas','Saldo do dia'],
+    L.prev.dias.filter(o=>o.ent||o.sai).map(o=>({cls:o.fim<0?'rp-neg':'', cells:[fdate(o.data), o.ent?rpM(o.ent):'—', o.sai?rpM(o.sai):'—', rpM(o.fim)]})), {num:[1,2,3]}));
+  return h;
+}
+
+/* ---------- 3) borderôs ---------- */
+function rpDadosBordero(){
+  const emp = state.empresa;
+  const L = BORDERO[emp] ? bdLinhas(emp) : [];
+  const por = {};
+  L.forEach(r=>{ const k=r.numero; if(!por[k]) por[k]={numero:k, data:r.b.data_bordero, conta:r.contaNome, qtd:0, total:0, pago:0, liberado:0, aguardando:0};
+    const o=por[k]; o.qtd++; o.total+=r.valor; if(r.status==='Pago') o.pago+=r.vpago||r.valor; else if(r.status==='Liberado') o.liberado+=r.valor; else o.aguardando+=r.valor; });
+  const lista = Object.values(por).sort((a,b)=>b.numero-a.numero);
+  const s = k=>lista.reduce((t,o)=>t+o[k],0);
+  return {qtd_borderos:lista.length, total:s('total'), pago:s('pago'), liberado:s('liberado'), aguardando:s('aguardando'),
+    borderos:lista.map(o=>({numero:o.numero, data:fdate(parseYMD(o.data)), conta:o.conta, pagamentos:o.qtd, total:o.total, pago:o.pago, liberado:o.liberado, aguardando:o.aguardando})),
+    _lin:{lista, L}};
+}
+function rpHtmlBordero(D){
+  const L = D._lin;
+  let h = rpKpis([['Borderôs', String(D.qtd_borderos)], ['Pago', rpM(D.pago)], ['Liberado p/ pagamento', rpM(D.liberado)], ['Aguardando liberação', rpM(D.aguardando)]]);
+  h += rpSec('Resumo por borderô', rpTabela(['Nº','Data','Conta pagadora','Pagamentos','Total','Pago','Liberado','Aguardando'],
+    L.lista.map(o=>[String(o.numero).padStart(3,'0'), fdate(parseYMD(o.data)), esc(o.conta.split(' — ')[0]), o.qtd, rpM(o.total), rpM(o.pago), rpM(o.liberado), rpM(o.aguardando)]),
+    {num:[3,4,5,6,7], vazio:'Nenhum borderô criado ainda.', foot:L.lista.length?['Total','','',L.L.length,rpM(D.total),rpM(D.pago),rpM(D.liberado),rpM(D.aguardando)]:null}));
+  h += rpSec('Pagamentos', rpTabela(['Nº','Vencimento','Fornecedor','Categoria','Status','Valor'],
+    L.L.slice().sort((a,b)=>(a.numero-b.numero)||((a.venc||0)-(b.venc||0))).map(r=>[String(r.numero).padStart(3,'0'), fdate(r.venc), esc(r.forn), esc(r.cat), r.status==='Pago'?'Pago'+(r.pgto?' em '+fdate(r.pgto):''):r.status==='Liberado'?'Liberado':'Aguardando', rpM(r.valor)]),
+    {num:[5], vazio:'Sem pagamentos em borderô.'}));
+  return h;
+}
+
+/* ---------- 4) prestação de contas mensal ---------- */
+function rpMesPadrao(){ return RP.mes!=null ? RP.mes : Math.max(0, REAL_M-1); }
+function rpDadosMensal(){
+  const m = rpMesPadrao(), ant = m-1;
+  const cfg = (DRE_CFG[state.empresa]||[]).filter(l=>l.ativa!==false);
+  const linhas = cfg.map(l=>({nome:l.nome, tipo:l.tipo, mes:dreLinhaVal(l,m,'real'), anterior:ant>=0?dreLinhaVal(l,ant,'real'):null,
+    acumulado:Array.from({length:m+1},(_,i)=>i).reduce((t,i)=>t+dreLinhaVal(l,i,'real'),0)}));
+  const res = linhas.find(l=>l.nome==='RESULTADO LÍQUIDO')||{mes:0};
+  const rec = linhas.find(l=>l.nome==='RECEITA BRUTA')||{mes:0};
+  const desp = analiticas().filter(a=>/^[23]/.test(a.c)).map(a=>({conta:a.c, nome:a.n, valor:v(a.c,m,'real'), anterior:ant>=0?v(a.c,ant,'real'):0}))
+    .filter(x=>x.valor>0.5).sort((a,b)=>b.valor-a.valor).slice(0,10);
+  const s = saldos('real')[m]||{ini:0,fim:0};
+  const prev = saldos('proj')[m]||{ger:0};
+  const fx = fluxoMes(m,'real'), fxp = fluxoMes(m,'proj');
+  const em = (PAGAR[state.empresa]||[]).filter(t=>t.status!=='Pago' && t.uid && t.venc && t.venc<rpDia(hojeReal()));
+  return {mes:MESES_LONG[m]+'/'+ANO, empresa:EMPRESAS[state.empresa].nome,
+    receita_bruta:rec.mes, resultado_liquido:res.mes, margem_liquida:rec.mes?res.mes/rec.mes*100:null,
+    caixa:{saldo_inicial:s.ini, entradas:fx.ent, saidas:fx.sai, saldo_final:s.fim},
+    previsto_x_realizado:{entradas_prev:fxp.ent, entradas_real:fx.ent, saidas_prev:fxp.sai, saidas_real:fx.sai},
+    dre:linhas.map(l=>({linha:l.nome, mes:l.mes, mes_anterior:l.anterior, acumulado_ano:l.acumulado})),
+    maiores_despesas:desp.map(x=>({conta:x.conta+' '+x.nome, valor:x.valor, mes_anterior:x.anterior})),
+    pendencias:{contas_vencidas:em.length, valor:em.reduce((t,x)=>t+x.vprev,0)},
+    _lin:{m, ant, linhas, desp, s, fx, fxp}};
+}
+function rpHtmlMensal(D){
+  const L = D._lin, pc = (a,b)=> (b && Math.abs(b)>0.5) ? pct((a-b)/Math.abs(b)*100) : '—';
+  let h = '<div class="rp-mesbar no-print"><label>Mês</label><select onchange="RP.mes=+this.value;RP.ia.mensal=null;render()">'+
+    MESES_LONG.map((n,i)=>i<=REAL_M?'<option value="'+i+'"'+(i===L.m?' selected':'')+'>'+n+'/'+ANO+(i===REAL_M?' (parcial)':'')+'</option>':'').join('')+'</select></div>';
+  h += rpKpis([
+    ['Receita bruta', rpM(D.receita_bruta)],
+    ['Resultado líquido', rpM(D.resultado_liquido), D.margem_liquida!=null?'margem '+pct(D.margem_liquida):'', D.resultado_liquido<0?'neg':'pos'],
+    ['Saldo inicial', rpM(L.s.ini)], ['Saldo final', rpM(L.s.fim), '', L.s.fim<0?'neg':'']]);
+  h += rpSec('Demonstrativo de resultado', rpTabela(['Linha','Mês','Mês anterior','Variação','Acumulado no ano'],
+    L.linhas.map(l=>({cls:l.tipo==='Resultado'?'rp-res':'', cells:[esc(l.nome), rpM(l.mes), l.anterior==null?'—':rpM(l.anterior), l.anterior==null?'—':pc(l.mes,l.anterior), rpM(l.acumulado)]})), {num:[1,2,3,4]}));
+  h += rpSec('Caixa do mês — previsto x realizado', rpTabela(['','Previsto','Realizado','Diferença'], [
+    ['Entradas', rpM(L.fxp.ent), rpM(L.fx.ent), rpM(L.fx.ent-L.fxp.ent)],
+    ['Saídas', rpM(L.fxp.sai), rpM(L.fx.sai), rpM(L.fx.sai-L.fxp.sai)],
+    ['Geração de caixa', rpM(L.fxp.ent-L.fxp.sai), rpM(L.fx.ent-L.fx.sai), rpM((L.fx.ent-L.fx.sai)-(L.fxp.ent-L.fxp.sai))]], {num:[1,2,3]}));
+  h += rpSec('Maiores despesas do mês', rpTabela(['Conta','Mês','Mês anterior','Variação'],
+    L.desp.map(x=>[esc(x.conta+' '+x.nome), rpM(x.valor), rpM(x.anterior), pc(x.valor,x.anterior)]), {num:[1,2,3]}));
+  if(D.pendencias.contas_vencidas) h += rpSec('Pendências', '<p class="rp-p">'+D.pendencias.contas_vencidas+' conta(s) a pagar vencida(s) em aberto, somando '+rpM(D.pendencias.valor)+'.</p>');
+  return h;
+}
+
+/* ---------- resumo com IA (Edge Function resumo-ia → Claude) ---------- */
+function rpSemLin(D){ const o={}; Object.keys(D).forEach(k=>{ if(k!=='_lin') o[k]=D[k]; }); return o; }
+async function rpGerarIA(aba){
+  const D = RP_DADOS[aba]();
+  RP.iaLoading[aba] = true; render();
+  try{
+    const { data, error } = await sb.functions.invoke('resumo-ia', {body:{tipo:aba, empresa:EMPRESAS[state.empresa].nome, dados:rpSemLin(D)}});
+    if(error) throw error;
+    if(!data || !data.texto) throw new Error((data&&data.erro)||'Resposta vazia');
+    RP.ia[aba] = {texto:data.texto, em:new Date()};
+    bdLog && bdLog('Resumo com IA', 'Report: '+aba);
+  }catch(e){
+    console.error(e);
+    let msg = e && e.message || String(e);
+    try{ if(e && e.context && e.context.json){ const j = await e.context.json(); if(j && j.erro) msg = j.erro; } }catch(_){}
+    toast('Não foi possível gerar o resumo: '+msg);
+  }
+  RP.iaLoading[aba] = false; render();
+}
+function rpIAHtml(aba){
+  const r = RP.ia[aba];
+  if(RP.iaLoading[aba]) return '<div class="rp-ia"><div class="rp-ia-h">'+icon('spark',15)+' Resumo da situação</div><div class="rp-ia-load">Analisando os números…</div></div>';
+  if(!r) return '';
+  const paras = esc(r.texto).split(/\n{2,}/).map(p=>{
+    const linhas = p.split('\n');
+    if(linhas.every(l=>/^\s*[-•]/.test(l))) return '<ul>'+linhas.map(l=>'<li>'+l.replace(/^\s*[-•]\s*/,'')+'</li>').join('')+'</ul>';
+    return '<p>'+linhas.join('<br>')+'</p>';
+  }).join('').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  return '<div class="rp-ia"><div class="rp-ia-h">'+icon('spark',15)+' Resumo da situação<span>gerado com IA em '+r.em.toLocaleString('pt-BR')+' · confira os números abaixo</span></div>'+paras+'</div>';
+}
+const RP_DADOS = {dia:rpDadosDia, fluxo:rpDadosFluxo, bordero:rpDadosBordero, mensal:rpDadosMensal};
+const RP_HTML = {dia:rpHtmlDia, fluxo:rpHtmlFluxo, bordero:rpHtmlBordero, mensal:rpHtmlMensal};
+const RP_TIT = {dia:'Report do dia', fluxo:'Fluxo de caixa', bordero:'Borderôs de pagamento', mensal:'Prestação de contas'};
+
+async function renderReports(){
+  const emp = state.empresa;
+  if(!BANCOS_REAL[emp] || !BORDERO[emp]){
+    $('content').innerHTML = pageHead('Reports','')+'<div class="card" style="padding:28px;text-align:center;color:var(--text2)">Carregando…</div>';
+    try{ if(!BANCOS_REAL[emp]) await loadBancosReal(emp); if(!BORDERO[emp]) await loadBorderos(emp); }catch(e){ console.error(e); }
+    if(state.view!=='reports') return;
+  }
+  const aba = RP.aba, D = RP_DADOS[aba]();
+  const sub = aba==='dia' ? D.data : aba==='fluxo' ? D.periodo : aba==='mensal' ? D.mes : 'todos os borderôs';
+  let acoes = '<button class="btn sm primary" onclick="rpGerarIA(\''+aba+'\')" '+(RP.iaLoading[aba]?'disabled':'')+'>'+icon('spark',14)+' '+(RP.ia[aba]?'Gerar novamente':'Gerar resumo com IA')+'</button>'+
+    '<button class="btn sm" onclick="window.print()">'+icon('download',14)+' PDF</button>';
+  let h = pageHead('Reports','', acoes);
+  h += '<div class="rp-tabs no-print">'+RP_ABAS.map(([k,n])=>'<button class="'+(k===aba?'on':'')+'" onclick="RP.aba=\''+k+'\';render()">'+n+'</button>').join('')+'</div>';
+  h += '<div class="rp-doc" id="rpDoc"><div class="rp-head"><div><div class="rp-t">'+RP_TIT[aba]+'</div><div class="rp-s">'+esc(EMPRESAS[emp].nome)+' · '+esc(sub)+'</div></div>'+
+       '<div class="rp-emit">Emitido em '+new Date().toLocaleString('pt-BR')+'</div></div>';
+  h += rpIAHtml(aba) + RP_HTML[aba](D) + '<div class="rp-foot">Nexa Gestão · '+RP_TIT[aba]+'</div></div>';
+  $('content').innerHTML = h;
+}
+
 function render(){
   if(currentUser && !empresaAutorizada(state.empresa)){
     const primeira = (currentUser.empresas||[])[0];
@@ -5311,7 +5612,7 @@ function render(){
       '<div class="t2">Buscando os títulos a pagar e a receber no banco de dados.</div></div>';
     return;
   }
-  const views={dashboard:renderDashboard, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
+  const views={dashboard:renderDashboard, reports:renderReports, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
     receber:()=>renderTitulos('receber'), bordero:renderBordero, admin:renderAdmin};
   (views[state.view]||renderDashboard)();
