@@ -6741,7 +6741,7 @@ function recLerRegra(txt){
   return {regra:r, ambigua};
 }
 function recSugereCoops(nome, coopNomes){
-  const stop = new Set(['DA','DE','DO','DOS','DAS','E','LTDA','JUNIOR','FILHO','NETO','SILVA','SANTOS','OLIVEIRA','SOUZA','COSTA','PEREIRA','RODRIGUES','ALVES','LIMA','GOMES','MARTINS','FERREIRA','COPERATIVA','COOPERATIVA','CONSULTORIA','HENRIQUE']);
+  const stop = new Set(['DA','DE','DO','DOS','DAS','E','LTDA','JUNIOR','FILHO','NETO','SILVA','SANTOS','OLIVEIRA','SOUZA','COSTA','PEREIRA','RODRIGUES','ALVES','LIMA','GOMES','MARTINS','FERREIRA','COPERATIVA','COOPERATIVA','CONSULTORIA','HENRIQUE','PAULO','JOSE','JOAO','MARIA','PEDRO','LUIS','LUIZ','CARLOS','ANTONIO','FRANCISCO','MARCOS','EDUARDO','SANTA','SAO','GESTAO','REGIONAL','MATRIZ']);
   const tk = recNorm(nome).split(/[^A-Z]+/).filter(w=>w.length>=4 && !stop.has(w));
   const nome2 = tk.slice(0,2).join(' ');
   return coopNomes.filter(c=>{ const nc = recNorm(c); return (nome2 && nc.includes(nome2)) || tk.some(w=>new RegExp('(^|[^A-Z])'+w+'([^A-Z]|$)').test(nc) && w.length>=5); });
@@ -6807,7 +6807,7 @@ async function recImportar(){
       const exist = {}; REC.negs.forEach(n=>exist[recNorm(n.nome)]=n);
       const negUp = itens.map((it,i)=>{ const e = exist[recNorm(it.nome)]; const lr = recLerRegra(it.texto||'');
         return {empresa_id:empId, nome:it.nome, cidade:it.cidade, grupo:it.grupo, texto:it.texto, ordem:i,
-          cooperativas: e&&e.cooperativas&&e.cooperativas.length ? e.cooperativas : recSugereCoops(it.nome, coopNomes),
+          cooperativas: e&&e.cooperativas&&e.cooperativas.length ? e.cooperativas : (it.grupo==='fixo' ? [] : recSugereCoops(it.nome, coopNomes)),
           regra: e&&e.regra&&Object.keys(e.regra).length ? e.regra : lr.regra, ambigua: e ? e.ambigua : lr.ambigua, ativa:true}; });
       const { data:negs, error:e1 } = await sb.from('rec_negociacoes').upsert(negUp, {onConflict:'empresa_id,nome'}).select('id,nome'); if(e1) throw e1;
       const idDe = {}; negs.forEach(n=>idDe[recNorm(n.nome)]=n.id);
