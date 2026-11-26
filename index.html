@@ -1716,7 +1716,7 @@ function alertas(){
   if(a && a.inadimplencia>13) out.push({tipo:'warn', t:'Inadimplência de associados em '+pct(a.inadimplencia), d:'Acima do limite de referência de 13%. Reforçar recuperação de boletos vencidos.'});
   // Diferença de conciliação bancária — só visível para Administrador
   // (Diretoria/Visualização/outros perfis não veem este alerta nem o valor).
-  if(state.role==='Administrador'){
+  if(state.role==='Administrador'||state.role==='Financeiro'){
     conciliacaoAlertas().forEach(c=>{
       if(state.conciliacaoResolvidas[c.key]) return;
       out.push({tipo:'warn',
@@ -5615,16 +5615,15 @@ function defaultDash(perfil){
   const chart=(id,size,extra)=>Object.assign({id, on:true, titulo:null, tipo:null, size:size||CHART_DEFS[id].size, legenda:true, valores:true, comp:true, drill:true},extra||{});
   const filtros=['regime','periodo','empresa','banco','categoria','conta','centro','status','resp','base'].map(id=>({id, on:['regime','periodo','empresa','banco','categoria','status'].includes(id), obrig:id==='periodo'}));
   let cards, charts;
-  if(perfil==='Diretoria'){ cards=['saldo_atual','menor_saldo','res_real','prox_venc'].map(c=>card(c)); charts=[chart('rcd',3),chart('evolucao',3),chart('resultado_mensal',3)]; }
-  else if(perfil==='Cliente'){ cards=['saldo_atual','menor_saldo','res_real'].map(c=>card(c)); charts=[chart('evolucao',6),chart('resultado_mensal',3),chart('desp_categoria',3)]; }
+  // Diretoria e Financeiro usam o mesmo dashboard do Administrador (cai no else)
+  if(perfil==='Cliente'){ cards=['saldo_atual','menor_saldo','res_real'].map(c=>card(c)); charts=[chart('evolucao',6),chart('resultado_mensal',3),chart('desp_categoria',3)]; }
   else if(perfil==='Visualização'){ cards=['saldo_atual','saldo_proj'].map(c=>card(c)); charts=[chart('evolucao',6)]; }
-  else if(perfil==='Financeiro'){ cards=['total_pagar','total_receber','vencidas','prox_venc','saldo_atual','geracao'].map(c=>card(c)); charts=[chart('pxr',3),chart('fluxo_es',3),chart('saldo_bancos',3),chart('aging',3),chart('vencimentos',3),chart('alertas',3)]; }
   else { cards=['saldo_atual','menor_saldo','res_real','prox_venc'].map(c=>card(c));
     charts=[chart('evolucao',3),chart('desp_categoria',3),chart('resultado_mensal',6),chart('vencimentos',3),chart('alertas',3)]; }
   return {cols:cards.length>=6?6:cards.length, cards, charts, filtros, versoes:[], atualizado:null, por:null, v:DASH_VER};
 }
 let DASH_STORE={};
-const DASH_VER=6; // muda quando o layout padrão muda: descarta caches locais antigos
+const DASH_VER=7; // muda quando o layout padrão muda: descarta caches locais antigos
 function dashKey(emp,perfil){ return (emp||state.empresa)+'|'+(perfil||state.role); }
 function dashCfg(emp,perfil){
   const k=dashKey(emp,perfil);
