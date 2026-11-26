@@ -6390,7 +6390,7 @@ async function cobCarregar(force){
   COB.carregando = false;
 }
 function cobGestor(){ return (currentUser && currentUser.perfil==='Administrador') || (COB.eu && COB.eu.papel==='gestor'); }
-function cobMeses(){ return [...new Set(COB.boletos.map(b=>b.mr).filter(Boolean))].sort().filter(m=>COB.boletos.filter(b=>b.mr===m).length>=20); }
+function cobMeses(){ const c={}; COB.boletos.forEach(b=>{ if(b.mr) c[b.mr]=(c[b.mr]||0)+1; }); const mx=Math.max(0,...Object.values(c)); return Object.keys(c).sort().filter(m=>c[m]>=Math.max(20,mx*0.25)); }
 function cobMesPadrao(){
   const ms = cobMeses(); if(!ms.length) return null;
   const atual = isoDate(hojeReal()).slice(0,7);
