@@ -1857,7 +1857,7 @@ function renderFluxo(){
       [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--c-in)'},
        {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--c-out)', neg:true}],
       {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
-      {click:'fluxoChartDrill'})
+      {click:'fluxoChartDrill', h:270})
       + legend([{color:'var(--c-in)',name:'Entradas'},{color:'var(--c-out)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]),
     summary: '<div class="row">Resumo do período<b style="color:var(--text2);font-weight:600;font-size:11px">'+esc(state.periodoLabel)+'</b></div>'+
       '<div class="row">Total de entradas<b style="color:var(--pos)">'+money(totalEnt,true)+'</b></div>'+
@@ -2060,17 +2060,18 @@ function saldosProjetadosCard(sp){
     '<span style="font-size:12px;font-weight:600;color:var(--text2)">Status</span>'+
     '<select class="select" onchange="state.spStatus=this.value;render()">'+['Todos','Em aberto','Vencidos'].map(s=>'<option'+(state.spStatus===s?' selected':'')+'>'+s+'</option>').join('')+'</select>'+
     '<button class="icon-btn" style="width:28px;height:28px" title="Exportar CSV" '+(dias.length?'onclick="exportSpCsv()"':'disabled')+'>'+icon('download',13)+'</button></div></div>';
-  h+='<div class="tbl-wrap"><table class="tbl"><thead><tr><th style="min-width:200px">Data Vencimento</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Geração de Caixa</th><th class="num">Saldo Previsto</th></tr></thead><tbody>';
+  h+='<div class="tbl-wrap sp-wrap"><table class="tbl sp-tbl"><thead><tr><th style="min-width:200px">Data</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Geração de Caixa</th><th class="num">Saldo Previsto</th></tr></thead><tbody>';
   if(!dias.length) h+='<tr><td colspan="5"><div class="empty" style="padding:26px"><div class="t1">Nenhum título no período</div><div class="t2">Não há vencimentos em aberto entre hoje e o fim do período selecionado.</div></div></td></tr>';
   dias.forEach(d2=>{
     const k=d2.data.toISOString().slice(0,10);
     const open=!!expandState.sp[k];
-    h+='<tr style="font-weight:600"><td><span class="tree-lbl"><button class="tree-toggle" onclick="spToggle(\''+k+'\')">'+(open?'&minus;':'+')+'</button>'+
-       d2.data.toLocaleDateString('pt-BR')+'</span></td>'+
-       '<td class="num"><span class="money'+(d2.ent?' pos':' zero')+'">'+money(d2.ent,true)+'</span></td>'+
-       '<td class="num"><span class="money'+(d2.sai?' neg':' zero')+'">'+(d2.sai?'-':'')+money(d2.sai,true)+'</span></td>'+
+    const dsem=d2.data.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','');
+    h+='<tr class="sp-dia'+(d2.saldo<0?' sp-neg':'')+'"><td><span class="tree-lbl"><button class="tree-toggle" onclick="spToggle(\''+k+'\')">'+(open?'&minus;':'+')+'</button>'+
+       d2.data.toLocaleDateString('pt-BR')+' <span class="sp-sem">'+dsem+'</span></span></td>'+
+       '<td class="num">'+(d2.ent?money(d2.ent,true):'<span class="sp-zero">—</span>')+'</td>'+
+       '<td class="num">'+(d2.sai?'-'+money(d2.sai,true):'<span class="sp-zero">—</span>')+'</td>'+
        '<td class="num">'+resultMoney(d2.ger,true)+'</td>'+
-       '<td class="num" style="font-weight:650">'+resultMoney(d2.saldo,true)+'</td></tr>';
+       '<td class="num sp-saldo">'+money(d2.saldo,true)+'</td></tr>';
     if(open){
       // Contribuições de associados (conta 1.1.01) somadas em uma única linha
       // por dia — o extrato individual só aparece no drawer (spDrillAssoc).
@@ -4420,6 +4421,17 @@ body.dark .rp-ia{background:#0F2026;border-color:#1D3B42}
 .tit-tbl tr.tit-grp td span{float:right;text-transform:none;letter-spacing:0}
 body.dark .tit-tbl tr.tit-grp td{background:#0F1720}
 .tit-mais{padding:10px 14px;font-size:12px;color:var(--text2);border-top:1px solid var(--border)}
+
+/* ---------- Fluxo: previsão diária compacta ---------- */
+.sp-wrap{max-height:460px;overflow:auto}
+.sp-tbl td{padding:6px 14px;font-size:12.5px}
+.sp-tbl tr.sp-dia td{font-weight:400}
+.sp-tbl .sp-sem{color:var(--text2);font-size:11px;margin-left:4px}
+.sp-tbl .sp-zero{color:#C3CCD6}
+.sp-tbl td.sp-saldo{font-weight:500}
+.sp-tbl tr.sp-neg td.sp-saldo{color:var(--neg)}
+.sp-tbl tr.sp-neg td{background:rgba(227,154,154,.08)}
+.pc-summary .row b{font-weight:500;font-size:14px}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
