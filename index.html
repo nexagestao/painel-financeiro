@@ -4482,6 +4482,30 @@ body.dark .rp-tbl tfoot td{background:#0F1720}
 .rp-tbl td{height:auto;white-space:normal}
 .rp-tbl td.num,.rp-tbl th.num{white-space:nowrap}
 @media print{ .rp-doc::before{display:none} .rp-tbl td{padding:4px 10px} .rp-tbl thead th{padding:6px 10px} }
+
+/* ---------- Reports: resumo executivo (1 página) ---------- */
+.rs-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.rs-list{margin:0;padding-left:18px;font-size:12.5px;line-height:1.55}
+.rs-list li{margin-bottom:4px}
+.rs-grid .rp-sec{margin-bottom:14px}
+@media print{
+  body.rp-resumo .rp-doc{font-size:10px}
+  body.rp-resumo .rp-brand{margin-bottom:10px}
+  body.rp-resumo .rp-head{padding-bottom:8px;margin-bottom:10px}
+  body.rp-resumo .rp-t{font-size:18px}
+  body.rp-resumo .rp-kpis{margin-bottom:10px}
+  body.rp-resumo .rp-kpi .vl{font-size:14px}
+  body.rp-resumo .rp-kpi .leg{font-size:9px}
+  body.rp-resumo .rp-sec{margin-bottom:10px}
+  body.rp-resumo .rp-sec h3{margin-bottom:6px;font-size:11px}
+  body.rp-resumo .rp-tbl{font-size:9.5px}
+  body.rp-resumo .rp-tbl td{padding:3px 8px}
+  body.rp-resumo .rp-tbl thead th{padding:4px 8px}
+  body.rp-resumo .rp-ia{padding:10px 14px;font-size:10.5px;line-height:1.45;margin-bottom:12px}
+  body.rp-resumo .rs-list{font-size:10px}
+  body.rp-resumo .rs-grid{gap:14px}
+  body.rp-resumo .rp-foot{margin-top:8px}
+}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -5448,8 +5472,8 @@ function renderChartFull(){
    "dados" com os números do relatório — é ele que vai para o resumo com IA
    (Edge Function resumo-ia), nunca a base inteira. PDF = impressão do
    próprio relatório (CSS @media print esconde o resto da tela). */
-const RP = {aba:'dia', mes:null, ia:{}, iaLoading:{}};
-const RP_ABAS = [['dia','Report do dia'],['fluxo','Fluxo de caixa'],['bordero','Borderôs'],['mensal','Prestação de contas']];
+const RP = {aba:'resumo', mes:null, ia:{}, iaLoading:{}};
+const RP_ABAS = [['resumo','Resumo'],['dia','Report do dia'],['fluxo','Fluxo de caixa'],['bordero','Borderôs'],['mensal','Prestação de contas']];
 // títulos 'Em aberto' de meses já fechados pela DRE/MGF são resíduo — ficam fora (mesmo corte do Fluxo de Caixa)
 function rpCorte(){ return new Date(ANO, REAL_M, 1); }
 function rpDia(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
@@ -5676,15 +5700,61 @@ function rpIAHtml(aba){
   }).join('').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
   return '<div class="rp-ia"><div class="rp-ia-h">'+icon('spark',15)+' Resumo da situação<span>gerado com IA em '+r.em.toLocaleString('pt-BR')+' · confira os números abaixo</span></div>'+paras+'</div>';
 }
-const RP_DADOS = {dia:rpDadosDia, fluxo:rpDadosFluxo, bordero:rpDadosBordero, mensal:rpDadosMensal};
-const RP_HTML = {dia:rpHtmlDia, fluxo:rpHtmlFluxo, bordero:rpHtmlBordero, mensal:rpHtmlMensal};
-const RP_TIT = {dia:'Report do dia', fluxo:'Fluxo de caixa', bordero:'Borderôs de pagamento', mensal:'Prestação de contas'};
+
+/* ---------- 0) resumo executivo: tudo numa página A4 ---------- */
+function rpDadosResumo(){
+  const dia = rpDadosDia(), fx = rpDadosFluxo(), bd = rpDadosBordero(), me = rpDadosMensal();
+  const pend = bd._lin.L.filter(r=>r.status!=='Pago');
+  const linha = n=>(me._lin.linhas.find(l=>l.nome===n)||{mes:0});
+  const atencao = [];
+  if(fx.dias_negativos) atencao.push('Caixa negativo em '+fx.dias_negativos+' dia(s) até '+fx.periodo.split(' a ')[1]+' — o primeiro em '+fx.primeiro_dia_negativo+'.');
+  atencao.push('Menor saldo previsto: '+rpM(fx.menor_saldo.valor)+' em '+fx.menor_saldo.data+'.');
+  if(dia.vencidos.qtd) atencao.push(dia.vencidos.qtd+' conta(s) a pagar vencida(s), somando '+rpM(dia.vencidos.total)+'.');
+  if(bd.aguardando) atencao.push(rpM(bd.aguardando)+' em borderô aguardando liberação.');
+  if(me.resultado_liquido<0) atencao.push('Resultado de '+me.mes+' negativo: '+rpM(me.resultado_liquido)+'.');
+  return {data:dia.data, empresa:dia.empresa,
+    caixa:{saldo_hoje:dia.saldo_total, bancos:dia.bancos, menor_saldo_previsto:fx.menor_saldo, saldo_fim_periodo:fx.saldo_final, periodo:fx.periodo},
+    proximos_7_dias:dia.proximos_7_dias, vence_hoje:dia.vence_hoje, vencidos:dia.vencidos,
+    fluxo_semanal:fx.semanas.slice(0,6),
+    borderos:{pago:bd.pago, liberado:bd.liberado, aguardando:bd.aguardando, pendentes:pend.length},
+    resultado_mes:{mes:me.mes, receita_bruta:me.receita_bruta, custos:linha('CUSTOS').mes, despesas:linha('DESPESAS OPERACIONAIS').mes, ebitda:linha('EBITDA').mes, resultado_liquido:me.resultado_liquido, margem:me.margem_liquida},
+    pontos_de_atencao:atencao,
+    _lin:{dia, fx, bd, me, pend, linha}};
+}
+function rpHtmlResumo(D){
+  const L = D._lin, fx = L.fx, me = L.me;
+  let h = rpKpis([
+    ['Saldo em bancos', rpM(D.caixa.saldo_hoje), L.dia._lin.bancos.map(b=>b.nome.split(' ')[0]+' '+kfmt(b.saldo)).join(' · ')],
+    ['Menor saldo previsto', rpM(D.caixa.menor_saldo_previsto.valor), 'em '+D.caixa.menor_saldo_previsto.data, D.caixa.menor_saldo_previsto.valor<0?'neg':''],
+    ['A pagar em 7 dias', rpM(D.proximos_7_dias.total), D.proximos_7_dias.qtd+' conta(s)'+(D.vencidos.qtd?' · '+D.vencidos.qtd+' vencida(s)':'')],
+    ['Resultado · '+me.mes, rpM(me.resultado_liquido), me.margem_liquida!=null?'margem '+pct(me.margem_liquida):'', me.resultado_liquido<0?'neg':'pos']]);
+  // fluxo semanal (esq) + borderôs e resultado (dir)
+  h += '<div class="rs-grid">';
+  h += '<div>'+rpSec('Fluxo de caixa previsto · por semana', rpTabela(['Semana','Entradas','Saídas','Saldo final'],
+    fx._lin.sem.slice(0,6).map(s2=>({cls:s2.menor<0?'rp-neg':'', cells:[fdate(s2.de).slice(0,5)+'–'+fdate(s2.ate).slice(0,5), kfmt(s2.ent), kfmt(s2.sai), kfmt(s2.fim)]})), {num:[1,2,3]}))+'</div>';
+  h += '<div>'+rpSec('Resultado de '+me.mes, rpTabela(['','Valor'], [
+      ['Receita bruta', rpM(D.resultado_mes.receita_bruta)], ['Custos', rpM(D.resultado_mes.custos)], ['Despesas operacionais', rpM(D.resultado_mes.despesas)],
+      ['EBITDA', rpM(D.resultado_mes.ebitda)], {cls:'rp-res', cells:['Resultado líquido', rpM(D.resultado_mes.resultado_liquido)]}], {num:[1]}))+
+    rpSec('Borderôs', rpTabela(['Pago','Liberado','Aguardando'], [[rpM(D.borderos.pago), rpM(D.borderos.liberado), rpM(D.borderos.aguardando)]], {num:[0,1,2]}))+'</div>';
+  h += '</div>';
+  // próximos vencimentos (maiores) + pontos de atenção
+  h += '<div class="rs-grid">';
+  const prox = L.dia._lin.vencidos.concat(L.dia._lin.hojeVence, L.dia._lin.prox7).sort((a,b)=>b.vprev-a.vprev).slice(0,7).sort((a,b)=>a.venc-b.venc);
+  h += '<div>'+rpSec('Maiores vencimentos · próximos 7 dias', rpTabela(['Data','Fornecedor','Valor'],
+    prox.map(t=>({cls:t.venc<rpDia(hojeReal())?'rp-neg':'', cells:[fdate(t.venc).slice(0,5), esc((t.forn||'').slice(0,34)), rpM(t.vprev)]})), {num:[2], vazio:'Sem vencimentos nos próximos 7 dias.'}))+'</div>';
+  h += '<div>'+rpSec('Pontos de atenção', '<ul class="rs-list">'+D.pontos_de_atencao.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>')+'</div>';
+  h += '</div>';
+  return h;
+}
+const RP_DADOS = {resumo:rpDadosResumo, dia:rpDadosDia, fluxo:rpDadosFluxo, bordero:rpDadosBordero, mensal:rpDadosMensal};
+const RP_HTML = {resumo:rpHtmlResumo, dia:rpHtmlDia, fluxo:rpHtmlFluxo, bordero:rpHtmlBordero, mensal:rpHtmlMensal};
+const RP_TIT = {resumo:'Resumo executivo', dia:'Report do dia', fluxo:'Fluxo de caixa', bordero:'Borderôs de pagamento', mensal:'Prestação de contas'};
 
 function rpPDF(){
   // nome do arquivo salvo = título da página no momento da impressão
   const t = document.title, emp = state.empresa;
   document.title = RP_TIT[RP.aba]+' - '+(EMPRESAS[emp].curto||EMPRESAS[emp].nome)+' - '+isoDate(hojeReal());
-  document.body.classList.add('rp-printing');
+  document.body.classList.add('rp-printing'); document.body.classList.toggle('rp-resumo', RP.aba==='resumo');
   setTimeout(()=>{ window.print(); document.title = t; document.body.classList.remove('rp-printing'); }, 50);
 }
 async function renderReports(){
@@ -5695,7 +5765,7 @@ async function renderReports(){
     if(state.view!=='reports') return;
   }
   const aba = RP.aba, D = RP_DADOS[aba]();
-  const sub = aba==='dia' ? D.data : aba==='fluxo' ? D.periodo : aba==='mensal' ? D.mes : 'todos os borderôs';
+  const sub = aba==='resumo' ? 'Posição em '+D.data : aba==='dia' ? D.data : aba==='fluxo' ? D.periodo : aba==='mensal' ? D.mes : 'todos os borderôs';
   let acoes = '<button class="btn sm primary" onclick="rpGerarIA(\''+aba+'\')" '+(RP.iaLoading[aba]?'disabled':'')+'>'+icon('spark',14)+' '+(RP.ia[aba]?'Gerar novamente':'Gerar resumo com IA')+'</button>'+
     '<button class="btn sm" onclick="rpPDF()">'+icon('download',14)+' PDF</button>';
   let h = pageHead('Reports','', acoes);

@@ -13,6 +13,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 const TIPOS: Record<string, string> = {
+  resumo: "resumo executivo de uma página (caixa hoje e menor saldo previsto, fluxo semanal, vencimentos, borderôs, resultado do mês e pontos de atenção)",
   dia: "report diário de caixa (saldo nos bancos, o que vence hoje, borderô do dia, próximos 7 dias e alertas)",
   fluxo: "previsão de fluxo de caixa até o fim do mês seguinte (visão semanal, menor saldo, dias negativos e maiores saídas)",
   bordero: "situação dos borderôs de pagamento (pago, liberado, aguardando liberação)",
