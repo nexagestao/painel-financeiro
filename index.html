@@ -945,6 +945,7 @@ const PERFIS = {
   'Diretoria':     {mods:['dashboard','reports','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
   'Cliente':       {mods:['dashboard','dre','cooperativas','indicadores'], importar:false, configurar:false, exportar:true},
   'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false},
+  'Recorrência':   {mods:['rec_apuracao','rec_conferencia','rec_negociacoes'], importar:false, configurar:false, exportar:true},
   'Cobrança':      {mods:['cob_painel','cob_carteiras','cob_inad','cob_coop','cob_acomp'], importar:false, configurar:false, exportar:true}
 };
 const LOGS = [
@@ -1220,9 +1221,13 @@ const NAV = [
     {id:'cob_carteiras', n:'Carteiras', ic:'wallet'},
     {id:'cob_coop', n:'Cooperativas', ic:'users'},
     {id:'cob_acomp', n:'Acompanhamento', ic:'check'}]},
+  {sec:'Recorrência', items:[
+    {id:'rec_apuracao', n:'Apuração', ic:'wallet'},
+    {id:'rec_conferencia', n:'Conferência', ic:'check'},
+    {id:'rec_negociacoes', n:'Negociações', ic:'file'}]},
   {sec:'Administração', items:[{id:'admin', n:'Administração', ic:'settings'}]}
 ];
-function podeVer(id){ return PERFIS[state.role].mods.includes(id); }
+function podeVer(id){ if(String(id).startsWith('rec_')) return !!(typeof REC!=='undefined' && REC.papel); return PERFIS[state.role].mods.includes(id); }
 function renderSidebar(){
   const e=EMPRESAS[state.empresa];
   const multiEmpresa=((currentUser&&currentUser.empresas)||[]).length>1;
@@ -4878,6 +4883,18 @@ b.cob-ok{color:var(--pos)} b.cob-atn{color:var(--warn)} b.cob-ruim{color:var(--n
 .cob-acao span{display:block;color:var(--text2);font-size:11.5px}
 .cob-acao p{margin:4px 0 0;color:var(--text)}
 body.dark .cob-obs{background:#0E1B24} body.dark .cob-meta-bar{background:#0E1B24}
+
+/* ---------- Recorrência ---------- */
+.rec-dif{border-bottom:1.5px dashed var(--warn);cursor:help}
+.rec-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+.rec-card{padding:16px 18px}
+.rec-card-h{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}
+.rec-valor{font-size:19px;font-weight:600;letter-spacing:-.02em;white-space:nowrap}
+.rec-obs{margin-top:10px;font-size:12.5px;color:var(--text2);line-height:1.45}
+.rec-neg{margin-top:10px;font-size:12.5px} .rec-neg summary{cursor:pointer;color:var(--azul);font-weight:500}
+.rec-neg div{margin-top:6px;color:var(--text2);line-height:1.5;white-space:pre-wrap;max-height:180px;overflow:auto}
+.rec-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -6646,6 +6663,319 @@ async function cobImportar(){
   await cobCarregar(true); render();
 }
 
+/* =========================== RECORRÊNCIA (comissões de representantes) ===========================
+   Negociações (contrato de cada representante), apuração mensal e conferência.
+   - Base de cálculo validada com a planilha do Elielton: boletos de associados
+     (contas 1.1.x) recebidos no mês de referência, somados pelas cooperativas
+     do representante. Vendas = planilha COOPERATIVAS (Miriã), aba do mês.
+   - Competência = mês do pagamento (ex.: 2026-11 paga o resultado de 2026-10).
+   - O valor a receber é sempre o informado pelo apurador (importado da planilha
+     ou editado); o "calculado Nexa" é uma conferência automática ao lado.
+   Acesso: rec_papel() no banco (admin, apurador, conferente, leitor). */
+const REC = {papel:null, emp:null, negs:[], apu:[], vendas:[], comp:null, f:{q:'', st:''}};
+async function recPapelCarregar(){
+  REC.papel = null;
+  const id = EMPRESA_IDS[state.empresa]; if(!id || !currentUser) return;
+  const { data } = await sb.rpc('rec_papel', {p_empresa:id});
+  REC.papel = data || null;
+}
+function recPode(acao){ const p = REC.papel; if(!p) return false;
+  if(acao==='ver') return true;
+  if(acao==='editar') return p==='admin' || p==='apurador';
+  if(acao==='conferir') return p==='admin' || p==='conferente';
+  return false; }
+async function recCarregar(force){
+  const emp = state.empresa, id = EMPRESA_IDS[emp];
+  if(REC.emp===emp && !force) return;
+  const [n, a, v] = await Promise.all([
+    sb.from('rec_negociacoes').select('*').eq('empresa_id', id).order('ordem'),
+    fetchAllRows(o=>sb.from('rec_apuracoes').select('*', o).eq('empresa_id', id).order('competencia')),
+    sb.from('rec_vendas').select('mes_ref,cooperativa,quantidade,novas,migracoes').eq('empresa_id', id)
+  ]);
+  REC.negs = n.data||[]; REC.apu = a||[]; REC.vendas = v.data||[]; REC.emp = emp;
+}
+const recNorm = s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+const recMesAnt = c=>{ const [y,m]=c.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+const recLb = c=>{ if(!c) return '—'; const [y,m]=c.split('-'); return MESES_LONG[+m-1].replace(/^./,x=>x.toUpperCase())+'/'+y; };
+/* base do mês de referência por cooperativa: boletos de associados recebidos no mês */
+let REC_BASE = {key:null, map:{}};
+function recBase(mesRef){
+  const emp = state.empresa, arr = RECEBER[emp]||[], key = emp+'|'+mesRef+'|'+arr.length;
+  if(REC_BASE.key===key) return REC_BASE.map;
+  const map = {};
+  arr.forEach(t=>{
+    if(t.status!=='Recebido' || !t.rec || !t.conta || !/^1\.1(\.|$)/.test(t.conta)) return;
+    const k = t.rec.getFullYear()+'-'+String(t.rec.getMonth()+1).padStart(2,'0'); if(k!==mesRef) return;
+    const c = recNorm(t.coop||'') || '(SEM COOPERATIVA)';
+    const o = map[c] = map[c] || {n:0, v:0, nome:t.coop||'(sem cooperativa)'}; o.n++; o.v += (t.vrec||t.vprev);
+  });
+  REC_BASE = {key, map};
+  return map;
+}
+function recCalc(neg, ap){
+  const mesRef = recMesAnt(ap.competencia), base = recBase(mesRef);
+  const coops = (neg.cooperativas||[]).map(recNorm);
+  let n=0, v=0; coops.forEach(c=>{ if(base[c]){ n+=base[c].n; v+=base[c].v; } });
+  let vendas = null;
+  if(coops.length){ const vs = REC.vendas.filter(x=>x.mes_ref===mesRef && coops.includes(recNorm(x.cooperativa))); if(vs.length) vendas = vs.reduce((t,x)=>t+x.quantidade,0); }
+  const r = neg.regra||{}; let calc = null, como = '';
+  if(r.fixo && !r.pct){ calc = r.fixo; como = 'fixo mensal'; }
+  else if(r.pct && coops.length){
+    const meta = r.meta||0, vd = vendas!=null ? vendas : (ap.vendas||0);
+    calc = (meta && vd < meta) ? (r.fixo||0) : v*r.pct/100 + (r.fixo||0);
+    como = (meta && vd<meta ? 'não bateu a meta de '+meta+' (vendas '+vd+')' : r.pct+'% × '+money(v,true)) + (r.fixo?' + fixo '+money(r.fixo):'');
+  }
+  return {placas: coops.length?n:null, valor: coops.length?v:null, vendas, calc, como};
+}
+/* leitura heurística da negociação (texto) → regra simples; contratos com várias faixas ficam marcados para conferência */
+function recLerRegra(txt){
+  const t = recNorm(txt), r = {};
+  const pcts = [...new Set((t.match(/(\d{1,2}(?:,\d+)?)\s*%/g)||[]).map(x=>parseFloat(x.replace(',','.'))))].filter(x=>x>0 && x<=20);
+  const fixo = t.match(/FIXO[^0-9R]*R?\$?\s*([\d.]+,\d{2}|[\d.]{4,})/);
+  const meta = t.match(/META[^0-9]{0,20}(\d{1,3})\s*PLACAS/);
+  if(fixo) r.fixo = parseFloat(fixo[1].replace(/\./g,'').replace(',','.'));
+  if(meta) r.meta = +meta[1];
+  const recPcts = pcts.filter(p=>p<=15 && !/ADESAO:\s*\d+\s*%/.test(''));
+  if(recPcts.length===1 && /RECORR|RECEBE|COMISS/.test(t)) r.pct = recPcts[0];
+  const ambigua = recPcts.length>1 || /APORTE|AJUDA DE CUSTO|BONIFICA|POR PLACA|FAIXA|ATE \d|A PARTIR DE/.test(t) && !(r.fixo && !r.pct && recPcts.length===0);
+  return {regra:r, ambigua};
+}
+function recSugereCoops(nome, coopNomes){
+  const stop = new Set(['DA','DE','DO','DOS','DAS','E','LTDA','JUNIOR','FILHO','NETO','SILVA','SANTOS','OLIVEIRA','SOUZA','COSTA','PEREIRA','RODRIGUES','ALVES','LIMA','GOMES','MARTINS','FERREIRA','COPERATIVA','COOPERATIVA','CONSULTORIA','HENRIQUE']);
+  const tk = recNorm(nome).split(/[^A-Z]+/).filter(w=>w.length>=4 && !stop.has(w));
+  const nome2 = tk.slice(0,2).join(' ');
+  return coopNomes.filter(c=>{ const nc = recNorm(c); return (nome2 && nc.includes(nome2)) || tk.some(w=>new RegExp('(^|[^A-Z])'+w+'([^A-Z]|$)').test(nc) && w.length>=5); });
+}
+
+/* ---------- importação: planilha de recorrência (aba do mês) ---------- */
+function recImportarAbrir(){
+  openModal('<div class="modal-head"><div class="drawer-title">Importar planilha</div><div class="drawer-sub">Recorrência (aba do mês) ou COOPERATIVAS da Miriã (vendas do mês)</div></div>'+
+    '<div class="modal-body"><div class="field"><label>Tipo</label><select id="recTipo"><option value="rec">Planilha de recorrência — negociações e valores do mês</option><option value="coop">COOPERATIVAS (Miriã) — vendas por cooperativa</option></select></div>'+
+    '<div class="field"><label>Arquivo (.xlsx)</label><input type="file" id="recArq" accept=".xlsx" onchange="recImportarAbas()"></div>'+
+    '<div class="field"><label>Aba</label><select id="recAba"><option>Escolha o arquivo</option></select></div><div id="recImpMsg" style="font-size:13px;margin-top:10px"></div></div>'+
+    '<div class="modal-foot"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" id="recImpBtn" onclick="recImportar()">Importar</button></div>');
+}
+let REC_WB = null;
+async function recImportarAbas(){
+  const f = $('recArq').files[0]; if(!f) return;
+  REC_WB = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true});
+  $('recAba').innerHTML = REC_WB.SheetNames.map((n,i)=>'<option'+(i===REC_WB.SheetNames.length-1?' selected':'')+'>'+esc(n)+'</option>').join('');
+}
+const REC_MESES = {JANEIRO:1,FEVEREIRO:2,MARCO:3,ABRIL:4,MAIO:5,JUNHO:6,JULHO:7,AGOSTO:8,SETEMBRO:9,OUTUBRO:10,NOVEMBRO:11,DEZEMBRO:12,JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12};
+function recMesDaAba(nome){
+  const t = recNorm(nome).replace(/[^A-Z0-9 ]/g,' ');
+  const m = Object.keys(REC_MESES).find(k=>new RegExp('(^| )'+k+'( |\\d|$)').test(t) || t.startsWith(k));
+  const y = (t.match(/20(\d{2})/)||[])[0] || ((t.match(/(\d{2})\s*$/)||[])[1] ? '20'+(t.match(/(\d{2})\s*$/))[1] : null);
+  return m && y ? y+'-'+String(REC_MESES[m]).padStart(2,'0') : null;
+}
+async function recImportar(){
+  const msg = $('recImpMsg'), btn = $('recImpBtn');
+  if(!REC_WB){ msg.textContent = 'Escolha o arquivo.'; return; }
+  const aba = $('recAba').value, tipo = $('recTipo').value, mes = recMesDaAba(aba), empId = EMPRESA_IDS[state.empresa];
+  if(!mes){ msg.textContent = 'Não reconheci o mês da aba "'+aba+'".'; return; }
+  const rows = XLSX.utils.sheet_to_json(REC_WB.Sheets[aba], {header:1, raw:true, defval:null});
+  btn.disabled = true;
+  try{
+    if(tipo==='coop'){
+      // resumo (nome, quant) no topo + detalhe (Nome, Placa, ..., Cooperativa, ..., Tipo Adesão)
+      const res = {}; let iDet = rows.findIndex(r=>r && r.some(x=>recNorm(x)==='TIPO ADESAO'));
+      const hdr = iDet>=0 ? rows[iDet].map(recNorm) : [];
+      const cCoop = hdr.indexOf('COOPERATIVA'), cTipo = hdr.indexOf('TIPO ADESAO');
+      if(iDet>=0) rows.slice(iDet+1).forEach(r=>{ const c = r[cCoop]; if(!c) return; const o = res[c] = res[c]||{q:0,nv:0,mg:0}; o.q++; if(/NOVA/.test(recNorm(r[cTipo]))) o.nv++; else o.mg++; });
+      else rows.forEach(r=>{ const [a,b] = (r||[]).filter(x=>x!=null); if(typeof a==='string' && typeof b==='number' && !/TOTAL/i.test(a)) res[a]={q:b}; });
+      const up = Object.entries(res).map(([c,o])=>({empresa_id:empId, mes_ref:mes, cooperativa:c, quantidade:o.q, novas:o.nv??null, migracoes:o.mg??null, origem:aba}));
+      const { error } = await sb.from('rec_vendas').upsert(up, {onConflict:'empresa_id,mes_ref,cooperativa'}); if(error) throw error;
+      msg.textContent = up.length+' cooperativas com vendas de '+recLb(mes)+' importadas.';
+    } else {
+      // planilha de recorrência: A nome, B cidade, C negociação, D vendas, E placas, F valor adimpl., G recorrência, H vale, I a receber, J extra/obs, K obs, L situação
+      const iH = rows.findIndex(r=>r && recNorm(r[0])==='NOMES'); if(iH<0) throw new Error('não achei o cabeçalho "NOMES"');
+      const coopNomes = [...new Set((RECEBER[state.empresa]||[]).map(t=>t.coop).filter(Boolean))];
+      const num = x=> x==null||x==='' ? null : (typeof x==='number' ? x : (parseFloat(String(x).replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.'))||null));
+      const itens = []; let grupo = 'variavel';
+      rows.slice(iH+2).forEach(r=>{
+        if(!r || r.every(x=>x==null||x==='')) return;
+        const nome = r[0] ? String(r[0]).trim() : '';
+        if(/PAGAMENTOS QUE SAO FIXOS/.test(recNorm(nome))){ grupo = 'fixo'; return; }
+        if(/^TOTAL$/.test(recNorm(r[7]||'')) || /TOTAL/.test(recNorm(r[7]||''))) return;
+        if(!nome){ if(itens.length && (r[2]||r[4]||r[5])) itens[itens.length-1].extra.push([r[2],r[4],r[5],r[6]].filter(x=>x!=null).join(' · ')); return; }
+        itens.push({nome, cidade:r[1]||null, texto:r[2]?String(r[2]):null, vendas:num(r[3]), placas:num(r[4]), valor:num(r[5]), recorr:num(r[6]), vale:num(r[7]), receber:num(r[8]),
+          obs:[r[9],r[10]].filter(x=>x!=null&&x!=='').map(x=>typeof x==='number'?money(x,true):String(x)).join(' · '), situacao:r[11]?String(r[11]):(r[10]&&/META|OK|NOTA/.test(recNorm(r[10]))?String(r[10]):null), extra:[],
+          grupo: /FIXO MENSAL/.test(recNorm(r[9]||'')) ? 'fixo' : grupo});
+        if(grupo==='fixo' && /COMISS|META|RECORR/.test(recNorm(r[2]||'')) && !/FIXO/.test(recNorm(r[9]||''))) itens[itens.length-1].grupo = 'variavel';
+      });
+      // negociações: cria/atualiza pelo nome (mantém cooperativas e regras já ajustadas)
+      const exist = {}; REC.negs.forEach(n=>exist[recNorm(n.nome)]=n);
+      const negUp = itens.map((it,i)=>{ const e = exist[recNorm(it.nome)]; const lr = recLerRegra(it.texto||'');
+        return {empresa_id:empId, nome:it.nome, cidade:it.cidade, grupo:it.grupo, texto:it.texto, ordem:i,
+          cooperativas: e&&e.cooperativas&&e.cooperativas.length ? e.cooperativas : recSugereCoops(it.nome, coopNomes),
+          regra: e&&e.regra&&Object.keys(e.regra).length ? e.regra : lr.regra, ambigua: e ? e.ambigua : lr.ambigua, ativa:true}; });
+      const { data:negs, error:e1 } = await sb.from('rec_negociacoes').upsert(negUp, {onConflict:'empresa_id,nome'}).select('id,nome'); if(e1) throw e1;
+      const idDe = {}; negs.forEach(n=>idDe[recNorm(n.nome)]=n.id);
+      const apUp = itens.map(it=>({empresa_id:empId, competencia:mes, negociacao_id:idDe[recNorm(it.nome)], vendas:it.vendas, placas:it.placas, valor_base:it.valor,
+        valor_recorrencia:it.recorr, desconto:it.vale, valor_receber:it.receber, observacao:[it.obs].concat(it.extra).filter(Boolean).join(' · ')||null, situacao:it.situacao, origem:'planilha: '+aba}));
+      const { error:e2 } = await sb.from('rec_apuracoes').upsert(apUp, {onConflict:'empresa_id,competencia,negociacao_id'}); if(e2) throw e2;
+      msg.textContent = itens.length+' representantes importados para '+recLb(mes)+' (total a receber '+money(itens.reduce((t,x)=>t+(x.receber||0),0),true)+').';
+      REC.comp = mes;
+    }
+    await sb.from('logs').insert({empresa_id:empId, acao:'Recorrência — importação', detalhe:aba+' ('+tipo+')', usuario_id:currentUser.id});
+    await recCarregar(true); render();
+  }catch(e){ console.error(e); msg.textContent = 'Erro: '+(e.message||e); }
+  btn.disabled = false;
+}
+
+/* ---------- telas ---------- */
+async function recPronto(titulo){
+  if(!REC.papel){ $('content').innerHTML = pageHead(titulo,'')+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Sem acesso à recorrência desta empresa</div></div></div>'; return false; }
+  if(REC.emp!==state.empresa){ $('content').innerHTML = pageHead(titulo,'')+'<div class="card" style="padding:28px;text-align:center;color:var(--text2)">Carregando…</div>'; await recCarregar(); if(!String(state.view).startsWith('rec_')) return false; }
+  const comps = [...new Set(REC.apu.map(a=>a.competencia))].sort();
+  if(!REC.comp || !comps.includes(REC.comp)) REC.comp = comps[comps.length-1] || null;
+  return true;
+}
+function recHead(titulo){
+  const comps = [...new Set(REC.apu.map(a=>a.competencia))].sort().reverse();
+  const acoes = (recPode('editar')?'<button class="btn sm" onclick="recImportarAbrir()">'+icon('upload',14)+' Importar planilha</button>':'');
+  return pageHead(titulo,'', '<span class="cob-quem">'+icon('users',13)+' '+({admin:'administrador',apurador:'apuração',conferente:'conferência',leitor:'somente leitura'}[REC.papel])+'</span>'+acoes)+
+    (comps.length?'<div class="cob-bar"><label class="cob-mes">Pagamento de<select class="select" onchange="REC.comp=this.value;render()">'+comps.map(c=>'<option value="'+c+'"'+(c===REC.comp?' selected':'')+'>'+recLb(c)+' · resultado de '+recLb(recMesAnt(c)).toLowerCase()+'</option>').join('')+'</select></label></div>':'');
+}
+function recLinhas(){
+  const negMap = {}; REC.negs.forEach(n=>negMap[n.id]=n);
+  return REC.apu.filter(a=>a.competencia===REC.comp && negMap[a.negociacao_id]).map(a=>({a, n:negMap[a.negociacao_id], c:recCalc(negMap[a.negociacao_id], a)}))
+    .sort((x,y)=>(x.n.grupo===y.n.grupo?0:x.n.grupo==='fixo'?-1:1) || x.n.ordem-y.n.ordem);
+}
+const REC_CF = {aguardando:['Aguardando','st-pend'], liberado:['Liberado','st-pago'], revisar:['Revisar','st-vencido']};
+function recSitCls(s){ const t = recNorm(s); return /NAO BATEU/.test(t)?'st-vencido':/FALTA NOTA/.test(t)?'st-pend':/OK/.test(t)?'st-pago':'st-neutro'; }
+async function renderRecApuracao(){
+  if(!await recPronto('Recorrência')) return;
+  let h = recHead('Recorrência · apuração');
+  if(!REC.comp){ $('content').innerHTML = h+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Nenhuma apuração ainda</div><div class="t2">Importe a planilha de recorrência (aba do mês) para começar.</div></div></div>'; return; }
+  const L = recLinhas(), q = recNorm(REC.f.q);
+  const tot = L.reduce((t,x)=>t+(+x.a.valor_receber||0),0), lib = L.filter(x=>x.a.conferencia==='liberado'), rev = L.filter(x=>x.a.conferencia==='revisar');
+  const nb = L.filter(x=>/NAO BATEU/.test(recNorm(x.a.situacao))).length;
+  h += '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">'+
+    kpi('Total a pagar', money(tot,true), null, L.length+' representantes')+
+    kpi('Liberado', money(lib.reduce((t,x)=>t+(+x.a.valor_receber||0),0),true), null, lib.length+' de '+L.length+' conferidos', lib.length===L.length?'pos':'')+
+    kpi('Para revisar', String(rev.length), null, 'apontados na conferência', rev.length?'neg':'')+
+    kpi('Não bateram a meta', String(nb), null, 'segundo a apuração')+'</div>';
+  h += '<div class="tit-bar"><input class="tit-busca" type="text" placeholder="Buscar representante ou cidade…" value="'+esc(REC.f.q)+'" oninput="REC.f.q=this.value;clearTimeout(window._rb);window._rb=setTimeout(()=>{render();const i=document.querySelector(\'.tit-busca\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">'+
+    '<div class="seg">'+[['','Todos'],['aguardando','Aguardando'],['liberado','Liberados'],['revisar','Revisar']].map(s=>'<button class="'+(REC.f.st===s[0]?'on':'')+'" onclick="REC.f.st=\''+s[0]+'\';render()">'+s[1]+'</button>').join('')+'</div></div>';
+  const linhas = L.filter(x=>(!q || recNorm(x.n.nome+' '+(x.n.cidade||'')).includes(q)) && (!REC.f.st || x.a.conferencia===REC.f.st));
+  let grp = null;
+  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl rec-tbl"><thead><tr><th>Representante</th><th class="num">Vendas</th><th class="num">Placas adimpl.</th><th class="num">Valor adimplente</th><th class="num">Recorrência</th><th class="num">Desconto</th><th class="num">A receber</th><th>Situação</th><th>Conferência</th></tr></thead><tbody>';
+  linhas.forEach(x=>{
+    if(x.n.grupo!==grp){ grp = x.n.grupo; h += '<tr class="tit-grp"><td colspan="9">'+(grp==='fixo'?'Pagamentos fixos mensais':'Recorrência e variáveis')+'</td></tr>'; }
+    const a = x.a, c = x.c, dif = (v1,v2)=> (v1!=null && v2!=null && Math.abs(v1-v2) > Math.max(1, Math.abs(v1)*0.02));
+    const cel = (pl, nx, fmt)=> pl==null && nx==null ? '—' : '<span'+(dif(pl,nx)?' class="rec-dif"'+tip('Planilha: '+(pl==null?'—':fmt(pl))+'<br>Nexa: '+(nx==null?'—':fmt(nx))):'')+'>'+(pl!=null?fmt(pl):fmt(nx))+'</span>';
+    h += '<tr class="hoverable" onclick="recDetalhe(\''+a.id+'\')"><td><div class="tit-f">'+esc(x.n.nome)+(x.n.ambigua?' <span class="ra-tag ruim" title="regra com várias condições — conferir">regra</span>':'')+'</div><div class="tit-s" style="font-size:11.5px;color:var(--text2)">'+esc(x.n.cidade||'')+'</div></td>'+
+      '<td class="num">'+cel(a.vendas, c.vendas, v=>String(v))+'</td><td class="num">'+cel(a.placas, c.placas, v=>String(v))+'</td><td class="num">'+cel(a.valor_base!=null?+a.valor_base:null, c.valor, v=>money(v,true))+'</td>'+
+      '<td class="num">'+(a.valor_recorrencia!=null?money(+a.valor_recorrencia,true):'—')+'</td><td class="num" style="color:var(--neg)">'+(+a.desconto?'−'+money(+a.desconto,true):'—')+'</td>'+
+      '<td class="num" style="font-weight:600">'+(a.valor_receber!=null?money(+a.valor_receber,true):'—')+'</td>'+
+      '<td>'+(a.situacao?'<span class="status-badge '+recSitCls(a.situacao)+'">'+esc(a.situacao)+'</span>':'')+'</td>'+
+      '<td><span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span></td></tr>';
+  });
+  h += '</tbody></table></div><div class="tit-mais">Valores em destaque (sublinhados) diferem do que o Nexa calcula pela base de boletos — passe o mouse para comparar.</div></div>';
+  $('content').innerHTML = h;
+}
+async function renderRecConferencia(){
+  if(!await recPronto('Conferência')) return;
+  REC.f.st = REC.f.st || 'aguardando';
+  const L = recLinhas(), feitos = L.filter(x=>x.a.conferencia!=='aguardando').length;
+  let h = recHead('Recorrência · conferência');
+  h += '<div class="card cob-meta"><div class="cob-meta-lb"><span>Conferência de '+recLb(REC.comp)+'</span><b class="cob-ok">'+feitos+' de '+L.length+'</b></div><div class="cob-meta-bar"><i class="cob-ok" style="width:'+(L.length?feitos/L.length*100:0)+'%"></i></div></div>';
+  h += '<div class="tit-bar"><div class="seg">'+[['aguardando','Aguardando'],['revisar','Revisar'],['liberado','Liberados'],['','Todos']].map(s=>'<button class="'+(REC.f.st===s[0]?'on':'')+'" onclick="REC.f.st=\''+s[0]+'\';render()">'+s[1]+'</button>').join('')+'</div></div>';
+  const lst = L.filter(x=>!REC.f.st || x.a.conferencia===REC.f.st);
+  h += '<div class="rec-cards">'+(lst.length ? lst.map(x=>{ const a=x.a;
+    return '<div class="card rec-card"><div class="rec-card-h"><div><div class="tit-f">'+esc(x.n.nome)+'</div><div style="font-size:11.5px;color:var(--text2)">'+esc(x.n.cidade||'')+(a.vendas!=null?' · '+a.vendas+' vendas':'')+(a.placas!=null?' · '+a.placas+' placas adimplentes':'')+'</div></div>'+
+      '<div class="rec-valor">'+(a.valor_receber!=null?money(+a.valor_receber,true):'—')+'</div></div>'+
+      (a.situacao?'<span class="status-badge '+recSitCls(a.situacao)+'">'+esc(a.situacao)+'</span> ':'')+'<span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span>'+
+      (a.observacao?'<div class="rec-obs">'+esc(a.observacao)+'</div>':'')+
+      '<details class="rec-neg"><summary>Negociação</summary><div>'+esc(x.n.texto||'—')+'</div></details>'+
+      (a.conferencia_obs?'<div class="rec-obs"><b>Conferência:</b> '+esc(a.conferencia_obs)+'</div>':'')+
+      (recPode('conferir')?'<div class="rec-acoes"><button class="btn sm primary" onclick="recConferir(\''+a.id+'\',\'liberado\')">'+icon('check',13)+' Liberar</button><button class="btn sm" onclick="recConferir(\''+a.id+'\',\'revisar\')">Revisar</button><button class="btn sm ghost" onclick="recDetalhe(\''+a.id+'\')">Detalhes</button></div>':'')+'</div>'; }).join('')
+    : '<div class="card"><div class="empty" style="padding:30px"><div class="t2">Nada neste filtro.</div></div></div>')+'</div>';
+  $('content').innerHTML = h;
+}
+async function recConferir(id, st){
+  let obs = null;
+  if(st==='revisar'){ obs = prompt('O que precisa ser revisado?'); if(obs===null) return; }
+  const patch = {conferencia:st}; if(obs!==null) patch.conferencia_obs = obs;
+  const { error } = await sb.from('rec_apuracoes').update(patch).eq('id', id);
+  if(error){ console.error(error); toast('Não foi possível salvar a conferência'); return; }
+  const a = REC.apu.find(x=>x.id===id); if(a){ a.conferencia = st; if(obs!==null) a.conferencia_obs = obs; }
+  toast(st==='liberado'?'Liberado':'Marcado para revisar'); render();
+}
+function recMsgWhats(n, a){
+  const linhas = ['Olá, '+n.nome.split(' ')[0].replace(/^./,c=>c.toUpperCase()).replace(/(?<=^.)(.*)/, s=>s.toLowerCase())+'!', '', 'Segue o fechamento da sua recorrência — pagamento de '+recLb(a.competencia)+' (resultado de '+recLb(recMesAnt(a.competencia)).toLowerCase()+'):'];
+  if(a.vendas!=null) linhas.push('• Vendas no mês: '+a.vendas);
+  if(a.placas!=null) linhas.push('• Placas adimplentes: '+a.placas);
+  if(a.valor_base!=null) linhas.push('• Valor total adimplente: '+money(+a.valor_base,true));
+  if(a.valor_recorrencia!=null) linhas.push('• Recorrência: '+money(+a.valor_recorrencia,true));
+  if(+a.desconto) linhas.push('• Desconto: −'+money(+a.desconto,true));
+  linhas.push('• *Valor a receber: '+money(+a.valor_receber||0,true)+'*', '', 'Por favor, emita a nota fiscal neste valor para liberarmos o pagamento.', 'Qualquer dúvida, estamos à disposição.');
+  return linhas.join('\n');
+}
+function recDetalhe(id){
+  const a = REC.apu.find(x=>x.id===id); if(!a) return; const n = REC.negs.find(x=>x.id===a.negociacao_id); const c = recCalc(n, a);
+  const ed = recPode('editar'), li = (k,v)=>'<div class="cob-li"><span>'+k+'</span><b>'+v+'</b></div>';
+  let h = drawerHead(esc(n.nome), esc(n.cidade||'')+' · '+recLb(a.competencia));
+  h += '<div class="drawer-body">'+
+    '<div class="pc-title" style="margin-bottom:6px">Valores</div>'+
+    (ed ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+      fld('recVd','Vendas',a.vendas??'','number')+fld('recPl','Placas adimplentes',a.placas??'','number')+fld('recVb','Valor adimplente',a.valor_base??'','number')+fld('recVr','Recorrência',a.valor_recorrencia??'','number')+
+      fld('recDs','Desconto (vale/empréstimo)',a.desconto??'','number')+fld('recRc','Valor a receber',a.valor_receber??'','number')+'</div>'+
+      '<div class="field"><label>Situação</label><input id="recSt" value="'+esc(a.situacao||'')+'" placeholder="OK, NÃO BATEU META, FALTA NOTA…"></div>'+
+      '<div class="field"><label>Observação</label><textarea id="recOb" rows="2">'+esc(a.observacao||'')+'</textarea></div>'+
+      '<button class="btn primary" style="width:100%;justify-content:center;margin-bottom:12px" onclick="recSalvar(\''+a.id+'\')">Salvar apuração</button>'
+    : li('Vendas', a.vendas??'—')+li('Placas adimplentes', a.placas??'—')+li('Valor adimplente', a.valor_base!=null?money(+a.valor_base,true):'—')+li('Recorrência', a.valor_recorrencia!=null?money(+a.valor_recorrencia,true):'—')+li('Desconto', +a.desconto?money(+a.desconto,true):'—')+li('A receber', a.valor_receber!=null?money(+a.valor_receber,true):'—')+(a.observacao?'<div class="cob-obs"><span>Observação</span>'+esc(a.observacao)+'</div>':''))+
+    '<div class="cob-obs" style="background:var(--accent-soft)"><span>Conferência automática (base de boletos do Nexa · '+recLb(recMesAnt(a.competencia)).toLowerCase()+')</span>'+
+      (c.valor!=null ? 'Placas adimplentes: <b>'+c.placas+'</b> · valor: <b>'+money(c.valor,true)+'</b>'+(c.vendas!=null?' · vendas: <b>'+c.vendas+'</b>':'')+(c.calc!=null?'<br>Cálculo pela regra: <b>'+money(c.calc,true)+'</b> ('+esc(c.como)+')':'') : 'Sem cooperativa vinculada a este representante.')+'</div>'+
+    '<div class="pc-title" style="margin:16px 0 6px">Negociação</div><div class="cob-obs" style="white-space:pre-wrap">'+esc(n.texto||'—')+'</div>'+
+    (ed ? '<div class="field"><label>Cooperativas da base (uma por linha)</label><textarea id="recCo" rows="3">'+esc((n.cooperativas||[]).join('\n'))+'</textarea></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'+fld('recRp','% recorrência',(n.regra||{}).pct??'','number')+fld('recRm','Meta (vendas)',(n.regra||{}).meta??'','number')+fld('recRf','Fixo mensal',(n.regra||{}).fixo??'','number')+'</div>'+
+      '<button class="btn" style="width:100%;justify-content:center" onclick="recSalvarNeg(\''+n.id+'\',\''+a.id+'\')">Salvar negociação</button>' : li('Cooperativas', esc((n.cooperativas||[]).join(', ')||'—')))+
+    '<div class="pc-title" style="margin:18px 0 6px">Conferência</div>'+li('Status', '<span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span>')+(a.conferencia_obs?'<div class="cob-obs">'+esc(a.conferencia_obs)+'</div>':'')+
+    (recPode('conferir')?'<div class="rec-acoes"><button class="btn sm primary" onclick="recConferir(\''+a.id+'\',\'liberado\');closeDrawer()">Liberar</button><button class="btn sm" onclick="recConferir(\''+a.id+'\',\'revisar\');closeDrawer()">Revisar</button></div>':'')+
+    (a.conferencia==='liberado' ? '<div class="pc-title" style="margin:18px 0 6px">Envio ao representante</div><div class="rec-acoes"><a class="btn sm primary" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(recMsgWhats(n,a))+'">WhatsApp com a mensagem pronta</a><button class="btn sm" onclick="recPdf(\''+a.id+'\')">'+icon('download',13)+' PDF</button></div>' : '')+
+    '</div>';
+  openDrawer(h);
+}
+async function recSalvar(id){
+  const v = k=>{ const x=$(k).value; return x===''?null:+x; };
+  const patch = {vendas:v('recVd'), placas:v('recPl'), valor_base:v('recVb'), valor_recorrencia:v('recVr'), desconto:v('recDs'), valor_receber:v('recRc'), situacao:$('recSt').value||null, observacao:$('recOb').value||null};
+  const { error } = await sb.from('rec_apuracoes').update(patch).eq('id', id);
+  if(error){ console.error(error); toast('Não foi possível salvar'); return; }
+  Object.assign(REC.apu.find(x=>x.id===id), patch); toast('Apuração salva'); render(); recDetalhe(id);
+}
+async function recSalvarNeg(nid, aid){
+  const co = $('recCo').value.split('\n').map(s=>s.trim()).filter(Boolean), num = k=>{ const x=$(k).value; return x===''?undefined:+x; };
+  const regra = {}; [['pct','recRp'],['meta','recRm'],['fixo','recRf']].forEach(([k,i])=>{ const x=num(i); if(x!=null) regra[k]=x; });
+  const { error } = await sb.from('rec_negociacoes').update({cooperativas:co, regra}).eq('id', nid);
+  if(error){ console.error(error); toast('Não foi possível salvar'); return; }
+  Object.assign(REC.negs.find(x=>x.id===nid), {cooperativas:co, regra}); toast('Negociação salva'); render(); recDetalhe(aid);
+}
+function recPdf(id){
+  const a = REC.apu.find(x=>x.id===id), n = REC.negs.find(x=>x.id===a.negociacao_id);
+  const li = (k,v)=>'<tr><td>'+k+'</td><td style="text-align:right;font-weight:600">'+v+'</td></tr>';
+  const w = window.open('', '_blank'); if(!w){ toast('Permita pop-ups para gerar o PDF'); return; }
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Recorrência '+esc(n.nome)+' '+a.competencia+'</title><style>body{font-family:Arial,sans-serif;color:#102A38;padding:32px;max-width:720px;margin:auto}h1{font-size:20px;margin:0}p{color:#5F7181}table{width:100%;border-collapse:collapse;margin-top:18px}td{padding:9px 6px;border-bottom:1px solid #E3E9EF;font-size:13px}.tot td{font-size:15px;background:#E7F3F5}</sty'+'le></head><body>'+
+    '<h1>Fechamento de recorrência</h1><p>'+esc(n.nome)+' · '+esc(n.cidade||'')+'<br>Pagamento de '+recLb(a.competencia)+' · resultado de '+recLb(recMesAnt(a.competencia)).toLowerCase()+'</p><table>'+
+    (a.vendas!=null?li('Vendas no mês',a.vendas):'')+(a.placas!=null?li('Placas adimplentes',a.placas):'')+(a.valor_base!=null?li('Valor total adimplente',money(+a.valor_base,true)):'')+
+    (a.valor_recorrencia!=null?li('Recorrência',money(+a.valor_recorrencia,true)):'')+(+a.desconto?li('Desconto','−'+money(+a.desconto,true)):'')+'<tr class="tot"><td><b>Valor a receber</b></td><td style="text-align:right"><b>'+money(+a.valor_receber||0,true)+'</b></td></tr></table>'+
+    (a.observacao?'<p>'+esc(a.observacao)+'</p>':'')+'<p style="font-size:11px;margin-top:30px">Nexa Gestão · emitido em '+new Date().toLocaleString('pt-BR')+'</p><script>window.print()<'+'/script></body></html>');
+  w.document.close();
+}
+async function renderRecNegociacoes(){
+  if(!await recPronto('Negociações')) return;
+  let h = recHead('Recorrência · negociações');
+  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl"><thead><tr><th>Representante</th><th>Cooperativas da base</th><th>Regra lida</th><th>Negociação</th></tr></thead><tbody>'+
+    REC.negs.map(n=>{ const r=n.regra||{}; const a = REC.apu.find(x=>x.negociacao_id===n.id && x.competencia===REC.comp);
+      return '<tr'+(a?' class="hoverable" onclick="recDetalhe(\''+a.id+'\')"':'')+'><td><div class="tit-f">'+esc(n.nome)+'</div><div style="font-size:11.5px;color:var(--text2)">'+esc(n.cidade||'')+'</div></td>'+
+        '<td class="tit-s">'+(n.cooperativas&&n.cooperativas.length?esc(n.cooperativas.join(', ')):'<span style="color:var(--warn)">vincular</span>')+'</td>'+
+        '<td>'+[r.fixo?'fixo '+money(r.fixo):'', r.pct?r.pct+'%':'', r.meta?'meta '+r.meta:''].filter(Boolean).join(' · ')+(n.ambigua?' <span class="ra-tag ruim">conferir</span>':'')+'</td>'+
+        '<td class="tit-s" style="max-width:520px;white-space:normal;font-size:12px">'+esc((n.texto||'').slice(0,220))+((n.texto||'').length>220?'…':'')+'</td></tr>'; }).join('')+
+    '</tbody></table></div></div>';
+  $('content').innerHTML = h;
+}
+
 function render(){
   if(currentUser && !empresaAutorizada(state.empresa)){
     const primeira = (currentUser.empresas||[])[0];
@@ -6655,6 +6985,7 @@ function render(){
   }
   if(currentUser && !podeVer(state.view)){ state.view = PERFIS[state.role].mods[0]; state.adminPage = null; }
   if(COB.emp && COB.emp!==state.empresa){ COB.emp=null; COB.boletos=[]; }
+  if(REC.emp && REC.emp!==state.empresa){ REC.emp=null; REC.papel=null; recPapelCarregar().then(render); }
   applyBrand(); applyChrome();
   renderSidebar(); renderTopbar();
   if(CARREGANDO[state.empresa] && !HYDRATED[state.empresa]){
@@ -6663,7 +6994,7 @@ function render(){
       '<div class="t2">Buscando os títulos a pagar e a receber no banco de dados.</div></div>';
     return;
   }
-  const views={dashboard:renderDashboard, reports:renderReports, cob_painel:renderCobPainel, cob_carteiras:renderCobCarteiras, cob_inad:renderCobInad, cob_coop:renderCobCoop, cob_acomp:renderCobAcomp, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
+  const views={rec_apuracao:renderRecApuracao, rec_conferencia:renderRecConferencia, rec_negociacoes:renderRecNegociacoes, dashboard:renderDashboard, reports:renderReports, cob_painel:renderCobPainel, cob_carteiras:renderCobCarteiras, cob_inad:renderCobInad, cob_coop:renderCobCoop, cob_acomp:renderCobAcomp, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
     receber:()=>renderTitulos('receber'), bordero:renderBordero, admin:renderAdmin};
   (views[state.view]||renderDashboard)();
@@ -9931,6 +10262,7 @@ async function showApp(){
   catch(e){ console.error('Falha ao carregar dados reais de '+EMPRESAS[state.empresa].curto+', mantendo demonstração:', e); }
   try{ await loadBrandLogos(); } catch(e){ console.error('Falha ao carregar logos das empresas:', e); }
   try{ await loadConciliacaoResolvidas(); } catch(e){ console.error('Falha ao carregar conciliações resolvidas:', e); }
+  try{ await recPapelCarregar(); } catch(e){ console.error('Falha ao carregar papel da recorrência:', e); }
   render();
 }
 
