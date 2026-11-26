@@ -1221,13 +1221,14 @@ const NAV = [
     {id:'cob_carteiras', n:'Carteiras', ic:'wallet'},
     {id:'cob_coop', n:'Cooperativas', ic:'users'},
     {id:'cob_acomp', n:'Acompanhamento', ic:'check'}]},
+  {sec:'Pessoas', items:[{id:'rh_painel', n:'Custo com pessoal', ic:'users'}]},
   {sec:'Recorrência', items:[
     {id:'rec_apuracao', n:'Apuração', ic:'wallet'},
     {id:'rec_conferencia', n:'Conferência', ic:'check'},
     {id:'rec_negociacoes', n:'Negociações', ic:'file'}]},
   {sec:'Administração', items:[{id:'admin', n:'Administração', ic:'settings'}]}
 ];
-function podeVer(id){ if(String(id).startsWith('rec_')) return !!(typeof REC!=='undefined' && REC.papel); return PERFIS[state.role].mods.includes(id); }
+function podeVer(id){ if(id==='rh_painel') return !!(typeof RH!=='undefined' && RH.pode); if(String(id).startsWith('rec_')) return !!(typeof REC!=='undefined' && REC.papel); return PERFIS[state.role].mods.includes(id); }
 function renderSidebar(){
   const e=EMPRESAS[state.empresa];
   const multiEmpresa=((currentUser&&currentUser.empresas)||[]).length>1;
@@ -7051,6 +7052,166 @@ async function renderRecNegociacoes(){
   $('content').innerHTML = h;
 }
 
+/* =========================== PESSOAS (RH) ===========================
+   Folha (CLT, PJ, contrato, aprendiz, diretoria) e benefícios VT/VA por mês,
+   importados das planilhas do RH. Acesso: rh_pode() no banco (admin, RH e
+   leitura da diretoria). CPF, e-mail e números longos das observações
+   são descartados na importação. */
+const RH = {pode:false, edita:false, emp:null, folha:[], ben:[], comp:null, f:{q:'', tipo:''}};
+async function rhPapelCarregar(){
+  RH.pode = RH.edita = false;
+  const id = EMPRESA_IDS[state.empresa]; if(!id || !currentUser) return;
+  const [a,b] = await Promise.all([sb.rpc('rh_pode',{p_empresa:id, p_editar:false}), sb.rpc('rh_pode',{p_empresa:id, p_editar:true})]);
+  RH.pode = !!a.data; RH.edita = !!b.data;
+}
+async function rhCarregar(force){
+  const emp = state.empresa, id = EMPRESA_IDS[emp];
+  if(RH.emp===emp && !force) return;
+  const [f, b] = await Promise.all([
+    fetchAllRows(o=>sb.from('rh_folha').select('*', o).eq('empresa_id', id)),
+    fetchAllRows(o=>sb.from('rh_beneficios').select('*', o).eq('empresa_id', id))
+  ]);
+  RH.folha = f||[]; RH.ben = b||[]; RH.emp = emp;
+}
+const rhSan = s=>{ if(s==null) return null; const t = String(s).replace(/[\w.+-]+@[\w-]+\.[\w.]+/g,'').replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g,'').replace(/\d{8,}/g,'').replace(/\s{2,}/g,' ').trim(); return t||null; };
+function rhNum(x){ if(x==null||x==='') return null; if(typeof x==='number') return x; const t=String(x).trim(); if(!/\d/.test(t)) return null; const v=parseFloat(t.replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.')); return isNaN(v)?null:v; }
+function rhTipo(depto, adm, nome){
+  const t = recNorm((depto||'')+' '+(adm||'')+' '+(nome||''));
+  if(/\(PJ\)|\bPJ\b/.test(t)) return 'PJ';
+  if(/APRENDIZ/.test(t)) return 'Aprendiz';
+  if(/DIRETORIA/.test(recNorm(depto||''))) return 'Diretoria';
+  if(/CONTRATO/.test(t)) return 'Contrato';
+  return 'CLT';
+}
+function rhParseFolha(rows, comp, aba){
+  const iH = rows.findIndex(r=>r && r.some(x=>/SALDO LIQUIDO|VALOR BASE/.test(recNorm(x)))); if(iH<0) return [];
+  const H = rows[iH].map(recNorm), col = re=>H.findIndex(h=>re.test(h));
+  const cAdm = col(/ADMISS/), cNome = col(/COLABORADOR/)>=0 ? col(/COLABORADOR/) : 1, cDep = col(/DEPARTAMENTO/), cCid = col(/CIDADE/), cObs = col(/OBSERVA/),
+        cBase = col(/VALOR BASE/), cDesc = col(/DESCONTO/), cLiq = col(/LIQUIDO/);
+  const out = {}; let unidade = null;
+  rows.slice(iH+1).forEach(r=>{
+    if(!r) return; const a0 = r[cAdm], nome = r[cNome] ? String(r[cNome]).trim() : '';
+    const t0 = recNorm(typeof a0==='string'?a0:'');
+    if(/^(PAGAMENTO|BASE|TOTAL|HUB)/.test(t0) || !nome || /^TOTAL/.test(recNorm(nome))) return;
+    const base = rhNum(r[cBase]); if(base==null) return;
+    const adm = a0 instanceof Date ? a0.toISOString().slice(0,10) : null;
+    unidade = r[cCid] ? String(r[cCid]).trim() : unidade;
+    const extra = rhSan(r[cLiq+1]);
+    out[recNorm(nome)] = {competencia:comp, nome, departamento:r[cDep]?String(r[cDep]).trim():null, cidade:unidade, unidade,
+      tipo:rhTipo(r[cDep], typeof a0==='string'?a0:'', ''), admissao:adm, observacao:[rhSan(r[cObs]), extra].filter(Boolean).join(' · ')||null,
+      valor_base:base, desconto:rhNum(r[cDesc]), liquido:rhNum(r[cLiq]), origem:'folha: '+aba};
+  });
+  return Object.values(out);
+}
+function rhParseBen(rows, comp, aba){
+  const iH = rows.findIndex(r=>r && r.some(x=>/^COLABORADOR/.test(recNorm(x)))); if(iH<0) return [];
+  const H = rows[iH].map(recNorm), col = re=>H.findIndex(h=>re.test(h));
+  const cNome = col(/^COLABORADOR/), cSet = col(/^SETOR/), cCid = col(/^CIDADE/), cVt = col(/^TRANSPORTE/), cVa = col(/^ALIMENTACAO/), cTot = col(/RECEB/), cTipo = col(/TIPO/), cDias = col(/^DIAS/);
+  const out = {};
+  for(const r of rows.slice(iH+1)){
+    if(!r) continue; const nome = r[cNome] ? String(r[cNome]).trim() : '';
+    if(!nome) continue; if(/^VALORES PARA|^TOTAL/.test(recNorm(nome))) break;
+    const vt = rhNum(r[cVt]), va = rhNum(r[cVa]); let tot = cTot>=0 ? rhNum(r[cTot]) : null; if(tot==null) tot = (vt||0)+(va||0);
+    const tp = recNorm(r[cTipo]||'');
+    out[recNorm(nome)] = {competencia:comp, nome, setor:r[cSet]?String(r[cSet]).trim():null, cidade:r[cCid]?String(r[cCid]).trim():null,
+      tipo: /PJ/.test(tp)?'PJ':/CLT/.test(tp)?'CLT':tp?String(r[cTipo]).trim():null, vt, va, total:tot, dias:parseInt(String(r[cDias]||'').replace(/\D/g,''))||null,
+      observacao: [r[cVt],r[cVa]].some(x=>/HOME OFFICE/i.test(String(x||'')))?'Home office':null, origem:'benefícios: '+aba};
+  }
+  return Object.values(out);
+}
+function rhImportarAbrir(){
+  openModal('<div class="modal-head"><div class="drawer-title">Importar planilha de RH</div><div class="drawer-sub">Folha de pagamento ou Vale-transporte/alimentação (.xlsx) — todas as abas de mês são importadas</div></div>'+
+    '<div class="modal-body"><div class="field"><label>Tipo</label><select id="rhTipo"><option value="folha">Folha de pagamento</option><option value="ben">Benefícios VT / VA</option></select></div>'+
+    '<div class="field"><label>Arquivo (.xlsx)</label><input type="file" id="rhArq" accept=".xlsx"></div><div id="rhImpMsg" style="font-size:13px;margin-top:10px"></div></div>'+
+    '<div class="modal-foot"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" id="rhImpBtn" onclick="rhImportar()">Importar</button></div>');
+}
+async function rhImportar(){
+  const msg = $('rhImpMsg'), btn = $('rhImpBtn'), f = $('rhArq').files[0], tipo = $('rhTipo').value, empId = EMPRESA_IDS[state.empresa];
+  if(!f){ msg.textContent = 'Escolha o arquivo.'; return; }
+  btn.disabled = true; msg.textContent = 'Lendo…';
+  try{
+    const wb = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true});
+    let n = 0; const meses = [];
+    for(const aba of wb.SheetNames){
+      const comp = recMesDaAba(aba); if(!comp) continue;
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[aba], {header:1, raw:true, defval:null});
+      const itens = (tipo==='folha' ? rhParseFolha : rhParseBen)(rows, comp, aba).map(x=>({...x, empresa_id:empId}));
+      if(!itens.length) continue;
+      const { error } = await sb.from(tipo==='folha'?'rh_folha':'rh_beneficios').upsert(itens, {onConflict:'empresa_id,competencia,nome'}); if(error) throw error;
+      n += itens.length; meses.push(comp);
+    }
+    msg.textContent = n+' linhas importadas de '+meses.length+' meses ('+(meses.length?recLb(meses.sort()[0])+' a '+recLb(meses[meses.length-1]):'—')+').';
+    await sb.from('logs').insert({empresa_id:empId, acao:'RH — importação', detalhe:(tipo==='folha'?'Folha':'Benefícios')+' · '+meses.length+' meses', usuario_id:currentUser.id});
+    await rhCarregar(true); RH.comp = null; render();
+  }catch(e){ console.error(e); msg.textContent = 'Erro: '+(e.message||e); }
+  btn.disabled = false;
+}
+/* ---------- tela ---------- */
+const RH_TIPO_COR = {CLT:'#123D4A', PJ:'#159E9F', Contrato:'#5FC1C1', Diretoria:'#9AD8D6', Aprendiz:'#CFE9E8'};
+function rhPessoasMes(comp){
+  const m = {};
+  RH.folha.filter(x=>x.competencia===comp).forEach(x=>{ m[recNorm(x.nome)] = {nome:x.nome, dep:x.departamento, cid:x.cidade, tipo:x.tipo, adm:x.admissao, obs:x.observacao, base:+x.valor_base||0, desc:+x.desconto||0, liq:x.liquido!=null?+x.liquido:null, vt:0, va:0, ben:0}; });
+  // benefícios casam pelo nome (primeiro + segundo nome), já que as planilhas abreviam
+  const chave = n=>recNorm(n).split(' ').filter(w=>w.length>2).slice(0,2).join(' ');
+  const porChave = {}; Object.values(m).forEach(p=>porChave[chave(p.nome)] = p);
+  RH.ben.filter(x=>x.competencia===comp).forEach(b=>{
+    const p = m[recNorm(b.nome)] || porChave[chave(b.nome)] || Object.values(m).find(p=>recNorm(p.nome).startsWith(recNorm(b.nome).split(' ')[0]+' ') && chave(p.nome).split(' ')[1]?.[0]===chave(b.nome).split(' ')[1]?.[0]);
+    const alvo = p || (m['~'+recNorm(b.nome)] = {nome:b.nome, dep:b.setor, cid:b.cidade, tipo:b.tipo||'—', base:0, desc:0, liq:null, vt:0, va:0, ben:0, soBen:true});
+    alvo.vt += +b.vt||0; alvo.va += +b.va||0; alvo.ben += +b.total||0;
+  });
+  return Object.values(m);
+}
+function rhRecebidoMes(comp){
+  return (RECEBER[state.empresa]||[]).filter(t=>t.status==='Recebido' && t.rec && (t.rec.getFullYear()+'-'+String(t.rec.getMonth()+1).padStart(2,'0'))===comp).reduce((s,t)=>s+(t.vrec||t.vprev||0),0);
+}
+async function renderRhPainel(){
+  const titulo = 'Pessoas · custo com pessoal';
+  if(!RH.pode){ $('content').innerHTML = pageHead('Pessoas','')+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Sem acesso aos dados de RH desta empresa</div></div></div>'; return; }
+  if(RH.emp!==state.empresa){ $('content').innerHTML = pageHead(titulo,'')+'<div class="card" style="padding:28px;text-align:center;color:var(--text2)">Carregando…</div>'; await rhCarregar(); if(state.view!=='rh_painel') return; }
+  const comps = [...new Set(RH.folha.map(x=>x.competencia).concat(RH.ben.map(x=>x.competencia)))].sort();
+  if(!RH.comp || !comps.includes(RH.comp)) RH.comp = [...new Set(RH.folha.map(x=>x.competencia))].sort().pop() || comps[comps.length-1] || null;
+  let h = pageHead(titulo,'', (RH.edita?'<button class="btn sm" onclick="rhImportarAbrir()">'+icon('upload',14)+' Importar planilha</button>':''));
+  if(!RH.comp){ $('content').innerHTML = h+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Nenhum dado de RH ainda</div><div class="t2">Importe a planilha da folha de pagamento e a de VT/VA.</div></div></div>'; return; }
+  h += '<div class="cob-bar"><label class="cob-mes">Competência<select class="select" onchange="RH.comp=this.value;render()">'+comps.slice().reverse().map(c=>'<option value="'+c+'"'+(c===RH.comp?' selected':'')+'>'+recLb(c)+'</option>').join('')+'</select></label></div>';
+  const P = rhPessoasMes(RH.comp), ant = comps[comps.indexOf(RH.comp)-1];
+  const tot = L=>L.reduce((s,p)=>s+p.base+p.ben,0);
+  const folha = P.reduce((s,p)=>s+p.base,0), ben = P.reduce((s,p)=>s+p.ben,0), custo = folha+ben, nP = P.filter(p=>!p.soBen).length;
+  const custoAnt = ant ? tot(rhPessoasMes(ant)) : null, rec = rhRecebidoMes(RH.comp);
+  const porTipo = {}; P.forEach(p=>{ const t = p.tipo||'—'; const o = porTipo[t] = porTipo[t]||{n:0,v:0}; if(!p.soBen) o.n++; o.v += p.base+p.ben; });
+  h += '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">'+
+    kpi('Custo total com pessoal', money(custo), custoAnt?pctChange(custo,custoAnt):null, 'folha + VT/VA · vs '+(ant?recLb(ant).toLowerCase():'—'))+
+    kpi('Folha (valor base)', money(folha), null, 'líquido pago '+money(P.reduce((s,p)=>s+(p.liq||0),0)))+
+    kpi('Benefícios VT / VA', money(ben), null, 'VT '+money(P.reduce((s,p)=>s+p.vt,0))+' · VA '+money(P.reduce((s,p)=>s+p.va,0)))+
+    kpi('Colaboradores', String(nP), null, Object.entries(porTipo).filter(([,o])=>o.n).sort((a,b)=>b[1].n-a[1].n).map(([t,o])=>o.n+' '+t).join(' · '))+'</div>';
+  // evolução
+  const evo = [...new Set(RH.folha.map(x=>x.competencia))].sort().slice(-12);
+  const evF = [], evB = [], evT = [];
+  evo.forEach(c=>{ const L = rhPessoasMes(c); const f = L.reduce((s,p)=>s+p.base,0), b = L.reduce((s,p)=>s+p.ben,0); evF.push(f); evB.push(b); evT.push(f+b); });
+  const lbs = evo.map(c=>MESES[+c.slice(5)-1]+'/'+c.slice(2,4));
+  h += '<div class="grid-2" style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:16px">'+
+    chartCard({id:'rh_evo', title:'Evolução do custo com pessoal', quick:false, body:pcComboBarLine('rh_evo', lbs, [{name:'Folha', values:evF, tone:'var(--c-in)'},{name:'VT / VA', values:evB, tone:'var(--c-out)'}], {name:'Custo total', values:evT}, {h:300})+
+      legend([{color:'var(--c-in)',name:'Folha'},{color:'var(--c-out)',name:'VT / VA'},{color:'var(--navy)',name:'Custo total'}])})+
+    chartCard({id:'rh_tipo', title:'Por tipo de contratação', quick:false, body:pcDonut('rh_tipo', Object.entries(porTipo).sort((a,b)=>b[1].v-a[1].v).map(([t,o])=>({name:t+' ('+o.n+')', value:o.v})), {h:200})})+'</div>';
+  const porCid = {}; P.forEach(p=>{ const c = (p.cid||'—').trim(); porCid[c] = (porCid[c]||0)+p.base+p.ben; });
+  const porDep = {}; P.forEach(p=>{ const d = (p.dep||'—').replace(/\(.*?\)/g,'').split(' - ')[0].trim(); porDep[d] = (porDep[d]||0)+p.base+p.ben; });
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'+
+    chartCard({id:'rh_cid', title:'Por unidade', quick:false, body:pcHBars(Object.entries(porCid).sort((a,b)=>b[1]-a[1]).map(([n,v])=>({name:n, value:v})))})+
+    chartCard({id:'rh_dep', title:'Por departamento', quick:false, body:pcHBars(Object.entries(porDep).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([n,v])=>({name:n, value:v})))})+'</div>';
+  if(rec>0) h += '<div class="card cob-meta" style="padding-bottom:16px"><div class="cob-meta-lb"><span>Custo com pessoal sobre os recebimentos de '+recLb(RH.comp).toLowerCase()+' ('+money(rec)+')</span><b>'+pct(custo/rec*100,1)+'</b></div><div class="cob-meta-bar"><i class="cob-ok" style="width:'+Math.min(100,custo/rec*100)+'%"></i></div></div>';
+  // tabela
+  const q = recNorm(RH.f.q), tipos = Object.keys(porTipo);
+  h += '<div class="tit-bar"><input class="tit-busca" type="text" placeholder="Buscar colaborador, setor ou cidade…" value="'+esc(RH.f.q)+'" oninput="RH.f.q=this.value;clearTimeout(window._rhb);window._rhb=setTimeout(()=>{render();const i=document.querySelector(\'.tit-busca\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">'+
+    '<div class="seg">'+[''].concat(tipos).map(t=>'<button class="'+(RH.f.tipo===t?'on':'')+'" onclick="RH.f.tipo=\''+t+'\';render()">'+(t||'Todos')+'</button>').join('')+'</div></div>';
+  const L = P.filter(p=>(!q || recNorm(p.nome+' '+(p.dep||'')+' '+(p.cid||'')).includes(q)) && (!RH.f.tipo || p.tipo===RH.f.tipo)).sort((a,b)=>(b.base+b.ben)-(a.base+a.ben));
+  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl"><thead><tr><th>Colaborador</th><th>Contratação</th><th>Unidade</th><th class="num">Valor base</th><th class="num">Descontos</th><th class="num">Líquido</th><th class="num">VT</th><th class="num">VA</th><th class="num">Custo total</th></tr></thead><tbody>'+
+    L.map(p=>'<tr'+(p.obs?tip(tipRows(esc(p.nome),[['var(--text2)','Obs.',esc(p.obs)]])):'')+'><td><div class="tit-f">'+esc(p.nome)+'</div><div style="font-size:11.5px;color:var(--text2)">'+esc(p.dep||'')+(p.adm?' · desde '+p.adm.split('-').reverse().join('/'):'')+'</div></td>'+
+      '<td><span class="status-badge st-neutro"><i style="display:inline-block;width:7px;height:7px;border-radius:2px;background:'+(RH_TIPO_COR[p.tipo]||'#93A3AE')+';margin-right:5px"></i>'+esc(p.tipo||'—')+'</span></td><td class="tit-s">'+esc(p.cid||'')+'</td>'+
+      '<td class="num">'+(p.base?money(p.base,true):'—')+'</td><td class="num" style="color:var(--neg)">'+(p.desc?'−'+money(p.desc,true):'—')+'</td><td class="num">'+(p.liq!=null?money(p.liq,true):'—')+'</td>'+
+      '<td class="num">'+(p.vt?money(p.vt,true):'—')+'</td><td class="num">'+(p.va?money(p.va,true):'—')+'</td><td class="num" style="font-weight:600">'+money(p.base+p.ben,true)+'</td></tr>').join('')+
+    '</tbody><tfoot><tr><td colspan="3"><b>Total ('+L.length+')</b></td><td class="num"><b>'+money(L.reduce((s,p)=>s+p.base,0),true)+'</b></td><td class="num">'+money(L.reduce((s,p)=>s+p.desc,0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+(p.liq||0),0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+p.vt,0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+p.va,0),true)+'</td><td class="num"><b>'+money(L.reduce((s,p)=>s+p.base+p.ben,0),true)+'</b></td></tr></tfoot></table></div></div>';
+  $('content').innerHTML = h;
+}
+
 function render(){
   if(currentUser && !empresaAutorizada(state.empresa)){
     const primeira = (currentUser.empresas||[])[0];
@@ -7061,6 +7222,7 @@ function render(){
   if(currentUser && !podeVer(state.view)){ state.view = PERFIS[state.role].mods[0]; state.adminPage = null; }
   if(COB.emp && COB.emp!==state.empresa){ COB.emp=null; COB.boletos=[]; }
   if(REC.emp && REC.emp!==state.empresa){ REC.emp=null; REC.papel=null; recPapelCarregar().then(render); }
+  if(RH.emp && RH.emp!==state.empresa){ RH.emp=null; RH.pode=false; rhPapelCarregar().then(render); }
   applyBrand(); applyChrome();
   renderSidebar(); renderTopbar();
   if(CARREGANDO[state.empresa] && !HYDRATED[state.empresa]){
@@ -7069,7 +7231,7 @@ function render(){
       '<div class="t2">Buscando os títulos a pagar e a receber no banco de dados.</div></div>';
     return;
   }
-  const views={rec_apuracao:renderRecApuracao, rec_conferencia:renderRecConferencia, rec_negociacoes:renderRecNegociacoes, dashboard:renderDashboard, reports:renderReports, cob_painel:renderCobPainel, cob_carteiras:renderCobCarteiras, cob_inad:renderCobInad, cob_coop:renderCobCoop, cob_acomp:renderCobAcomp, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
+  const views={rh_painel:renderRhPainel, rec_apuracao:renderRecApuracao, rec_conferencia:renderRecConferencia, rec_negociacoes:renderRecNegociacoes, dashboard:renderDashboard, reports:renderReports, cob_painel:renderCobPainel, cob_carteiras:renderCobCarteiras, cob_inad:renderCobInad, cob_coop:renderCobCoop, cob_acomp:renderCobAcomp, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
     receber:()=>renderTitulos('receber'), bordero:renderBordero, admin:renderAdmin};
   (views[state.view]||renderDashboard)();
@@ -10338,6 +10500,7 @@ async function showApp(){
   try{ await loadBrandLogos(); } catch(e){ console.error('Falha ao carregar logos das empresas:', e); }
   try{ await loadConciliacaoResolvidas(); } catch(e){ console.error('Falha ao carregar conciliações resolvidas:', e); }
   try{ await recPapelCarregar(); } catch(e){ console.error('Falha ao carregar papel da recorrência:', e); }
+  try{ await rhPapelCarregar(); } catch(e){ console.error('Falha ao carregar acesso de RH:', e); }
   render();
 }
 
