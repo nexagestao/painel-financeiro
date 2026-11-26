@@ -4565,6 +4565,14 @@ body.dark .rp-tbl tfoot td{background:#0F1720}
 .fx-full{padding:18px 22px;height:100%;display:flex;flex-direction:column}
 .fx-full-h{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
 .fx-full-b{flex:1;min-height:0;overflow:auto}
+
+/* ---------- Dashboard: cartões de gráfico do mesmo tamanho, sem filete no topo dos KPIs ---------- */
+.kpi::after{display:none}
+.dash-grid{align-items:stretch}
+.dash-grid > .dz{display:flex;min-width:0}
+.dash-grid > .dz > .card{flex:1;height:400px;display:flex;flex-direction:column;min-width:0}
+.dash-grid > .dz > .card > .card-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;justify-content:center}
+.dash-grid > .dz > .card > .card-body .tbl th{position:sticky;top:0}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
