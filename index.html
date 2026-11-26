@@ -1695,7 +1695,7 @@ function alertas(){
   if(negMeses.length) out.push({tipo:'neg', t:'Saldo projetado negativo em '+negMeses.join(', '), d:'Menor saldo projetado: '+money(menorSaldoProj().valor)+'. Avaliar antecipação de recebíveis ou postergação de saídas.'});
   const ms=menorSaldoProj();
   if(!negMeses.length) out.push({tipo:'ok', t:'Caixa projetado positivo até Dez/2026', d:'Menor saldo projetado: '+money(ms.valor)+' em '+ms.mes+'.'});
-  const a=ASSOC[state.empresa];
+  const a=null;
   if(a && a.inadimplencia>13) out.push({tipo:'warn', t:'Inadimplência de associados em '+pct(a.inadimplencia), d:'Acima do limite de referência de 13%. Reforçar recuperação de boletos vencidos.'});
   // Diferença de conciliação bancária — só visível para Administrador
   // (Diretoria/Visualização/outros perfis não veem este alerta nem o valor).
@@ -3299,7 +3299,7 @@ function renderIndicadores(){
     ['Prazo Médio de Pagamento',pmp+' dias','emissão até pagamento'],
     ['Prazo Médio de Recebimento',pmr+' dias','emissão até recebimento']
   ]);
-  const a=ASSOC[state.empresa];
+  if(false){ const a=ASSOC[state.empresa];
   const assocItems=[
     ['Total de Associados',a.associados,x=>x.toLocaleString('pt-BR')],
     ['Associados Ativos',a.ativos,x=>x.toLocaleString('pt-BR')],
@@ -3324,7 +3324,7 @@ function renderIndicadores(){
   let g='<div class="card"><div class="card-head"><div style="flex:1"><div class="card-title">Proteção Veicular — Indicadores da Associação</div><div class="card-sub">Somente indicadores com dados suficientes na base importada são exibidos</div></div></div><div class="card-body"><div class="kpi-grid" style="margin-bottom:0">';
   disponiveis.forEach(i=>g+=kpi(i[0], i[2](i[1]), null, i[3]||''));
   g+='</div>';
-  h+=g+'</div></div>';
+  h+=g+'</div></div>'; }
   $('content').innerHTML=h;
 }
 </script>
@@ -4943,7 +4943,9 @@ const CHART_DEFS={
 };
 
 const CARD_DEFS={
-  saldo_atual:{t:'Saldo Atual', fmt:'m', calc:c=>({v:c.saldoA, leg:'consolidado bancário em 31/07', cor:c.saldoA<0?'neg':''})},
+  saldo_atual:{t:'Saldo Atual', fmt:'m', calc:c=>({v:c.saldoA, leg:c.saldoData?'bancos em '+c.saldoData:'consolidado bancário', cor:c.saldoA<0?'neg':''})},
+  ger_real:{t:'Geração de Caixa · realizado', fmt:'m', calc:c=>({v:c.entR-c.saiR, leg:'entradas '+kfmt(c.entR)+' · saídas '+kfmt(c.saiR)+(c.realLbl?' · '+c.realLbl:''), cor:c.entR-c.saiR<0?'neg':'pos'})},
+  res_real:{t:'Resultado Líquido · realizado', fmt:'m', calc:c=>({v:c.resR, leg:'DRE'+(c.realLbl?' · '+c.realLbl:''), cor:c.resR<0?'neg':'pos'})},
   saldo_proj:{t:'Saldo Previsto', fmt:'m', calc:c=>({v:c.saldoP, leg:'projeção até Dez/2026', cor:c.saldoP<0?'neg':''})},
   entradas:{t:'Entradas', fmt:'m', calc:c=>({v:c.ent, delta:c.entD, leg:'no período'})},
   saidas:{t:'Saídas', fmt:'m', calc:c=>({v:c.sai, delta:c.saiD, leg:'no período'})},
@@ -4960,7 +4962,7 @@ const CARD_DEFS={
   total_receber:{t:'Total a Receber', fmt:'m', calc:c=>({v:c.totReceber, leg:c.nReceber+' título(s) em aberto'})},
   vencidas:{t:'Contas Vencidas', fmt:'m', calc:c=>({v:c.vencidas, leg:'pagar + receber em atraso', cor:c.vencidas>0?'neg':''})},
   prox_venc:{t:'Próximos Vencimentos', fmt:'m', calc:c=>({v:c.prox7, leg:'a pagar nos próximos 7 dias'})},
-  menor_saldo:{t:'Menor Saldo Previsto', fmt:'m', calc:c=>({v:c.menor.valor, leg:'em '+c.menor.mes+'/2026', cor:c.menor.valor<0?'neg':''})}
+  menor_saldo:{t:'Menor Saldo Previsto', fmt:'m', calc:c=>({v:c.menor.valor, leg:'fim de '+c.menor.mes+'/2026 · com títulos em aberto', cor:c.menor.valor<0?'neg':''})}
 };
 
 function defaultDash(perfil){
@@ -4968,15 +4970,16 @@ function defaultDash(perfil){
   const chart=(id,size,extra)=>Object.assign({id, on:true, titulo:null, tipo:null, size:size||CHART_DEFS[id].size, legenda:true, valores:true, comp:true, drill:true},extra||{});
   const filtros=['regime','periodo','empresa','banco','categoria','conta','centro','status','resp','base'].map(id=>({id, on:['regime','periodo','empresa','banco','categoria','status'].includes(id), obrig:id==='periodo'}));
   let cards, charts;
-  if(perfil==='Diretoria'){ cards=['saldo_atual','saldo_proj','ebitda','resultado'].map(c=>card(c)); charts=[chart('rcd',3),chart('evolucao',3),chart('resultado_mensal',3)]; }
-  else if(perfil==='Cliente'){ cards=['saldo_atual','resultado','ebitda','inadimplencia'].map(c=>card(c)); charts=[chart('evolucao',6),chart('comp_despesas',3),chart('rec_categoria',3)]; }
+  if(perfil==='Diretoria'){ cards=['saldo_atual','menor_saldo','ger_real','res_real'].map(c=>card(c)); charts=[chart('rcd',3),chart('evolucao',3),chart('resultado_mensal',3)]; }
+  else if(perfil==='Cliente'){ cards=['saldo_atual','menor_saldo','res_real'].map(c=>card(c)); charts=[chart('evolucao',6),chart('resultado_mensal',3),chart('desp_categoria',3)]; }
   else if(perfil==='Visualização'){ cards=['saldo_atual','saldo_proj'].map(c=>card(c)); charts=[chart('evolucao',6)]; }
   else if(perfil==='Financeiro'){ cards=['total_pagar','total_receber','vencidas','prox_venc','saldo_atual','geracao'].map(c=>card(c)); charts=[chart('pxr',3),chart('fluxo_es',3),chart('saldo_bancos',3),chart('aging',3),chart('vencimentos',3),chart('alertas',3)]; }
-  else { cards=['saldo_atual','saldo_proj','entradas','saidas','geracao','resultado'].map(c=>card(c));
-    charts=[chart('rcd',3),chart('evolucao',3),chart('fluxo_es',3),chart('pxr',3),chart('saldo_bancos',3),chart('resultado_mensal',6),chart('comp_despesas',3),chart('comp_custos',3),chart('rec_categoria',3),chart('desp_categoria',3),chart('inadimplencia',3),chart('aging',3),chart('vencimentos',3),chart('alertas',3)]; }
-  return {cols:cards.length>=6?6:cards.length, cards, charts, filtros, versoes:[], atualizado:null, por:null};
+  else { cards=['saldo_atual','menor_saldo','ger_real','res_real'].map(c=>card(c));
+    charts=[chart('evolucao',3),chart('resultado_mensal',3),chart('desp_categoria',3),chart('vencimentos',3)]; }
+  return {cols:cards.length>=6?6:cards.length, cards, charts, filtros, versoes:[], atualizado:null, por:null, v:DASH_VER};
 }
 let DASH_STORE={};
+const DASH_VER=2; // muda quando o layout padrão muda: descarta caches locais antigos
 function dashKey(emp,perfil){ return (emp||state.empresa)+'|'+(perfil||state.role); }
 function dashCfg(emp,perfil){
   const k=dashKey(emp,perfil);
@@ -4990,7 +4993,7 @@ function saveDash(){
     const k=dashKey(state.empresa, perfilEditado);
     const cfg=DASH_STORE[k];
     if(cfg){ cfg.atualizado=new Date().toLocaleString('pt-BR'); cfg.por=(currentUser&&currentUser.nome)||'—'; }
-    localStorage.setItem('pef_v3', JSON.stringify({dash:DASH_STORE, brand:BRAND}));
+    localStorage.setItem('pef_v3', JSON.stringify({dash:DASH_STORE, brand:BRAND, v:DASH_VER}));
   }catch(e){}
   persistDashLayout(state.empresa, perfilEditado);
 }
@@ -5025,7 +5028,7 @@ function loadDash(){
   try{
     const raw=localStorage.getItem('pef_v3');
     if(raw){ const o=JSON.parse(raw);
-      if(o.dash) DASH_STORE=o.dash;
+      if(o.dash && o.v===DASH_VER) DASH_STORE=o.dash;
       if(o.brand) Object.keys(o.brand).forEach(k=>{ if(BRAND[k]) Object.assign(BRAND[k], o.brand[k]); });
     }
   }catch(e){}
@@ -5054,6 +5057,11 @@ function dashCtx(){
     eb, ebD:pctChange(eb,sp(m=>dreLinhaVal(lEB,m,reg))),
     res, resD:pctChange(res,sp(m=>dreLinhaVal(lRES,m,reg))),
     saldoA:saldoAtual(), saldoP:saldos('proj')[11].fim, menor:menorSaldoProj(),
+    saldoData:(BASES[state.empresa].saldoHoje&&BASES[state.empresa].saldoHoje.data)?fdate(BASES[state.empresa].saldoHoje.data):'',
+    entR:wm.filter(m=>m<=REAL_M).reduce((t,m)=>t+fluxoMes(m,'real').ent,0),
+    saiR:wm.filter(m=>m<=REAL_M).reduce((t,m)=>t+fluxoMes(m,'real').sai,0),
+    resR:wm.filter(m=>m<=REAL_M).reduce((t,m)=>t+dreLinhaVal(lRES,m,'real'),0),
+    realLbl:(()=>{ const r=wm.filter(m=>m<=REAL_M); return r.length?MESES[r[0]].toLowerCase()+(r.length>1?'–'+MESES[r[r.length-1]].toLowerCase():''):''; })(),
     inad:somaT(vencRl)/(somaT(RECEBER[state.empresa])||1)*100,
     totPagar:somaT(abertoP), nPagar:abertoP.length,
     totReceber:somaT(abertoR), nReceber:abertoR.length,
