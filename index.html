@@ -5716,7 +5716,7 @@ function rpDadosResumo(){
   return {data:dia.data, empresa:dia.empresa,
     caixa:{saldo_hoje:dia.saldo_total, bancos:dia.bancos, menor_saldo_previsto:fx.menor_saldo, saldo_fim_periodo:fx.saldo_final, periodo:fx.periodo},
     proximos_7_dias:dia.proximos_7_dias, vence_hoje:dia.vence_hoje, vencidos:dia.vencidos,
-    fluxo_semanal:fx.semanas.slice(0,6),
+    fluxo_7_dias:fx._lin.prev.dias.slice(0,7).map(o=>({dia:fdate(o.data), entradas:o.ent, saidas:o.sai, saldo:o.fim})),
     borderos:{pago:bd.pago, liberado:bd.liberado, aguardando:bd.aguardando, pendentes:pend.length},
     resultado_mes:{mes:me.mes, receita_bruta:me.receita_bruta, custos:linha('CUSTOS').mes, despesas:linha('DESPESAS OPERACIONAIS').mes, ebitda:linha('EBITDA').mes, resultado_liquido:me.resultado_liquido, margem:me.margem_liquida},
     pontos_de_atencao:atencao,
@@ -5731,8 +5731,8 @@ function rpHtmlResumo(D){
     ['Resultado · '+me.mes, rpM(me.resultado_liquido), me.margem_liquida!=null?'margem '+pct(me.margem_liquida):'', me.resultado_liquido<0?'neg':'pos']]);
   // fluxo semanal (esq) + borderôs e resultado (dir)
   h += '<div class="rs-grid">';
-  h += '<div>'+rpSec('Fluxo de caixa previsto · por semana', rpTabela(['Semana','Entradas','Saídas','Saldo final'],
-    fx._lin.sem.slice(0,6).map(s2=>({cls:s2.menor<0?'rp-neg':'', cells:[fdate(s2.de).slice(0,5)+'–'+fdate(s2.ate).slice(0,5), kfmt(s2.ent), kfmt(s2.sai), kfmt(s2.fim)]})), {num:[1,2,3]}))+'</div>';
+  h += '<div>'+rpSec('Fluxo de caixa · próximos 7 dias', rpTabela(['Dia','Entradas','Saídas','Saldo do dia'],
+    fx._lin.prev.dias.slice(0,7).map(o=>({cls:o.fim<0?'rp-neg':'', cells:[fdate(o.data).slice(0,5)+' '+o.data.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''), o.ent?kfmt(o.ent):'—', o.sai?kfmt(o.sai):'—', kfmt(o.fim)]})), {num:[1,2,3]}))+'</div>';
   h += '<div>'+rpSec('Resultado de '+me.mes, rpTabela(['','Valor'], [
       ['Receita bruta', rpM(D.resultado_mes.receita_bruta)], ['Custos', rpM(D.resultado_mes.custos)], ['Despesas operacionais', rpM(D.resultado_mes.despesas)],
       ['EBITDA', rpM(D.resultado_mes.ebitda)], {cls:'rp-res', cells:['Resultado líquido', rpM(D.resultado_mes.resultado_liquido)]}], {num:[1]}))+
