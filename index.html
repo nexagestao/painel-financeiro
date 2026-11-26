@@ -473,6 +473,7 @@ body.dark .st-bdagu{color:#FBBF24;background:#33260A}
 
 /* ---------- Ícones (traço estilo Lucide) ---------- */
 const ICON_PATHS = {
+  expand:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   spark:'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
   report:'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6M10 9h2',
   plus:'M12 5v14M5 12h14',
@@ -1850,24 +1851,37 @@ function renderFluxo(){
   const prevGer=cols.map(c=>colFluxo(c,'prev').ger);
   const splitAt = state.fluxoPeriodo==='mensal' ? cols.findIndex(c=>c.m===REAL_M) : -1;
   const resLiquido=totalEnt-totalSai, saldoFimPeriodo=saldosCol[saldosCol.length-1].fim;
-  h+=chartCard({
-    id:'evolucao', title:'Fluxo de Caixa — Entradas, Saídas e Saldo',
-    trend: pctChange(resLiquido, prevGer.reduce((t,x)=>t+x,0)),
-    body: pcComboBarLine('flx', lbls,
-      [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--c-in)'},
-       {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--c-out)', neg:true}],
-      {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
-      {click:'fluxoChartDrill', h:270})
-      + legend([{color:'var(--c-in)',name:'Entradas'},{color:'var(--c-out)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]),
-    summary: '<div class="row">Resumo do período<b style="color:var(--text2);font-weight:600;font-size:11px">'+esc(state.periodoLabel)+'</b></div>'+
-      '<div class="row">Total de entradas<b style="color:var(--pos)">'+money(totalEnt,true)+'</b></div>'+
-      '<div class="row">Total de saídas<b style="color:var(--neg)">-'+money(totalSai,true)+'</b></div>'+
-      '<div class="row">Resultado líquido<b style="color:'+(resLiquido<0?'var(--neg)':resLiquido>0?'var(--pos)':'var(--text2)')+'">'+money(resLiquido,true)+'</b></div>'+
-      '<div class="row">Saldo final<b style="color:'+(saldoFimPeriodo<0?'var(--neg)':saldoFimPeriodo>0?'var(--pos)':'var(--text2)')+'">'+money(saldoFimPeriodo,true)+'</b></div>'
-  });
-
+  // ---- 4 gráficos lado a lado (2x2), cada um expansível em tela cheia ----
+  const regG = state.regime==='pxr'?'proj':reg;
+  const grupos = ['2','3','5','6'].flatMap(r=>filhos(r).map(f=>({code:f.c, name:acc(f.c).n, value:cols.reduce((t,c)=>t+colVal(f.c,c,regG),0)})))
+    .filter(i=>i.value>=0.5).sort((x,y)=>y.value-x.value);
+  const gruposTop = grupos.slice(0,6).concat(grupos.length>6?[{name:'Outros', value:grupos.slice(6).reduce((t,i)=>t+i.value,0)}]:[]);
+  const spD = sp.dias;
+  const semanas = []; spD.forEach((d2,i)=>{ const w=Math.floor((d2.data-spD[0].data)/(7*86400000)); if(!semanas[w]) semanas[w]={lb:d2.data.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}), ent:0, sai:0}; semanas[w].ent+=d2.ent; semanas[w].sai+=d2.sai; });
+  const semOk = semanas.filter(Boolean);
+  FX_CHARTS = [
+    {t:'Entradas, saídas e saldo', sub:esc(state.periodoLabel), build:hh=>
+      pcComboBarLine('flx'+hh, lbls,
+        [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--c-in)'},
+         {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--c-out)', neg:true}],
+        {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
+        {click:'fluxoChartDrill', h:hh})
+      + legend([{color:'var(--c-in)',name:'Entradas'},{color:'var(--c-out)',name:'Saídas'},{color:'var(--navy)',name:'Saldo'},{color:'var(--navy)',name:'Previsto',dash:true}])},
+    {t:'Saldo previsto dia a dia', sub:spD.length?'de '+fdate(spD[0].data)+' a '+fdate(spD[spD.length-1].data):'sem títulos em aberto', build:hh=>
+      spD.length ? pcLineArea('fxsd'+hh, spD.map(d2=>d2.data.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})), [{name:'Saldo previsto', values:spD.map(d2=>d2.saldo), kind:'main'}], {h:hh})
+        : '<div class="empty" style="padding:30px"><div class="t2">Sem títulos em aberto no período.</div></div>'},
+    {t:'Entradas x saídas por semana', sub:'próximas semanas · títulos em aberto', build:hh=>
+      semOk.length ? pcBars('fxsem'+hh, semOk.map(w=>w.lb), [{name:'Entradas',values:semOk.map(w=>w.ent),tone:'accent'},{name:'Saídas',values:semOk.map(w=>w.sai),tone:'n2'}], {h:hh})
+        + legend([{color:'var(--accent)',name:'Entradas'},{color:NEUT2,name:'Saídas'}])
+        : '<div class="empty" style="padding:30px"><div class="t2">Sem títulos em aberto no período.</div></div>'},
+    {t:'Saídas por grupo', sub:esc(state.periodoLabel), build:hh=>
+      gruposTop.length ? pcDonut('fxspg'+hh, gruposTop, {h:Math.min(hh,300)}) : '<div class="empty" style="padding:30px"><div class="t2">Sem saídas no período.</div></div>'}
+  ];
+  h+='<div class="fx-grid">'+FX_CHARTS.map((c,i)=>
+    '<div class="card fx-card"><div class="pc-head"><div style="flex:1;min-width:0"><div class="pc-title">'+c.t+'</div><div class="fx-sub">'+c.sub+'</div></div>'+
+    '<div class="pc-actions"><button class="icon-btn fx-exp" title="Tela cheia" onclick="fxFull('+i+')">'+icon('expand',14)+'</button></div></div>'+
+    '<div class="card-body" style="padding-top:4px">'+c.build(230)+'</div></div>').join('')+'</div>';
   h+=saldosProjetadosCard(sp);
-  h+=saidasPorGrupoCard(cols, state.regime==='pxr'?'proj':reg);
 
   h+='<div class="card" style="margin-top:16px"><div class="card-head"><div class="card-title">Demonstrativo do Fluxo</div></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th style="min-width:250px">Descrição</th>';
   cols.forEach(c=>h+='<th class="num">'+c.label+'</th>');
@@ -1911,6 +1925,14 @@ function fluxoChartDrill(i){ const c=FLUXO_COLS[i]; if(c) drill('1', c.m!=null?c
 
 /* Participação de cada grupo do plano (filhos diretos de 2, 3, 5 e 6 — ex.:
    2.1 Sinistro, 3.1 Comercial) no total de saídas das colunas do Fluxo. */
+let FX_CHARTS = [];
+function fxFull(i){
+  const c = FX_CHARTS[i]; if(!c) return;
+  const hh = Math.max(360, Math.min(620, window.innerHeight-230));
+  openModal('<div class="fx-full"><div class="fx-full-h"><div><div class="pc-title" style="font-size:17px">'+c.t+'</div><div class="fx-sub">'+c.sub+'</div></div>'+
+    '<button class="icon-btn" title="Fechar" onclick="closeModal()">'+icon('x',16)+'</button></div><div class="fx-full-b">'+c.build(hh)+'</div></div>');
+  $('modalCard').classList.add('wide');
+}
 function saidasPorGrupoCard(cols, reg){
   const itens=['2','3','5','6'].flatMap(r=>filhos(r).map(f=>{
     const raiz=acc(r);
@@ -4532,6 +4554,17 @@ body.dark .rp-tbl tfoot td{background:#0F1720}
 #loginGate .btn.primary{background:linear-gradient(135deg,#14A3A8,#0E6B7E);border-color:transparent;border-radius:10px;font-weight:500;box-shadow:0 6px 16px -6px rgba(14,107,126,.55)}
 #loginGate .btn.primary:hover{background:linear-gradient(135deg,#14A3A8,#0E6B7E);filter:brightness(1.06)}
 .login-error.ok{color:#0E6B7E}
+
+/* ---------- Fluxo de Caixa: gráficos 2x2 ---------- */
+.fx-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.fx-card{min-width:0;display:flex;flex-direction:column}
+.fx-sub{font-size:11.5px;color:var(--text2);margin-top:2px}
+.fx-card .fx-exp{opacity:.55}
+.fx-card:hover .fx-exp{opacity:1}
+@media(max-width:1100px){.fx-grid{grid-template-columns:1fr}}
+.fx-full{padding:18px 22px;height:100%;display:flex;flex-direction:column}
+.fx-full-h{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.fx-full-b{flex:1;min-height:0;overflow:auto}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
