@@ -6287,15 +6287,17 @@ function renderAnalise(tipo){
   const d80 = cv.cum.findIndex(p=>p>=80), lb80 = d80>=0 ? (cv.labels[d80]==='0'?'no vencimento':'em D'+cv.labels[d80]) : '—';
   const porG = {};
   (C.concAtraso ? rs.filter(r=>r.dias>0) : rs).forEach(r=>{ const key = C.concAtraso ? r.grp : r.parte; const o=porG[key]=porG[key]||{nm:key, v:0, d:0, n:0}; o.v+=r.v; o.n++; o.d+=Math.max(0,r.dias)*r.v; });
+  const semParte = C.concAtraso ? null : (porG['(sem fornecedor)']||porG['—']||null);
+  if(semParte){ delete porG[semParte.nm]; }
   const ordem = Object.values(porG).sort((a,b)=>b.v-a.v), itens = ordem.slice(0,15);
   let n80 = 0; { let a=0; const tt=ordem.reduce((t,o)=>t+o.v,0)||1; for(const it of ordem){ a+=it.v; n80++; if(a/tt>=0.8) break; } }
   const totG = ordem.reduce((t,o)=>t+o.v,0)||1;
-  const par = itens.length ? nxParetoSvg(itens.map(i=>i.nm), itens.map(i=>i.v), {h:300, rot:true, pontos:true, escuro:(i,c)=>c<=80.5,
+  const par = itens.length ? nxParetoSvg(itens.map(i=>i.nm), itens.map(i=>i.v), {h:300, rot:true, pontos:true, escuro:(i,c)=>i===0||c<=80.5,
     tip:(i,v,c)=>tipRows(esc(itens[i].nm), [['var(--azul)', C.concAtraso?'Pago com atraso':'Pago no mês', money(v)],['var(--turquesa)','% do total',pct(v/totG*100)],['var(--turquesa)','Acumulado',pct(c)],['var(--text2)', C.concAtraso?'Atraso médio':C.ents.replace(/^./,c=>c.toUpperCase()), C.concAtraso?Math.round(itens[i].d/itens[i].v)+' dias':String(itens[i].n)]])}) : null;
   h += '<div class="fx-grid">';
   h += '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Curva de '+(tipo==='pagar'?'pagamento':'recebimento')+'</div><div class="fx-sub">valor '+C.liqV+' por dia em relação ao vencimento · linha = % acumulado'+(rc?' · tracejado = '+anLbMes(F.comp):'')+'</div></div>'+
        '<div class="ra-pill">80% do valor '+C.liqV+' <b>'+lb80+'</b></div></div><div class="card-body" style="padding-top:4px">'+cv.svg+'</div></div>';
-  h += '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">'+C.concTit+'</div><div class="fx-sub">'+C.concSub+'</div></div>'+
+  h += '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">'+C.concTit+'</div><div class="fx-sub">'+C.concSub+(semParte?' · <b style="color:var(--warn);font-weight:500">'+pct(semParte.v/(A.tot||1)*100)+' do valor sem fornecedor informado</b> (fora do gráfico)':'')+'</div></div>'+
        (itens.length?'<div class="ra-pill"><b>'+n80+'</b> '+(C.concAtraso?'cooperativa(s) concentram 80% do atraso':'fornecedor(es) concentram 80% do valor')+'</div>':'')+'</div><div class="card-body" style="padding-top:4px">'+
        (par?par.svg:'<div class="empty" style="padding:30px"><div class="t2">Nada a mostrar no filtro.</div></div>')+'</div></div>';
   h += '</div>';
