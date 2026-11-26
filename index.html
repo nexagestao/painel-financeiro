@@ -7088,16 +7088,18 @@ function rhParseFolha(rows, comp, aba){
   const H = rows[iH].map(recNorm), col = re=>H.findIndex(h=>re.test(h));
   const cAdm = col(/ADMISS/), cNome = col(/COLABORADOR/)>=0 ? col(/COLABORADOR/) : 1, cDep = col(/DEPARTAMENTO/), cCid = col(/CIDADE/), cObs = col(/OBSERVA/),
         cBase = col(/VALOR BASE/), cDesc = col(/DESCONTO/), cLiq = col(/LIQUIDO/);
-  const out = {}; let unidade = null;
+  const out = {}; let unidade = null, ult = null;
   rows.slice(iH+1).forEach(r=>{
     if(!r) return; const a0 = r[cAdm], nome = r[cNome] ? String(r[cNome]).trim() : '';
     const t0 = recNorm(typeof a0==='string'?a0:'');
+    // "PAGAMENTO <nome> ... PELA HUB": pagamento complementar da pessoa da linha anterior
+    if(/^PAGAMENTO/.test(t0) && ult && rhNum(r[cBase])){ const v = rhNum(r[cBase]); ult.valor_base += v; ult.liquido = (ult.liquido||0) + v; ult.observacao = [ult.observacao, 'inclui pagamento complementar de '+money(v,true)+(rhSan(r[cLiq+1])?' ('+rhSan(r[cLiq+1]).toLowerCase()+')':'')].filter(Boolean).join(' · '); return; }
     if(/^(PAGAMENTO|BASE|TOTAL|HUB)/.test(t0) || !nome || /^TOTAL/.test(recNorm(nome))) return;
     const base = rhNum(r[cBase]); if(base==null) return;
     const adm = a0 instanceof Date ? a0.toISOString().slice(0,10) : null;
     unidade = r[cCid] ? String(r[cCid]).trim() : unidade;
     const extra = rhSan(r[cLiq+1]);
-    out[recNorm(nome)] = {competencia:comp, nome, departamento:r[cDep]?String(r[cDep]).trim():null, cidade:unidade, unidade,
+    ult = out[recNorm(nome)] = {competencia:comp, nome, departamento:r[cDep]?String(r[cDep]).trim():null, cidade:unidade, unidade,
       tipo:rhTipo(r[cDep], typeof a0==='string'?a0:'', ''), admissao:adm, observacao:[rhSan(r[cObs]), extra].filter(Boolean).join(' · ')||null,
       valor_base:base, desconto:rhNum(r[cDesc]), liquido:rhNum(r[cLiq]), origem:'folha: '+aba};
   });
@@ -7155,7 +7157,8 @@ function rhPessoasMes(comp){
   const chave = n=>recNorm(n).split(' ').filter(w=>w.length>2).slice(0,2).join(' ');
   const porChave = {}; Object.values(m).forEach(p=>porChave[chave(p.nome)] = p);
   RH.ben.filter(x=>x.competencia===comp).forEach(b=>{
-    const p = m[recNorm(b.nome)] || porChave[chave(b.nome)] || Object.values(m).find(p=>recNorm(p.nome).startsWith(recNorm(b.nome).split(' ')[0]+' ') && chave(p.nome).split(' ')[1]?.[0]===chave(b.nome).split(' ')[1]?.[0]);
+    const pl = n=>{ const w = recNorm(n).split(' ').filter(x=>x.length>1); return w[0]+' '+w[w.length-1]; };
+    const p = m[recNorm(b.nome)] || porChave[chave(b.nome)] || Object.values(m).find(p=>pl(p.nome)===pl(b.nome)) || Object.values(m).find(p=>recNorm(p.nome).startsWith(recNorm(b.nome).split(' ')[0]+' ') && chave(p.nome).split(' ')[1]?.[0]===chave(b.nome).split(' ')[1]?.[0]);
     const alvo = p || (m['~'+recNorm(b.nome)] = {nome:b.nome, dep:b.setor, cid:b.cidade, tipo:b.tipo||'—', base:0, desc:0, liq:null, vt:0, va:0, ben:0, soBen:true});
     alvo.vt += +b.vt||0; alvo.va += +b.va||0; alvo.ben += +b.total||0;
   });
