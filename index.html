@@ -4213,6 +4213,96 @@ body{font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;font-fea
 tr.row-result.final td{font-weight:700}
 td.total-highlight{font-weight:600 !important}
 .axis-lbl{font-family:'Plus Jakarta Sans',sans-serif}
+/* ==================== Repaginação visual (tema Nexa) ==================== */
+:root{
+  --bg:#F3F5F8; --surface:#FFFFFF; --text:#0F1B2D; --text2:#64748B; --border:#E6EAF0;
+  --accent:#0E6B7E; --accent-2:#14A3A8; --accent-soft:#E6F4F5;
+  --r:16px; --r-sm:12px;
+  --shadow:0 1px 2px rgba(15,27,45,.04),0 4px 16px -8px rgba(15,27,45,.08);
+  --shadow-lg:0 18px 48px -12px rgba(15,27,45,.22);
+  --side-bg:#0B1E2B; --side-bg2:#0F2736; --side-text:#A9B8C6; --side-hover:rgba(255,255,255,.06);
+}
+body.dark{
+  --bg:#0A0F15; --surface:#121A23; --text:#E6EDF5; --text2:#8B9AAD; --border:#1F2A37;
+  --accent-soft:#0F2E35; --side-bg:#070C12; --side-bg2:#0B141D;
+}
+body{background:var(--bg);letter-spacing:-.003em}
+
+/* ---- menu lateral escuro ---- */
+#sidebar{background:linear-gradient(180deg,var(--side-bg) 0%,var(--side-bg2) 100%);border-right:none;color:#fff}
+.side-head{border-bottom:1px solid rgba(255,255,255,.07);padding:20px 16px 14px}
+.brand-name{color:#fff;font-size:14.5px}
+.brand-sub{color:var(--side-text)}
+.company-pill{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:#fff}
+.company-pill:hover{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.09)}
+.company-pill svg{color:var(--side-text)}
+.nav-sec{color:rgba(169,184,198,.6);font-size:10px;letter-spacing:.1em;padding:18px 10px 7px}
+.side-link{color:var(--side-text);border-radius:10px;padding:9px 11px;font-weight:500;position:relative}
+.side-link:hover{background:var(--side-hover);color:#fff}
+.side-link.active{background:linear-gradient(90deg,rgba(20,163,168,.22),rgba(20,163,168,.06));color:#fff;font-weight:600}
+.side-link.active::before{content:'';position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--accent-2)}
+.side-link.active svg{color:#5FD3D6}
+.side-foot{border-top:1px solid rgba(255,255,255,.07)}
+.user-meta .nm{color:#fff}
+.user-meta .rl{color:var(--side-text)}
+.avatar{background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff}
+.side-foot .role-sel{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#DCE5EE}
+.side-foot .role-sel option{color:#0F1B2D}
+.side-foot .icon-btn,.side-foot button{color:var(--side-text)}
+.side-foot .btn{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);color:#DCE5EE}
+.side-foot .btn:hover{background:rgba(255,255,255,.1)}
+#sidebar ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12)}
+
+/* ---- barra superior ---- */
+#topbar{background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);border-bottom:1px solid var(--border);height:62px;min-height:62px}
+body.dark #topbar{background:rgba(18,26,35,.82)}
+.hdr-emp-sel,.select{border-radius:10px;border-color:var(--border);background-color:var(--surface)}
+
+/* ---- conteúdo ---- */
+#content{padding:28px 32px}
+.page-head{margin-bottom:22px}
+.page-title{font-size:24px;font-weight:650;letter-spacing:-.025em}
+.page-sub{font-size:13px;margin-top:4px}
+.chip{background:var(--accent-soft);color:var(--accent);font-weight:600;padding:5px 8px 5px 12px}
+
+/* ---- cartões ---- */
+.card{border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);background:var(--surface)}
+.card-head{padding:16px 20px 6px;border-bottom:none}
+.card-title{font-size:14.5px;font-weight:650;letter-spacing:-.01em}
+
+/* ---- KPIs ---- */
+.kpi{border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:18px 20px;position:relative;overflow:hidden;background:var(--surface)}
+.kpi::after{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent-2));opacity:.85}
+.kpi:hover{box-shadow:0 10px 28px -12px rgba(15,27,45,.22);transform:translateY(-1px)}
+.kpi .lb{font-size:11px;color:var(--text2);letter-spacing:.07em}
+.kpi .vl{font-size:26px;font-weight:650;letter-spacing:-.03em;margin:10px 0 4px}
+
+/* ---- botões ---- */
+.btn{border-radius:10px;font-weight:600;box-shadow:0 1px 2px rgba(15,27,45,.04)}
+.btn:hover{border-color:#C5CED9;background:#FAFBFC}
+body.dark .btn:hover{background:#18222D;border-color:#2C3947}
+.btn.primary{background:linear-gradient(135deg,var(--accent-2),var(--accent));border-color:transparent;box-shadow:0 4px 12px -4px rgba(14,107,126,.5)}
+.btn.primary:hover{filter:brightness(1.06);background:linear-gradient(135deg,var(--accent-2),var(--accent))}
+.btn.ghost{box-shadow:none}
+.btn.sm{border-radius:9px}
+
+/* ---- tabelas ---- */
+.tbl th{font-size:10.5px;font-weight:650;letter-spacing:.06em;color:#7A8899;background:#F8FAFC;border-bottom:1px solid var(--border);padding:11px 14px}
+body.dark .tbl th{background:#0F1720;color:#8B9AAD}
+.tbl td{padding:10px 14px;border-bottom:1px solid #EEF1F5}
+body.dark .tbl td{border-bottom-color:#1A2430}
+.tbl tbody tr:hover td{background:#F7FAFB}
+body.dark .tbl tbody tr:hover td{background:#141E28}
+
+/* ---- gavetas / modais / campos ---- */
+.drawer,.modal-card{border-radius:18px 0 0 18px;box-shadow:var(--shadow-lg)}
+.modal-card{border-radius:18px}
+.field input,.field select,.field textarea,input[type=text],input[type=date],input[type=number],select{border-radius:10px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-2) !important;box-shadow:0 0 0 3px rgba(20,163,168,.15)}
+
+/* ---- status ---- */
+.st-pago,.st-recebido,.st-aberto,.st-vencido,.st-parcial,.st-neutro,.st-ok{border-radius:999px;font-weight:600}
+.brand-name{white-space:normal;line-height:1.2;font-size:13.5px}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
