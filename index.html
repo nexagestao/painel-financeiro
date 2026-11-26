@@ -5629,7 +5629,8 @@ function rpHtmlBordero(D){
 }
 
 /* ---------- 4) prestação de contas mensal ---------- */
-function rpMesPadrao(){ return RP.mes!=null ? RP.mes : Math.max(0, REAL_M-1); }
+// padrão: sempre dois meses atrás (em nov → setembro), limitado ao que já tem realizado
+function rpMesPadrao(){ if(RP.mes!=null) return RP.mes; const h=hojeReal(); const m=h.getFullYear()===ANO ? h.getMonth()-2 : REAL_M-2; return Math.max(0, Math.min(REAL_M, m)); }
 function rpDadosMensal(){
   const m = rpMesPadrao(), ant = m-1;
   const cfg = (DRE_CFG[state.empresa]||[]).filter(l=>l.ativa!==false);
