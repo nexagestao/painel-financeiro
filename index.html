@@ -473,6 +473,7 @@ body.dark .st-bdagu{color:#FBBF24;background:#33260A}
 
 /* ---------- Ícones (traço estilo Lucide) ---------- */
 const ICON_PATHS = {
+  pareto:'M4 20V10M9 20V6M14 20v-7M19 20v-4M3 20h18M4 9l5-4 5 3 6-4',
   expand:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   spark:'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
   report:'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6M10 9h2',
@@ -939,9 +940,9 @@ const USUARIOS = [
 const MODULOS_PERM = ['Dashboard','Fluxo de Caixa','DRE','Indicadores','Contas a Pagar','Borderô de Pagamentos','Contas a Receber','Administração'];
 const ACOES_PERM = ['visualizar','exportar','importar','configurar','operar'];
 const PERFIS = {
-  'Administrador': {mods:['dashboard','reports','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
-  'Financeiro':    {mods:['dashboard','reports','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber'], importar:true, configurar:false, exportar:true},
-  'Diretoria':     {mods:['dashboard','reports','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
+  'Administrador': {mods:['dashboard','reports','recanalise','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
+  'Financeiro':    {mods:['dashboard','reports','recanalise','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber'], importar:true, configurar:false, exportar:true},
+  'Diretoria':     {mods:['dashboard','reports','recanalise','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
   'Cliente':       {mods:['dashboard','dre','cooperativas','indicadores'], importar:false, configurar:false, exportar:true},
   'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false}
 };
@@ -1205,6 +1206,7 @@ const NAV = [
   {sec:'Visão Geral', items:[{id:'dashboard', n:'Dashboard', ic:'home'},{id:'reports', n:'Reports', ic:'report'}]},
   {sec:'Análises gerenciais', items:[
     {id:'fluxo', n:'Fluxo de Caixa', ic:'flow'},
+    {id:'recanalise', n:'Análise de Recebimentos', ic:'pareto'},
     {id:'dre', n:'DRE', ic:'file'},
     {id:'cooperativas', n:'Resultado por Cooperativa', ic:'users'}
     /* Indicadores oculto por enquanto (pedido em 26/11/2026) — renderIndicadores segue no código */]},
@@ -3704,7 +3706,7 @@ async function fmSave(){
 }
 
 /* =========================== PERFIS E PERMISSÕES =========================== */
-const MODMAP={'Dashboard':'dashboard','Reports':'reports','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Borderô de Pagamentos':'bordero','Contas a Receber':'receber','Administração':'admin'};
+const MODMAP={'Dashboard':'dashboard','Reports':'reports','Análise de Recebimentos':'recanalise','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Borderô de Pagamentos':'bordero','Contas a Receber':'receber','Administração':'admin'};
 function renderPermissoes(){
   let rows='';
   MODULOS_PERM.forEach(mod=>{
@@ -4803,6 +4805,36 @@ body.dark .bd-fin-row{background:#0E1B24}
 .tit-tbl tr.tit-grp td{background:#F3F7F9;color:var(--text2)}
 .tbl.tbl-dre .money.pos{color:var(--text)}
 .tbl.tbl-dre .money.neg{color:var(--neg)}
+
+/* ---------- Análise de Recebimentos ---------- */
+.ra-aviso{display:flex;gap:10px;align-items:flex-start;background:#EEF6F8;border:1px solid #D3E8EC;color:var(--text);border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.5;margin-bottom:16px}
+.ra-aviso svg{color:var(--azul);flex:none;margin-top:2px}
+body.dark .ra-aviso{background:#10262E;border-color:#1D3B44}
+.ra-filtros{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+.ra-filtros label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;font-weight:500;color:var(--text2);min-width:190px}
+.ra-kpis{grid-template-columns:repeat(5,1fr)}
+@media(max-width:1200px){.ra-kpis{grid-template-columns:repeat(3,1fr)}}
+.ra-kpis .kpi{cursor:help}
+.ra-dl{font-size:11.5px;font-weight:500;color:var(--text3)}
+.ra-dl.up{color:var(--pos)} .ra-dl.down{color:var(--neg)}
+.ra-card{margin-bottom:16px}
+.ra-wrap{max-height:520px;overflow:auto}
+.ra-tbl td{padding:8px 12px;font-size:12.5px}
+.ra-tbl tfoot td{font-weight:600;background:#F3F7F9;border-top:1px solid var(--border);padding:9px 12px;position:sticky;bottom:0}
+body.dark .ra-tbl tfoot td{background:#0E1B24}
+.ra-bar{display:flex;height:8px;border-radius:5px;overflow:hidden;background:#EEF2F6}
+.ra-bar i{display:block;height:100%}
+.ra-leg{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--text2)}
+.ra-leg i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.ra-tag{font-size:10px;font-weight:500;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--azul);margin-left:6px}
+.ra-tag.bom{background:var(--pos-soft);color:var(--pos)} .ra-tag.ruim{background:var(--neg-soft);color:var(--neg)}
+.ra-pill{font-size:12px;color:var(--text2);background:#F3F7F9;border:1px solid var(--border);border-radius:999px;padding:5px 12px;white-space:nowrap}
+.ra-pill b{color:var(--azul);font-weight:600}
+body.dark .ra-pill{background:#0E1B24}
+.ra-hbar{position:relative;height:20px;border-radius:6px;background:#EEF3F6;overflow:hidden}
+.ra-hbar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--azul),var(--turquesa));opacity:.85;border-radius:6px}
+.ra-hbar span{position:relative;font-size:11.5px;font-weight:500;color:#fff;padding-left:8px;line-height:20px;text-shadow:0 1px 1px rgba(0,0,0,.15)}
+.ra-hist tr.ra-sel td{background:#F1F7F8}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -6086,6 +6118,180 @@ async function renderReports(){
   $('content').innerHTML = h;
 }
 
+/* =========================== ANÁLISE DE RECEBIMENTOS ===========================
+   Só usa dado real: boletos de associados (contas 1.1.x) com status Recebido,
+   vencimento e data de recebimento. Boletos emitidos e não pagos não estão na
+   base importada — por isso faturado, em aberto e inadimplência não são
+   calculados aqui (a tela diz isso explicitamente). Nada é gravado. */
+const RA = {mes:null, comp:null, coop:'', faixa:null};
+const RA_FAIXAS = [['Em dia',d=>d<=0],['1–5 dias',d=>d>=1&&d<=5],['6–15 dias',d=>d>=6&&d<=15],['16–30 dias',d=>d>=16&&d<=30],['Mais de 30',d=>d>30]];
+const RA_CORES = ['#126477','#20A6A5','#8FD1D0','#E6B8A2','#D7747C'];
+let RA_CACHE = {emp:null, n:-1, rows:[]};
+function raBase(){
+  const emp = state.empresa, arr = RECEBER[emp]||[];
+  if(RA_CACHE.emp===emp && RA_CACHE.n===arr.length) return RA_CACHE.rows;
+  const rows = [];
+  arr.forEach(t=>{
+    if(t.status!=='Recebido' || !t.venc || !t.rec || !t.conta || !/^1\.1(\.|$)/.test(t.conta)) return;
+    if(/^Proje/i.test(t.cli||'')) return;
+    const v = t.vrec || t.vprev; if(!(v>0)) return;
+    const dias = Math.round((rpDia(t.rec)-rpDia(t.venc))/86400000);
+    rows.push({t, v, dias, mes:t.venc.getFullYear()+'-'+String(t.venc.getMonth()+1).padStart(2,'0'), venc:rpDia(t.venc), coop:(t.coop||'').trim()||'Sem cooperativa'});
+  });
+  RA_CACHE = {emp, n:arr.length, rows};
+  return rows;
+}
+function raMeses(rows){
+  const c = {}; rows.forEach(r=>c[r.mes]=(c[r.mes]||0)+1);
+  const ks = Object.keys(c).sort(), med = ks.map(k=>c[k]).sort((a,b)=>a-b)[Math.floor(ks.length/2)]||0;
+  return ks.filter(k=>c[k]>=Math.max(20, med*0.3));
+}
+const raLbMes = k=>{ const [y,m]=k.split('-'); return MESES[+m-1]+'/'+y.slice(2); };
+function raResumo(rs){
+  const tot = rs.reduce((t,r)=>t+r.v,0), n = rs.length;
+  const emDia = rs.filter(r=>r.dias<=0).reduce((t,r)=>t+r.v,0);
+  const atr = rs.filter(r=>r.dias>0), vAtr = atr.reduce((t,r)=>t+r.v,0);
+  const atrMed = vAtr ? atr.reduce((t,r)=>t+r.dias*r.v,0)/vAtr : 0;
+  const ate5 = rs.filter(r=>r.dias<=5).reduce((t,r)=>t+r.v,0);
+  return {tot, n, emDia, pEmDia: tot?emDia/tot*100:0, pAte5: tot?ate5/tot*100:0, vAtr, atrMed, ticket: n?tot/n:0,
+    faixas: RA_FAIXAS.map(([nm,f])=>{ const x=rs.filter(r=>f(r.dias)); const v=x.reduce((t,r)=>t+r.v,0); return {nm, n:x.length, v, p: tot?v/tot*100:0}; })};
+}
+function raDelta(a, b, inv, pp){
+  if(b==null || !isFinite(a) || !isFinite(b) || (!pp && !b)) return '';
+  const d = pp ? a-b : (a-b)/Math.abs(b)*100; const bom = inv ? d<0 : d>0;
+  if(Math.abs(d)<0.05) return '<span class="ra-dl">= '+(pp?'0 p.p.':'0%')+'</span>';
+  return '<span class="ra-dl '+(bom?'up':'down')+'">'+(d>0?'▲':'▼')+' '+(pp?Math.abs(d).toLocaleString('pt-BR',{maximumFractionDigits:1})+' p.p.':pct(Math.abs(d)))+'</span>';
+}
+/* curva de recebimento: barras = valor por dia relativo ao vencimento; linha = % acumulado (eixo direito) */
+function raCurva(cid, rs, comp, H){
+  const MIN=-10, MAX=30, labels=[], vals=[], vc=[];
+  for(let d=MIN-1; d<=MAX+1; d++){ labels.push(d<MIN?'≤'+MIN:d>MAX?'>'+MAX:(d>0?'+'+d:String(d))); vals.push(0); vc.push(0); }
+  const idx = d=> d<MIN?0 : d>MAX?labels.length-1 : d-MIN+1;
+  rs.forEach(r=>vals[idx(r.dias)]+=r.v); (comp||[]).forEach(r=>vc[idx(r.dias)]+=r.v);
+  const tot = vals.reduce((t,x)=>t+x,0)||1, totC = vc.reduce((t,x)=>t+x,0)||1;
+  let acc=0, accC=0; const cum = vals.map(x=>(acc+=x)/tot*100), cumC = vc.map(x=>(accC+=x)/totC*100);
+  const W=1120, L=70, R=52, T=18, B=34, n=labels.length, slot=(W-L-R)/n, max=Math.max(...vals)||1;
+  const X=i=>L+slot*i+slot/2, Y=v=>T+(H-T-B)*(1-v/max), YP=p=>T+(H-T-B)*(1-p/100);
+  let o='<svg class="chart-box" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:'+H+'px">';
+  for(let g=0; g<=4; g++){ const y=T+(H-T-B)*g/4; o+='<line class="grid-line" x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'"/>'+
+    '<text class="axis-lbl" x="'+(L-8)+'" y="'+(y+3)+'" text-anchor="end">'+kfmt(max*(1-g/4))+'</text><text class="axis-lbl" x="'+(W-R+8)+'" y="'+(y+3)+'">'+(100-g*25)+'%</text>'; }
+  const x0 = X(idx(0)); o+='<line x1="'+x0+'" x2="'+x0+'" y1="'+T+'" y2="'+(H-B)+'" stroke="var(--turquesa)" stroke-dasharray="3 3" opacity=".8"/><text class="axis-lbl" x="'+(x0+4)+'" y="'+(T+10)+'" style="fill:var(--azul)">vencimento</text>';
+  o+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+YP(80)+'" y2="'+YP(80)+'" stroke="#D7747C" stroke-dasharray="4 4" opacity=".55"/>';
+  vals.forEach((v,i)=>{ const bw=Math.max(3,slot*.62), y=Y(v);
+    o+='<rect x="'+(X(i)-bw/2)+'" y="'+y+'" width="'+bw+'" height="'+Math.max(0,H-B-y)+'" rx="2" fill="'+(i<idx(0)+1?'var(--azul)':'#8FD1D0')+'"'+
+      tip(tipRows((labels[i]==='0'?'No vencimento':'D'+labels[i]),[['var(--azul)','Recebido no dia',money(v)],['var(--turquesa)','Acumulado',pct(cum[i])]].concat(comp?[[NEUT1,'Acumulado (comparação)',pct(cumC[i])]]:[])))+'/>';
+    if(i%5===1 || labels[i].startsWith('≤') || labels[i].startsWith('>')) o+='<text class="axis-lbl" x="'+X(i)+'" y="'+(H-12)+'" text-anchor="middle">'+labels[i]+'</text>'; });
+  const path = a=>a.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+YP(p).toFixed(1)).join(' ');
+  if(comp) o+='<path d="'+path(cumC)+'" fill="none" stroke="'+NEUT1+'" stroke-width="2" stroke-dasharray="5 4"/>';
+  o+='<path d="'+path(cum)+'" fill="none" stroke="var(--petroleo)" stroke-width="2.4"/>';
+  return {svg:o+'</svg>', cum, labels, idx0:idx(0)};
+}
+/* Pareto de concentração do atraso por cooperativa */
+function raPareto(itens, H){
+  const tot = itens.reduce((t,i)=>t+i.v,0)||1, W=1120, L=70, R=52, T=16, B=70, n=Math.max(1,itens.length), slot=(W-L-R)/n, max=itens[0]?itens[0].v:1;
+  let acc=0; const cum = itens.map(i=>(acc+=i.v)/tot*100);
+  const X=i=>L+slot*i+slot/2, Y=v=>T+(H-T-B)*(1-v/max), YP=p=>T+(H-T-B)*(1-p/100);
+  let o='<svg class="chart-box" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:'+H+'px">';
+  for(let g=0; g<=4; g++){ const y=T+(H-T-B)*g/4; o+='<line class="grid-line" x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'"/><text class="axis-lbl" x="'+(L-8)+'" y="'+(y+3)+'" text-anchor="end">'+kfmt(max*(1-g/4))+'</text><text class="axis-lbl" x="'+(W-R+8)+'" y="'+(y+3)+'">'+(100-g*25)+'%</text>'; }
+  o+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+YP(80)+'" y2="'+YP(80)+'" stroke="#D7747C" stroke-dasharray="4 4" opacity=".55"/>';
+  itens.forEach((it,i)=>{ const bw=Math.max(4,slot*.6), y=Y(it.v);
+    o+='<rect x="'+(X(i)-bw/2)+'" y="'+y+'" width="'+bw+'" height="'+Math.max(0,H-B-y)+'" rx="2" fill="'+(cum[i]<=80.5?'var(--azul)':'#A9DCDB')+'"'+
+      tip(tipRows(esc(it.nm),[['var(--azul)','Recebido com atraso',money(it.v)],['var(--turquesa)','% do atraso total',pct(it.v/tot*100)],['var(--turquesa)','Acumulado',pct(cum[i])],['var(--text2)','Atraso médio',Math.round(it.atr)+' dias']]))+'/>';
+    o+='<text class="axis-lbl" text-anchor="end" transform="translate('+(X(i)+3)+','+(H-B+12)+') rotate(-35)">'+esc(it.nm.length>18?it.nm.slice(0,17)+'…':it.nm)+'</text>'; });
+  o+='<path d="'+cum.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+YP(p).toFixed(1)).join(' ')+'" fill="none" stroke="var(--petroleo)" stroke-width="2.2"/>';
+  cum.forEach((p,i)=>o+='<circle cx="'+X(i)+'" cy="'+YP(p)+'" r="2.6" fill="var(--petroleo)"/>');
+  return o+'</svg>';
+}
+function raCalor(p, max){ const a = max? Math.min(1,p/max):0; return 'background:rgba(215,116,124,'+(a*0.32).toFixed(3)+')'; }
+function raCalorBom(p){ const a = Math.max(0,Math.min(1,(p-50)/50)); return 'background:rgba(32,166,165,'+(a*0.28).toFixed(3)+')'; }
+function raDetalheDia(k){
+  const rows = raBase().filter(r=>isoDate(r.venc)===k && (!RA.coop || r.coop===RA.coop)).sort((a,b)=>b.dias-a.dias);
+  let h=drawerHead('Boletos com vencimento em '+fdate(parseYMD(k)), rows.length+' boleto(s) pagos · '+money(rows.reduce((t,r)=>t+r.v,0),true));
+  h+='<div class="drawer-body"><table class="tbl"><thead><tr><th>Associado</th><th>Cooperativa</th><th>Pago em</th><th class="num">Dias</th><th class="num">Valor</th></tr></thead><tbody>'+
+    rows.slice(0,400).map(r=>'<tr><td>'+esc(r.t.cli||'—')+'</td><td style="color:var(--text2)">'+esc(r.coop)+'</td><td>'+fdate(r.t.rec)+'</td><td class="num" style="color:'+(r.dias>0?'var(--neg)':'var(--text2)')+'">'+(r.dias>0?'+':'')+r.dias+'</td><td class="num">'+money(r.v,true)+'</td></tr>').join('')+
+    '</tbody></table>'+(rows.length>400?'<div class="tit-mais">Mostrando 400 de '+rows.length+'.</div>':'')+'</div>';
+  openDrawer(h);
+}
+function renderRecAnalise(){
+  const all = raBase(), meses = raMeses(all);
+  let h = pageHead('Análise de Recebimentos','');
+  if(!meses.length){ $('content').innerHTML = h+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Sem boletos recebidos na base desta empresa</div><div class="t2">A análise usa boletos de associados com vencimento e data de recebimento.</div></div></div>'; return; }
+  if(!RA.mes || !meses.includes(RA.mes)) RA.mes = meses[meses.length-1];
+  const iM = meses.indexOf(RA.mes);
+  if(RA.comp===null || (RA.comp && !meses.includes(RA.comp))) RA.comp = iM>0 ? meses[iM-1] : '';
+  const fc = r=>!RA.coop || r.coop===RA.coop;
+  const rs = all.filter(r=>r.mes===RA.mes && fc(r)), rc = RA.comp ? all.filter(r=>r.mes===RA.comp && fc(r)) : null;
+  const A = raResumo(rs), C = rc ? raResumo(rc) : null;
+  const coops = [...new Set(all.filter(r=>r.mes===RA.mes).map(r=>r.coop))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+  h += '<div class="ra-aviso">'+icon('alert',14)+'<span><b>Base:</b> boletos de associados <b>pagos</b> (vencimento × data do pagamento). Boletos emitidos e ainda não pagos não estão na base importada — por isso <b>faturado, saldo em aberto e inadimplência</b> não aparecem aqui.</span></div>';
+  h += '<div class="ra-filtros">'+
+    '<label>Mês de vencimento<select class="select" onchange="RA.mes=this.value;RA.comp=null;render()">'+meses.slice().reverse().map(k=>'<option value="'+k+'"'+(k===RA.mes?' selected':'')+'>'+raLbMes(k)+'</option>').join('')+'</select></label>'+
+    '<label>Comparar com<select class="select" onchange="RA.comp=this.value;render()"><option value="">Sem comparação</option>'+meses.slice().reverse().filter(k=>k!==RA.mes).map(k=>'<option value="'+k+'"'+(k===RA.comp?' selected':'')+'>'+raLbMes(k)+'</option>').join('')+'</select></label>'+
+    '<label>Cooperativa<select class="select" onchange="RA.coop=this.value;render()"><option value="">Todas</option>'+coops.map(c=>'<option'+(c===RA.coop?' selected':'')+' value="'+esc(c)+'">'+esc(c)+'</option>').join('')+'</select></label>'+
+    '</div>';
+
+  // indicadores
+  const k = (lb, vl, dl, leg, tp)=>'<div class="kpi"'+(tp?tip(tp):'')+'><div class="lb">'+lb+'</div><div class="vl">'+vl+'</div><div class="dl">'+dl+(leg?'<span class="kpi-leg">'+leg+'</span>':'')+'</div></div>';
+  h += '<div class="kpi-grid ra-kpis">'+
+    k('Arrecadado', money(A.tot), raDelta(A.tot, C&&C.tot), A.n.toLocaleString('pt-BR')+' boletos pagos', 'Soma dos boletos com vencimento em '+raLbMes(RA.mes)+' que já foram pagos.')+
+    k('Pago até o vencimento', pct(A.pEmDia), raDelta(A.pEmDia, C&&C.pEmDia, false, true), money(A.emDia)+' em dia', '% do valor arrecadado que entrou até a data de vencimento.')+
+    k('Pago até D+5', pct(A.pAte5), raDelta(A.pAte5, C&&C.pAte5, false, true), 'até 5 dias após o vencimento', '% do valor arrecadado recebido até 5 dias depois do vencimento.')+
+    k('Atraso médio', Math.round(A.atrMed)+' dias', raDelta(A.atrMed, C&&C.atrMed, true), money(A.vAtr)+' pagos com atraso', 'Média de dias de atraso dos boletos pagos depois do vencimento, ponderada pelo valor.')+
+    k('Ticket médio', money(A.ticket,true), raDelta(A.ticket, C&&C.ticket), 'por boleto pago', 'Valor médio de cada boleto pago.')+
+    '</div>';
+
+  // 1) tabela por vencimento
+  const porDia = {}; rs.forEach(r=>{ const kk=isoDate(r.venc); (porDia[kk]=porDia[kk]||[]).push(r); });
+  const dias = Object.keys(porDia).sort();
+  const linhas = dias.map(kk=>({kk, R:raResumo(porDia[kk])}));
+  const maxAtr = Math.max(...linhas.map(l=>100-l.R.pEmDia), 1);
+  const best = linhas.filter(l=>l.R.n>=20).sort((a,b)=>b.R.pEmDia-a.R.pEmDia)[0], worst = linhas.filter(l=>l.R.n>=20).sort((a,b)=>a.R.pEmDia-b.R.pEmDia)[0];
+  let t = '<div class="tbl-wrap ra-wrap"><table class="tbl ra-tbl"><thead><tr><th>Vencimento</th><th class="num">Boletos</th><th class="num">Arrecadado</th>'+
+    RA_FAIXAS.map(f=>'<th class="num">'+f[0]+'</th>').join('')+'<th class="num">Atraso médio</th><th style="width:150px">Composição</th></tr></thead><tbody>';
+  linhas.forEach(l=>{
+    const tag = best&&l===best?' <span class="ra-tag bom">melhor</span>':worst&&l===worst&&worst!==best?' <span class="ra-tag ruim">pior</span>':'';
+    t += '<tr class="hoverable" onclick="raDetalheDia(\''+l.kk+'\')"><td>'+fdate(parseYMD(l.kk))+tag+'</td><td class="num">'+l.R.n+'</td><td class="num">'+money(l.R.tot)+'</td>'+
+      l.R.faixas.map((f,i)=>'<td class="num" style="'+(i===0?raCalorBom(f.p):raCalor(f.p,maxAtr))+'"'+tip(tipRows(f.nm,[[RA_CORES[i],'Valor',money(f.v)],[RA_CORES[i],'Boletos',String(f.n)]]))+'>'+pct(f.p)+'</td>').join('')+
+      '<td class="num">'+(l.R.vAtr?Math.round(l.R.atrMed)+' d':'—')+'</td>'+
+      '<td><div class="ra-bar">'+l.R.faixas.map((f,i)=>f.p?'<i style="width:'+f.p+'%;background:'+RA_CORES[i]+'"></i>':'').join('')+'</div></td></tr>';
+  });
+  t += '</tbody><tfoot><tr><td>Total</td><td class="num">'+A.n.toLocaleString('pt-BR')+'</td><td class="num">'+money(A.tot)+'</td>'+A.faixas.map(f=>'<td class="num">'+pct(f.p)+'</td>').join('')+
+    '<td class="num">'+(A.vAtr?Math.round(A.atrMed)+' d':'—')+'</td><td><div class="ra-bar">'+A.faixas.map((f,i)=>f.p?'<i style="width:'+f.p+'%;background:'+RA_CORES[i]+'"></i>':'').join('')+'</div></td></tr></tfoot></table></div>';
+  h += '<div class="card ra-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Recebimento por data de vencimento</div><div class="fx-sub">% do valor de cada vencimento conforme o prazo de pagamento · clique numa linha para ver os boletos</div></div>'+
+       '<div class="ra-leg">'+RA_FAIXAS.map((f,i)=>'<span><i style="background:'+RA_CORES[i]+'"></i>'+f[0]+'</span>').join('')+'</div></div>'+t+'</div>';
+
+  // 2) curva + 3) concentração
+  const cv = raCurva('racv', rs, rc, 300);
+  const d80 = cv.cum.findIndex(p=>p>=80), lb80 = d80>=0 ? (cv.labels[d80]==='0'?'no vencimento':'em D'+cv.labels[d80]) : '—';
+  const porCoop = {}; rs.filter(r=>r.dias>0).forEach(r=>{ const o=porCoop[r.coop]=porCoop[r.coop]||{nm:r.coop, v:0, d:0}; o.v+=r.v; o.d+=r.dias*r.v; });
+  const itens = Object.values(porCoop).map(o=>({nm:o.nm, v:o.v, atr:o.v?o.d/o.v:0})).sort((a,b)=>b.v-a.v).slice(0,15);
+  let n80 = 0; { let a=0; const tt=Object.values(porCoop).reduce((t,o)=>t+o.v,0)||1; for(const it of Object.values(porCoop).sort((a,b)=>b.v-a.v)){ a+=it.v; n80++; if(a/tt>=0.8) break; } }
+  h += '<div class="fx-grid">';
+  h += '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Curva de recebimento</div><div class="fx-sub">valor recebido por dia em relação ao vencimento · linha = % acumulado'+(rc?' · tracejado = '+raLbMes(RA.comp):'')+'</div></div>'+
+       '<div class="ra-pill">80% do valor recebido <b>'+lb80+'</b></div></div><div class="card-body" style="padding-top:4px">'+cv.svg+'</div></div>';
+  h += '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Concentração do atraso por cooperativa</div><div class="fx-sub">valor pago com atraso · linha = % acumulado (Pareto)</div></div>'+
+       (itens.length?'<div class="ra-pill"><b>'+n80+'</b> cooperativa(s) concentram 80% do atraso</div>':'')+'</div><div class="card-body" style="padding-top:4px">'+
+       (itens.length?raPareto(itens,300):'<div class="empty" style="padding:30px"><div class="t2">Nenhum pagamento com atraso no filtro.</div></div>')+'</div></div>';
+  h += '</div>';
+
+  // 4) comparativo histórico
+  const ult = meses.slice(-12), H = ult.map(m=>({m, R:raResumo(all.filter(r=>r.mes===m && fc(r)))}));
+  const maxT = Math.max(...H.map(x=>x.R.tot),1), media = H.reduce((t,x)=>t+x.R.tot,0)/H.length;
+  let hm = '<div class="tbl-wrap"><table class="tbl ra-tbl ra-hist"><thead><tr><th>Mês de vencimento</th><th class="num">Boletos</th><th style="width:28%">Arrecadado</th>'+RA_FAIXAS.map(f=>'<th class="num">'+f[0]+'</th>').join('')+'<th class="num">Atraso médio</th></tr></thead><tbody>';
+  const maxAtrH = Math.max(...H.map(x=>100-x.R.pEmDia),1);
+  H.forEach(x=>{
+    hm += '<tr class="hoverable'+(x.m===RA.mes?' ra-sel':'')+'" onclick="RA.mes=\''+x.m+'\';RA.comp=null;render()"><td>'+raLbMes(x.m)+(x.m===RA.mes?' <span class="ra-tag">selecionado</span>':'')+'</td><td class="num">'+x.R.n.toLocaleString('pt-BR')+'</td>'+
+      '<td><div class="ra-hbar"'+tip(tipRows(raLbMes(x.m),[['var(--azul)','Arrecadado',money(x.R.tot)],['var(--text2)','vs média 12 meses',pct((x.R.tot/media-1)*100)]]))+'><i style="width:'+(x.R.tot/maxT*100)+'%"></i><span>'+kfmt(x.R.tot)+'</span></div></td>'+
+      x.R.faixas.map((f,i)=>'<td class="num" style="'+(i===0?raCalorBom(f.p):raCalor(f.p,maxAtrH))+'">'+pct(f.p)+'</td>').join('')+
+      '<td class="num">'+(x.R.vAtr?Math.round(x.R.atrMed)+' d':'—')+'</td></tr>';
+  });
+  hm += '</tbody></table></div>';
+  h += '<div class="card ra-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Comparativo histórico</div><div class="fx-sub">últimos '+H.length+' meses · velocidade de recebimento, arrecadação e sazonalidade (barra = arrecadado; média de '+kfmt(media)+') · clique num mês para analisá-lo</div></div></div>'+hm+'</div>';
+
+  $('content').innerHTML = h;
+}
+
 function render(){
   if(currentUser && !empresaAutorizada(state.empresa)){
     const primeira = (currentUser.empresas||[])[0];
@@ -6101,7 +6307,7 @@ function render(){
       '<div class="t2">Buscando os títulos a pagar e a receber no banco de dados.</div></div>';
     return;
   }
-  const views={dashboard:renderDashboard, reports:renderReports, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
+  const views={dashboard:renderDashboard, reports:renderReports, recanalise:renderRecAnalise, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
     receber:()=>renderTitulos('receber'), bordero:renderBordero, admin:renderAdmin};
   (views[state.view]||renderDashboard)();
