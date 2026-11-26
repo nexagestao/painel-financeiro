@@ -7469,11 +7469,14 @@ async function renderDividas(){
     kpi('Sem prazo definido', money(semPrazo.reduce((s,d)=>s+(+d.saldo_atual||0),0)), null, semPrazo.map(d=>esc(d.credor)).join(', ')||'nenhum')+'</div>';
   // gráfico: parcelas por credor + saldo devedor (próximos 12 meses)
   const bars = comParc.map(d=>({name:d.credor, tone:cor[d.id], values:m12.map(m=>soma(abertas.filter(p=>p.divida_id===d.id && mk(p)===m)))}));
-  const saldoLinha = m12.map(m=>divSaldoAte(D, semPrazo, m));
+  const totMes = m12.map((m,i)=>bars.reduce((s,b)=>s+b.values[i],0));
+  const mTodos = [...new Set(futuras.map(mk))].sort();
   h += '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:16px">'+
-    chartCard({id:'div_evo', title:'Parcelas e saldo devedor · próximos 12 meses', quick:false, body:(m12.length?pcComboBarLine('div_evo', m12.map(divMesLb), bars, {name:'Saldo devedor', values:saldoLinha}, {h:300}):'<div class="empty" style="padding:30px">Sem parcelas futuras</div>')+
-      legend(bars.map(b=>({color:b.tone, name:b.name})).concat([{color:'var(--navy)', name:'Saldo devedor'}]))})+
-    chartCard({id:'div_cred', title:'Saldo devedor por credor', quick:false, body:pcDonut('div_cred', D.map(d=>({name:d.credor, value:+d.saldo_atual||0, color:cor[d.id]})), {h:200})})+'</div>';
+    chartCard({id:'div_evo', title:'Parcelas por mês · próximos 12 meses', quick:false, body:(m12.length?pcComboBarLine('div_evo', m12.map(divMesLb), bars, {name:'Total do mês', values:totMes}, {h:300}):'<div class="empty" style="padding:30px">Sem parcelas futuras</div>')+
+      legend(bars.map(b=>({color:b.tone, name:b.name})).concat([{color:'var(--navy)', name:'Total do mês'}]))})+
+    chartCard({id:'div_cred', title:'Saldo devedor por credor', quick:false, body:pcDonut('div_cred', D.map(d=>({name:d.credor, value:+d.saldo_atual||0})), {h:200})})+'</div>';
+  if(mTodos.length>1) h += '<div style="margin-bottom:16px">'+chartCard({id:'div_saldo', title:'Evolução do saldo devedor até a quitação', quick:false,
+      body:pcLineArea('div_saldo', mTodos.map(divMesLb), [{name:'Saldo devedor', kind:'main', values:mTodos.map(m=>divSaldoAte(D, semPrazo, m))}], {h:260})})+'</div>';
   // credores
   h += '<div class="card" style="margin-bottom:16px"><div class="pc-head"><div style="flex:1"><div class="pc-title">Credores</div></div></div><div class="card-body"><table class="tbl"><thead><tr><th>Credor</th><th>Tipo</th><th class="num">Taxa</th><th class="num">Saldo devedor</th><th class="num">Parcelas restantes</th><th class="num">Total a pagar</th><th class="num">Juros a pagar</th><th>Término</th></tr></thead><tbody>'+
     D.map(d=>{ const L = abertas.filter(p=>p.divida_id===d.id);
