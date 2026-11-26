@@ -4835,6 +4835,8 @@ body.dark .ra-pill{background:#0E1B24}
 .ra-hbar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--azul),var(--turquesa));opacity:.85;border-radius:6px}
 .ra-hbar span{position:relative;font-size:11.5px;font-weight:500;color:#fff;padding-left:8px;line-height:20px;text-shadow:0 1px 1px rgba(0,0,0,.15)}
 .ra-hist tr.ra-sel td{background:#F1F7F8}
+.ra-tbl tr.ra-demais td{color:var(--text2);background:#FAFBFC}
+body.dark .ra-tbl tr.ra-demais td{background:#0E1B24}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -6143,8 +6145,8 @@ function raBase(){
 }
 function raMeses(rows){
   const c = {}; rows.forEach(r=>c[r.mes]=(c[r.mes]||0)+1);
-  const ks = Object.keys(c).sort(), med = ks.map(k=>c[k]).sort((a,b)=>a-b)[Math.floor(ks.length/2)]||0;
-  return ks.filter(k=>c[k]>=Math.max(20, med*0.3));
+  const ks = Object.keys(c).sort(), mx = Math.max(0,...ks.map(k=>c[k]));
+  return ks.filter(k=>c[k]>=Math.max(20, mx*0.25));
 }
 const raLbMes = k=>{ const [y,m]=k.split('-'); return MESES[+m-1]+'/'+y.slice(2); };
 function raResumo(rs){
@@ -6180,7 +6182,7 @@ function raCurva(cid, rs, comp, H){
   vals.forEach((v,i)=>{ const bw=Math.max(3,slot*.62), y=Y(v);
     o+='<rect x="'+(X(i)-bw/2)+'" y="'+y+'" width="'+bw+'" height="'+Math.max(0,H-B-y)+'" rx="2" fill="'+(i<idx(0)+1?'var(--azul)':'#8FD1D0')+'"'+
       tip(tipRows((labels[i]==='0'?'No vencimento':'D'+labels[i]),[['var(--azul)','Recebido no dia',money(v)],['var(--turquesa)','Acumulado',pct(cum[i])]].concat(comp?[[NEUT1,'Acumulado (comparação)',pct(cumC[i])]]:[])))+'/>';
-    if(i%5===1 || labels[i].startsWith('≤') || labels[i].startsWith('>')) o+='<text class="axis-lbl" x="'+X(i)+'" y="'+(H-12)+'" text-anchor="middle">'+labels[i]+'</text>'; });
+    if(i%5===1) o+='<text class="axis-lbl" x="'+X(i)+'" y="'+(H-12)+'" text-anchor="middle">'+labels[i]+'</text>'; });
   const path = a=>a.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+YP(p).toFixed(1)).join(' ');
   if(comp) o+='<path d="'+path(cumC)+'" fill="none" stroke="'+NEUT1+'" stroke-width="2" stroke-dasharray="5 4"/>';
   o+='<path d="'+path(cum)+'" fill="none" stroke="var(--petroleo)" stroke-width="2.4"/>';
@@ -6244,14 +6246,17 @@ function renderRecAnalise(){
   // 1) tabela por vencimento
   const porDia = {}; rs.forEach(r=>{ const kk=isoDate(r.venc); (porDia[kk]=porDia[kk]||[]).push(r); });
   const dias = Object.keys(porDia).sort();
-  const linhas = dias.map(kk=>({kk, R:raResumo(porDia[kk])}));
+  const corte = A.tot*0.01;
+  const principais = dias.filter(kk=>porDia[kk].reduce((t,r)=>t+r.v,0)>=corte), demais = dias.filter(kk=>!principais.includes(kk));
+  const linhas = principais.map(kk=>({kk, R:raResumo(porDia[kk])}));
+  if(demais.length) linhas.push({kk:null, demais:demais.length, R:raResumo(demais.flatMap(kk=>porDia[kk]))});
   const maxAtr = Math.max(...linhas.map(l=>100-l.R.pEmDia), 1);
-  const best = linhas.filter(l=>l.R.n>=20).sort((a,b)=>b.R.pEmDia-a.R.pEmDia)[0], worst = linhas.filter(l=>l.R.n>=20).sort((a,b)=>a.R.pEmDia-b.R.pEmDia)[0];
+  const best = linhas.filter(l=>l.kk && l.R.n>=20).sort((a,b)=>b.R.pEmDia-a.R.pEmDia)[0], worst = linhas.filter(l=>l.kk && l.R.n>=20).sort((a,b)=>a.R.pEmDia-b.R.pEmDia)[0];
   let t = '<div class="tbl-wrap ra-wrap"><table class="tbl ra-tbl"><thead><tr><th>Vencimento</th><th class="num">Boletos</th><th class="num">Arrecadado</th>'+
     RA_FAIXAS.map(f=>'<th class="num">'+f[0]+'</th>').join('')+'<th class="num">Atraso médio</th><th style="width:150px">Composição</th></tr></thead><tbody>';
   linhas.forEach(l=>{
     const tag = best&&l===best?' <span class="ra-tag bom">melhor</span>':worst&&l===worst&&worst!==best?' <span class="ra-tag ruim">pior</span>':'';
-    t += '<tr class="hoverable" onclick="raDetalheDia(\''+l.kk+'\')"><td>'+fdate(parseYMD(l.kk))+tag+'</td><td class="num">'+l.R.n+'</td><td class="num">'+money(l.R.tot)+'</td>'+
+    t += (l.kk ? '<tr class="hoverable" onclick="raDetalheDia(\''+l.kk+'\')"><td>'+fdate(parseYMD(l.kk))+tag+'</td>' : '<tr class="ra-demais"><td>Demais datas <span class="ra-tag">'+l.demais+' datas com menos de 1% do valor</span></td>')+'<td class="num">'+l.R.n+'</td><td class="num">'+money(l.R.tot)+'</td>'+
       l.R.faixas.map((f,i)=>'<td class="num" style="'+(i===0?raCalorBom(f.p):raCalor(f.p,maxAtr))+'"'+tip(tipRows(f.nm,[[RA_CORES[i],'Valor',money(f.v)],[RA_CORES[i],'Boletos',String(f.n)]]))+'>'+pct(f.p)+'</td>').join('')+
       '<td class="num">'+(l.R.vAtr?Math.round(l.R.atrMed)+' d':'—')+'</td>'+
       '<td><div class="ra-bar">'+l.R.faixas.map((f,i)=>f.p?'<i style="width:'+f.p+'%;background:'+RA_CORES[i]+'"></i>':'').join('')+'</div></td></tr>';
