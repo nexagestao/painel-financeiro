@@ -4332,6 +4332,8 @@ body.dark .grid-line{stroke:#1C2633}
 /* sem repetição: nome da empresa já aparece no seletor do topo e da lateral */
 .hdr-company-name{display:none}
 .kpi::after{height:2px;opacity:.6}
+:root{--c-neg:#E39A9A}
+body.dark{--c-neg:#B86464}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -4439,7 +4441,7 @@ function pcLineArea(cid, labels, series, opts){
     if(s.kind==='main'){
       s.values.forEach((vv,i)=>{ if(vv==null)return;
         const last=i===s.values.length-1, negv=vv<0;
-        if(negv||last||n<=14) out+='<circle class="pc-fade" cx="'+X(i)+'" cy="'+Y(vv)+'" r="'+(last?4.5:negv?4:2.8)+'" fill="'+(negv?'var(--neg)':'var(--navy)')+'" stroke="var(--surface)" stroke-width="1.5"/>';
+        if(negv||last||n<=14) out+='<circle class="pc-fade" cx="'+X(i)+'" cy="'+Y(vv)+'" r="'+(last?4.5:negv?4:2.8)+'" fill="'+(negv?'var(--c-neg)':'var(--navy)')+'" stroke="var(--surface)" stroke-width="1.5"/>';
       });
     }
   });
@@ -4458,7 +4460,7 @@ function pcBars(cid, labels, groups, opts){
   let {min,max}=yScaleInfo(Math.min(0,...all),Math.max(...all,0));
   const n=labels.length, slot=(W-L-R)/n, bw=Math.min(20,(slot-12)/groups.length);
   const Y=vv=>T+(H-T-B)*(1-(vv-min)/(max-min));
-  const TONE={accent:'var(--accent)', n1:NEUT1, n2:NEUT2, neg:'var(--neg)', pos:'var(--pos)'};
+  const TONE={accent:'var(--accent)', n1:NEUT1, n2:NEUT2, neg:'var(--c-neg)', pos:'var(--pos)'};
   let out='<svg class="chart-box" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="height:'+H+'px">';
   for(let g=0;g<=4;g++){
     const val=min+(max-min)*g/4, y=Y(val);
@@ -4471,10 +4473,10 @@ function pcBars(cid, labels, groups, opts){
     groups.forEach((g,j)=>{
       const vv=g.values[i], y=Y(Math.max(vv,0)), hh=Math.abs(Y(vv)-Y(0));
       const x=L+slot*i+slot/2-(bw*groups.length+2*(groups.length-1))/2+j*(bw+2);
-      const tone=vv<0&&g.negAuto?'var(--neg)':(TONE[g.tone]||TONE.accent);
+      const tone=vv<0&&g.negAuto?'var(--c-neg)':(TONE[g.tone]||TONE.accent);
       out+='<rect class="pc-bar" style="animation-delay:'+(i*35)+'ms" x="'+x+'" y="'+y+'" width="'+bw+'" height="'+Math.max(hh,1.5)+'" rx="3.5" fill="'+tone+'"/>';
     });
-    const rows=groups.map(g=>[(g.values[i]<0&&g.negAuto)?'var(--neg)':(TONE[g.tone]||TONE.accent), g.name, F(g.values[i])]);
+    const rows=groups.map(g=>[(g.values[i]<0&&g.negAuto)?'var(--c-neg)':(TONE[g.tone]||TONE.accent), g.name, F(g.values[i])]);
     if(opts.extra) rows.push(['var(--text2)', opts.extra.name, F(opts.extra.values[i])]);
     out+='<rect x="'+(L+slot*i)+'" y="0" width="'+slot+'" height="'+H+'" fill="transparent"'+tip(tipRows(lb,rows))+(opts.click?' style="cursor:pointer" onclick="'+opts.click+'('+i+')"':'')+'/>';
   });
@@ -4535,7 +4537,7 @@ function pcComboBarLine(cid, labels, bars, line, opts){
     } else {
       out+='<path class="pc-line" d="'+smoothPath(idxPts.map(p=>[p.x,p.y]))+'" fill="none" stroke="var(--navy)" stroke-width="'+wMain+'" stroke-linecap="round"/>';
     }
-    idxPts.forEach(p=>out+='<circle class="pc-fade" cx="'+p.x+'" cy="'+p.y+'" r="3.4" fill="'+(p.i!=null&&line.values[p.i]<0?'var(--neg)':'var(--navy)')+'" stroke="var(--surface)" stroke-width="1.5"/>');
+    idxPts.forEach(p=>out+='<circle class="pc-fade" cx="'+p.x+'" cy="'+p.y+'" r="3.4" fill="'+(p.i!=null&&line.values[p.i]<0?'var(--c-neg)':'var(--navy)')+'" stroke="var(--surface)" stroke-width="1.5"/>');
   }
   labels.forEach((lb,i)=>{
     // Saídas/custos/despesas exibem valor negativo no tooltip (natureza
@@ -4594,6 +4596,8 @@ function ddTree(cid,idx){
 }
 function pcDonut(cid, items, opts){
   opts=opts||{};
+  // linhas zeradas não ajudam a leitura: fora da legenda e do gráfico
+  items=(items||[]).filter(it=>Math.abs(it.value)>=0.5);
   const H=opts.h||250, cx=118, cy=H/2, r=Math.min(88,H/2-16), ir=opts.pie?0:r*.64;
   const tot=items.reduce((t,i)=>t+Math.max(0,i.value),0)||1;
   let a0=-Math.PI/2;
@@ -4639,7 +4643,7 @@ function pcWaterfall(cid, steps, opts){
   out+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="var(--text2)" stroke-width="1" opacity=".4"/>';
   pts.forEach((p,i)=>{
     const x=L+slot*i+slot/2-bw/2, y1=Y(Math.max(p.from,p.to)), hh=Math.max(Math.abs(Y(p.from)-Y(p.to)),2);
-    const color=p.total?'var(--accent)':(p.value>=0?NEUT1:'var(--neg)');
+    const color=p.total?'var(--accent)':(p.value>=0?NEUT1:'var(--c-neg)');
     out+='<rect class="pc-bar" style="animation-delay:'+(i*45)+'ms" x="'+x+'" y="'+y1+'" width="'+bw+'" height="'+hh+'" rx="3.5" fill="'+color+'"'+
       tip(tipRows(esc(p.name),[[color, p.total?'Acumulado':'Variação', money(p.value)]]))+
       (opts.click?' onclick="'+opts.click+'('+i+')" cursor="pointer"':'')+'/>';
