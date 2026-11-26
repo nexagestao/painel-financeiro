@@ -2602,80 +2602,105 @@ function titulosDataFiltro(arr){
 }
 function setTitDataFiltro(campo, val){ state[campo]=val; render(); }
 function limparTitDataFiltro(){ state.titDataIni=''; state.titDataFim=''; render(); }
+/* Contas a Pagar / Receber.
+   - "Em aberto" só considera títulos a partir do mês corrente da conciliação
+     (REAL_M): os anteriores já estão no realizado da DRE/MGF e o que sobrou
+     "em aberto" no banco é resíduo (mesmo corte do Fluxo de Caixa).
+   - Vencido usa a data real de hoje (não a data-base simulada HOJE).
+   - Abre mostrando o que falta pagar/receber, ordenado por vencimento. */
+function titStatus(t, pagar){
+  const liq = pagar ? t.status==='Pago' : t.status==='Recebido';
+  if(liq) return pagar?'Pago':'Recebido';
+  return (t.venc && t.venc < rpDia(hojeReal())) ? 'Vencido' : 'Em aberto';
+}
 function renderTitulos(tipo){
   const pagar = tipo==='pagar';
-  const lista = titulosDataFiltro(pagar?pagarSel():receberSel());
+  const corte = new Date(ANO, REAL_M, 1), hoje = rpDia(hojeReal());
+  const base = titulosDataFiltro(pagar?pagarSel():receberSel())
+    .filter(t=>t.status!=='Cancelado')
+    .filter(t=>(pagar?t.status==='Pago':t.status==='Recebido') || (t.venc && t.venc>=corte))
+    .map(t=>Object.assign(Object.create(Object.getPrototypeOf(t)), t, {_st:titStatus(t,pagar)}));
   const modo = pagar?state.pagarModo:state.receberModo;
-  const aberto = lista.filter(t=>t.status!=='Pago'&&t.status!=='Recebido');
-  const vencidos = lista.filter(t=>t.status==='Vencido');
-  const pagos = lista.filter(t=>t.status==='Pago'||t.status==='Recebido');
+  const fil = state.titFiltro || 'aberto';
+  const busca = (state.titBusca||'').trim().toLowerCase();
+  const aberto = base.filter(t=>t._st==='Em aberto'||t._st==='Vencido');
+  const vencidos = base.filter(t=>t._st==='Vencido');
+  const liq = base.filter(t=>t._st==='Pago'||t._st==='Recebido');
   const soma = a=>a.reduce((t,x)=>t+x.vprev,0);
-  const prox7 = aberto.filter(t=>t.venc>HOJE && (t.venc-HOJE)/86400000<=7);
-  const porParte={};
-  lista.forEach(t=>{ const k=t.forn||t.cli; porParte[k]=(porParte[k]||0)+t.vprev; });
-  const maior=Object.entries(porParte).sort((a,b)=>b[1]-a[1])[0]||['—',0];
+  const somaLiq = a=>a.reduce((t,x)=>t+((pagar?x.vpago:x.vrec)||x.vprev),0);
+  const fim7 = new Date(hoje); fim7.setDate(fim7.getDate()+7);
+  const prox7 = aberto.filter(t=>t.venc>=hoje && t.venc<=fim7);
+  const dLiq = t=>pagar?t.pgto:t.rec;
+  const liqMes = liq.filter(t=>dLiq(t) && dLiq(t).getMonth()===hoje.getMonth() && dLiq(t).getFullYear()===hoje.getFullYear());
+  const lista = (fil==='aberto'?aberto:fil==='vencido'?vencidos:fil==='liq'?liq:base)
+    .filter(t=>!busca || ((t.forn||t.cli||'')+' '+(acc(t.conta)?acc(t.conta).n:t.conta)).toLowerCase().includes(busca));
 
   let h=pageHead(pagar?'Contas a Pagar':'Contas a Receber','');
-  h+='<div class="kpi-grid">';
-  h+=kpi('Total em aberto',money(soma(aberto)),null,aberto.length+' título(s)');
-  h+=kpi('Total vencido',money(soma(vencidos)),null,vencidos.length+' título(s)',vencidos.length?'neg':'');
-  if(pagar){
-    h+=kpi('Total pago no mês',money(soma(pagos)),null,'Julho/2026','pos');
-    h+=kpi('Próximos 7 dias',money(soma(prox7)),null,prox7.length+' vencimento(s)');
-    h+=kpi('Maior fornecedor',money(maior[1]),null,esc(maior[0]));
-    h+=kpi('A vencer',money(soma(aberto)-soma(vencidos)),null,'títulos dentro do prazo');
-  } else {
-    h+=kpi('Total recebido no mês',money(soma(pagos)),null,'Julho/2026','pos');
-    const inad = soma(vencidos)/(soma(lista)||1)*100;
-    h+=kpi('Inadimplência',pct(inad),null,'vencidos / carteira',inad>12?'neg':'');
-    h+=kpi('Adimplência',pct(100-inad),null,'complemento da carteira','pos');
-    h+=kpi('Maior devedor',money(maior[1]),null,esc(maior[0]));
-  }
+  h+='<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">';
+  h+=kpi(pagar?'A pagar':'A receber', money(soma(aberto),true), null, aberto.length+' título(s) em aberto');
+  h+=kpi('Vencido', money(soma(vencidos),true), null, vencidos.length?vencidos.length+' título(s) em atraso':'nada em atraso', vencidos.length?'neg':'');
+  h+=kpi('Próximos 7 dias', money(soma(prox7),true), null, prox7.length+' vencimento(s) até '+fdate(fim7));
+  h+=kpi((pagar?'Pago':'Recebido')+' em '+MESES_LONG[hoje.getMonth()], money(somaLiq(liqMes),true), null, liqMes.length+' baixa(s)', '');
   h+='</div>';
 
   if(!pagar){
     const buckets=agingBuckets();
-    const cores=['var(--pos)','var(--navy)','#F1948A','#E57373','var(--neg)','#B91C1C','#7F1D1D'];
+    const cores=['var(--c-in)','#3F9AA3','#7DBFC4','#E8B4B4','#E39A9A','#D27878','#B85C5C'];
     const vals=buckets.map(b=>soma(aberto.filter(b[1])));
-    const tot=vals.reduce((t,x)=>t+x,0)||1;
-    h+='<div class="card" style="margin-bottom:16px"><div class="card-head"><div class="card-title">Aging da Carteira</div></div><div class="card-body">';
-    h+='<div class="aging-bar">'+vals.map((vv,i)=>vv?'<div style="width:'+(vv/tot*100)+'%;background:'+cores[i]+'" title="'+buckets[i][0]+': '+money(vv)+'"></div>':'').join('')+'</div>';
-    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px">';
-    buckets.forEach((b,i)=>{ h+='<div><div style="font-size:11px;color:var(--text2)"><i style="display:inline-block;width:8px;height:8px;border-radius:3px;background:'+cores[i]+';margin-right:5px"></i>'+b[0]+'</div><div style="font-size:13.5px;font-weight:600;margin-top:3px">'+money(vals[i])+'</div></div>'; });
-    h+='</div></div></div>';
+    const tot=vals.reduce((t,x)=>t+x,0);
+    if(tot>0){
+      h+='<div class="card" style="margin-bottom:16px"><div class="card-head"><div class="card-title">Aging da carteira</div></div><div class="card-body">';
+      h+='<div class="aging-bar">'+vals.map((vv,i)=>vv?'<div style="width:'+(vv/tot*100)+'%;background:'+cores[i]+'" title="'+buckets[i][0]+': '+money(vv)+'"></div>':'').join('')+'</div>';
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px">';
+      buckets.forEach((bk,i)=>{ if(vals[i]) h+='<div><div style="font-size:11px;color:var(--text2)"><i style="display:inline-block;width:8px;height:8px;border-radius:3px;background:'+cores[i]+';margin-right:5px"></i>'+bk[0]+'</div><div style="font-size:13.5px;font-weight:500;margin-top:3px">'+money(vals[i])+'</div></div>'; });
+      h+='</div></div></div>';
+    }
   }
 
-  const modos=[['lista','Lista'],['calendario','Calendário'],['venc','Por vencimento'],['parte',pagar?'Por fornecedor':'Por cliente'],['cat','Por categoria']];
-  h+='<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px">';
-  h+='<div class="seg">'+modos.map(mo=>
-    '<button class="'+(modo===mo[0]?'on':'')+'" onclick="state.'+(pagar?'pagarModo':'receberModo')+'=\''+mo[0]+'\';render()">'+mo[1]+'</button>').join('')+'</div>';
-  h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-    '<span style="font-size:12px;font-weight:600;color:var(--text2)">Vencimento</span>'+
-    '<span style="font-size:12px;color:var(--text2)">De</span>'+
-    '<input type="date" class="select" value="'+esc(state.titDataIni)+'" onchange="setTitDataFiltro(\'titDataIni\',this.value)">'+
-    '<span style="font-size:12px;color:var(--text2)">Até</span>'+
-    '<input type="date" class="select" value="'+esc(state.titDataFim)+'" onchange="setTitDataFiltro(\'titDataFim\',this.value)">'+
+  const modos=[['lista','Lista'],['calendario','Calendário'],['parte',pagar?'Por fornecedor':'Por cliente'],['cat','Por categoria']];
+  const filtros=[['aberto','Em aberto',aberto.length],['vencido','Vencidos',vencidos.length],['liq',pagar?'Pagos':'Recebidos',liq.length],['todos','Todos',base.length]];
+  h+='<div class="tit-bar">';
+  h+='<div class="seg">'+filtros.map(f=>'<button class="'+(fil===f[0]?'on':'')+'" onclick="state.titFiltro=\''+f[0]+'\';render()">'+f[1]+' <span class="tit-n">'+f[2]+'</span></button>').join('')+'</div>';
+  h+='<input class="tit-busca" type="text" placeholder="Buscar '+(pagar?'fornecedor':'cliente')+' ou categoria…" value="'+esc(state.titBusca||'')+'" oninput="state.titBusca=this.value;clearTimeout(window._tb);window._tb=setTimeout(()=>{render();const i=document.querySelector(\'.tit-busca\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">';
+  h+='<div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+    '<div class="seg">'+modos.map(mo=>'<button class="'+(modo===mo[0]?'on':'')+'" onclick="state.'+(pagar?'pagarModo':'receberModo')+'=\''+mo[0]+'\';render()">'+mo[1]+'</button>').join('')+'</div>'+
+    '<input type="date" class="select" title="Vencimento de" value="'+esc(state.titDataIni)+'" onchange="setTitDataFiltro(\'titDataIni\',this.value)">'+
+    '<input type="date" class="select" title="Vencimento até" value="'+esc(state.titDataFim)+'" onchange="setTitDataFiltro(\'titDataFim\',this.value)">'+
     ((state.titDataIni||state.titDataFim)?'<button class="btn sm ghost" onclick="limparTitDataFiltro()">'+icon('x',12)+' Limpar</button>':'')+
     '</div></div>';
 
   if(modo==='lista'){
-    h+='<div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Vencimento</th><th>'+(pagar?'Fornecedor':'Cliente')+'</th><th>Documento</th><th>Conta</th><th>Centro</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>';
-    [...lista].sort((a,b)=>a.venc-b.venc).forEach(t=>{
-      h+='<tr class="hoverable" onclick="detTitulo(\''+t.id+'\',\''+tipo+'\')"><td>'+fdate(t.venc)+'</td><td>'+esc(t.forn||t.cli)+'</td><td style="color:var(--text2)">'+t.doc+'</td><td style="color:var(--text2)">'+(acc(t.conta)?esc(acc(t.conta).n):t.conta)+'</td><td style="color:var(--text2)">'+t.centro+'</td><td class="num">'+moneyHtml(t.vprev,null,pagar?null:'in')+'</td><td><span class="status-badge '+stClass(t.status)+'">'+t.status+'</span></td></tr>';
+    const ord = fil==='liq' ? [...lista].sort((x,y)=>(dLiq(y)||0)-(dLiq(x)||0)) : [...lista].sort((x,y)=>(x.venc||0)-(y.venc||0));
+    const temDoc = ord.some(t=>t.doc), temCentro = ord.some(t=>t.centro && t.centro!=='Receitas');
+    const LIM = 400;
+    h+='<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl"><thead><tr><th>Vencimento</th><th>'+(pagar?'Fornecedor':'Cliente')+'</th>'+(temDoc?'<th>Documento</th>':'')+'<th>Categoria</th>'+(temCentro?'<th>Centro</th>':'')+'<th class="num">Valor</th><th>Status</th></tr></thead><tbody>';
+    if(!ord.length) h+='<tr><td colspan="7"><div class="empty" style="padding:26px"><div class="t1">Nada por aqui</div><div class="t2">Nenhum título com esse filtro.</div></div></td></tr>';
+    let grupoAnt = null;
+    ord.slice(0,LIM).forEach(t=>{
+      if(fil!=='liq' && t.venc){
+        const g = t.venc<hoje?'Vencidos':rpMesmoDia(t.venc,hoje)?'Hoje':t.venc<=fim7?'Próximos 7 dias':MESES_LONG[t.venc.getMonth()]+' de '+t.venc.getFullYear();
+        if(g!==grupoAnt){ const n=ord.filter(x=>{ const gg=x.venc<hoje?'Vencidos':rpMesmoDia(x.venc,hoje)?'Hoje':x.venc<=fim7?'Próximos 7 dias':MESES_LONG[x.venc.getMonth()]+' de '+x.venc.getFullYear(); return gg===g; });
+          h+='<tr class="tit-grp"><td colspan="'+(5+(temDoc?1:0)+(temCentro?1:0))+'">'+g+'<span>'+n.length+' · '+money(soma(n),true)+'</span></td></tr>'; grupoAnt=g; }
+      }
+      const st = t._st, cls = st==='Vencido'?'st-vencido':(st==='Pago'||st==='Recebido')?(pagar?'st-pago':'st-recebido'):'st-aberto';
+      h+='<tr class="hoverable" onclick="detTitulo(\''+t.id+'\',\''+tipo+'\')"><td class="tit-d">'+fdate(fil==='liq'&&dLiq(t)?dLiq(t):t.venc)+'</td><td class="tit-f">'+esc(t.forn||t.cli||'—')+'</td>'+
+        (temDoc?'<td class="tit-s">'+esc(t.doc||'')+'</td>':'')+'<td class="tit-s">'+(acc(t.conta)?esc(acc(t.conta).n):esc(t.conta||''))+'</td>'+(temCentro?'<td class="tit-s">'+esc(t.centro||'')+'</td>':'')+
+        '<td class="num">'+money(t.vprev,true)+'</td><td><span class="status-badge '+cls+'">'+st+'</span></td></tr>';
     });
-    h+='</tbody></table></div></div>';
+    h+='</tbody></table></div>'+(ord.length>LIM?'<div class="tit-mais">Mostrando '+LIM+' de '+ord.length+' — use a busca ou o filtro de datas.</div>':'')+'</div>';
   } else if(modo==='calendario'){
-    h+='<div class="card"><div class="card-head"><div class="card-title">Agosto de 2026</div></div><div class="card-body">';
+    const cm=hoje.getMonth(), cy=hoje.getFullYear(), ndias=new Date(cy,cm+1,0).getDate();
+    h+='<div class="card"><div class="card-head"><div class="card-title">'+MESES_LONG[cm].replace(/^./,c=>c.toUpperCase())+' de '+cy+'</div></div><div class="card-body">';
     h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;font-size:11px">';
     ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(dd=>h+='<div style="color:var(--text2);font-weight:600;text-align:center;padding:4px">'+dd+'</div>');
-    const first=new Date(2026,7,1).getDay();
+    const first=new Date(cy,cm,1).getDay();
     for(let i=0;i<first;i++)h+='<div></div>';
-    for(let dia=1;dia<=31;dia++){
-      const doDia=lista.filter(t=>t.venc.getMonth()===7&&t.venc.getDate()===dia);
+    for(let dia=1;dia<=ndias;dia++){
+      const doDia=lista.filter(t=>t.venc&&t.venc.getMonth()===cm&&t.venc.getFullYear()===cy&&t.venc.getDate()===dia);
       const tot=soma(doDia);
       h+='<div style="border:1px solid var(--border);border-radius:8px;min-height:58px;padding:5px 7px'+(doDia.length?';cursor:pointer':'')+'"'+(doDia.length?' onclick="detTitulo(\''+doDia[0].id+'\',\''+tipo+'\')"':'')+'>'+
          '<div style="color:var(--text2)">'+dia+'</div>'+
-         (doDia.length?'<div style="font-weight:600;font-size:11.5px;margin-top:3px;color:'+(pagar?'var(--neg)':'var(--pos)')+'">'+kfmt(tot)+'</div><div style="color:var(--text2)">'+doDia.length+' título(s)</div>':'')+'</div>';
+         (doDia.length?'<div style="font-weight:500;font-size:11.5px;margin-top:3px;color:var(--text)">'+kfmt(tot)+'</div><div style="color:var(--text2)">'+doDia.length+' título(s)</div>':'')+'</div>';
     }
     h+='</div></div></div>';
   } else {
@@ -4380,6 +4405,21 @@ body.dark .rp-ia{background:#0F2026;border-color:#1D3B42}
   .rp-sec,.rp-kpis,.rp-ia{break-inside:avoid}
   .tbl th{position:static}
 }
+
+/* ---------- Contas a Pagar / Receber ---------- */
+.tit-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.tit-n{font-size:11px;color:var(--text2);margin-left:3px}
+.seg button.on .tit-n{color:inherit;opacity:.7}
+.tit-busca{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-width:260px;font-size:13px}
+.tit-wrap{max-height:calc(100vh - 330px);overflow:auto}
+.tit-tbl td{padding:8px 14px}
+.tit-tbl td.tit-d{color:var(--text2);white-space:nowrap;width:110px}
+.tit-tbl td.tit-f{font-weight:500}
+.tit-tbl td.tit-s{color:var(--text2)}
+.tit-tbl tr.tit-grp td{background:#F8FAFC;font-size:11.5px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;padding:7px 14px;position:sticky;top:37px;z-index:1}
+.tit-tbl tr.tit-grp td span{float:right;text-transform:none;letter-spacing:0}
+body.dark .tit-tbl tr.tit-grp td{background:#0F1720}
+.tit-mais{padding:10px 14px;font-size:12px;color:var(--text2);border-top:1px solid var(--border)}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -5348,6 +5388,8 @@ function renderChartFull(){
    próprio relatório (CSS @media print esconde o resto da tela). */
 const RP = {aba:'dia', mes:null, ia:{}, iaLoading:{}};
 const RP_ABAS = [['dia','Report do dia'],['fluxo','Fluxo de caixa'],['bordero','Borderôs'],['mensal','Prestação de contas']];
+// títulos 'Em aberto' de meses já fechados pela DRE/MGF são resíduo — ficam fora (mesmo corte do Fluxo de Caixa)
+function rpCorte(){ return new Date(ANO, REAL_M, 1); }
 function rpDia(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
 function rpMesmoDia(a,b){ return a && b && rpDia(a).getTime()===rpDia(b).getTime(); }
 function rpSaldosBancos(emp){
@@ -5383,8 +5425,8 @@ function rpPrevisaoDiaria(ateDia){
     const o = dias[idx[k]];
     if(tipo==='p'){ o.sai += t.vprev; o.itensS.push(t); } else { o.ent += t.vprev; o.itensE.push(t); }
   };
-  (PAGAR[emp]||[]).filter(t=>t.status!=='Pago' && t.uid).forEach(t=>lanc(t,'p'));
-  (RECEBER[emp]||[]).filter(t=>t.status!=='Recebido' && t.status!=='Cancelado' && t.venc && t.venc>=new Date(ANO,REAL_M,1)).forEach(t=>lanc(t,'r'));
+  (PAGAR[emp]||[]).filter(t=>t.status!=='Pago' && t.uid && t.venc && t.venc>=rpCorte()).forEach(t=>lanc(t,'p'));
+  (RECEBER[emp]||[]).filter(t=>t.status!=='Recebido' && t.status!=='Cancelado' && t.venc && t.venc>=rpCorte()).forEach(t=>lanc(t,'r'));
   let s = ini;
   dias.forEach(o=>{ o.ini=s; s += o.ent - o.sai; o.fim=s; });
   return {ini, dias};
@@ -5397,7 +5439,7 @@ function rpDadosDia(){
   const bancos = rpSaldosBancos(emp);
   const pagosHoje = (PAGAR[emp]||[]).filter(t=>t.status==='Pago' && rpMesmoDia(t.pgto,hoje));
   const recHoje = (RECEBER[emp]||[]).filter(t=>t.status==='Recebido' && rpMesmoDia(t.rec,hoje));
-  const abertos = (PAGAR[emp]||[]).filter(t=>t.status!=='Pago' && t.uid);
+  const abertos = (PAGAR[emp]||[]).filter(t=>t.status!=='Pago' && t.uid && t.venc && t.venc>=rpCorte());
   const vencidos = abertos.filter(t=>t.venc && t.venc<hoje);
   const hojeVence = abertos.filter(t=>rpMesmoDia(t.venc,hoje));
   const prox7 = abertos.filter(t=>t.venc && t.venc>hoje && t.venc<=fim7).sort((a,b)=>a.venc-b.venc);
@@ -5412,7 +5454,7 @@ function rpDadosDia(){
     bordero_do_dia:{qtd:bd.length, total:bd.reduce((t,r)=>t+r.valor,0), liberado:bd.filter(r=>r.status==='Liberado').reduce((t,r)=>t+r.valor,0), aguardando:bd.filter(r=>r.status==='Aguardando').reduce((t,r)=>t+r.valor,0)},
     proximos_7_dias:{qtd:prox7.length, total:soma(prox7), maiores:prox7.slice().sort((a,b)=>b.vprev-a.vprev).slice(0,5).map(t=>({fornecedor:t.forn, venc:fdate(t.venc), valor:t.vprev}))},
     menor_saldo_7_dias:{valor:menor.fim, data:fdate(menor.data)},
-    alertas:alertas().map(a=>a.t),
+    alertas:alertas().filter(a=>!/vencida/.test(a.t)).map(a=>a.t),
     _lin:{bancos, pagosHoje, recHoje, hojeVence, vencidos, prox7, bd, prev}};
 }
 function rpHtmlDia(D){
@@ -5514,7 +5556,7 @@ function rpDadosMensal(){
   const s = saldos('real')[m]||{ini:0,fim:0};
   const prev = saldos('proj')[m]||{ger:0};
   const fx = fluxoMes(m,'real'), fxp = fluxoMes(m,'proj');
-  const em = (PAGAR[state.empresa]||[]).filter(t=>t.status!=='Pago' && t.uid && t.venc && t.venc<rpDia(hojeReal()));
+  const em = (PAGAR[state.empresa]||[]).filter(t=>t.status!=='Pago' && t.uid && t.venc && t.venc>=rpCorte() && t.venc<rpDia(hojeReal()));
   return {mes:MESES_LONG[m]+'/'+ANO, empresa:EMPRESAS[state.empresa].nome,
     receita_bruta:rec.mes, resultado_liquido:res.mes, margem_liquida:rec.mes?res.mes/rec.mes*100:null,
     caixa:{saldo_inicial:s.ini, entradas:fx.ent, saidas:fx.sai, saldo_final:s.fim},
