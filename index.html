@@ -6795,20 +6795,19 @@ async function recImportar(){
       rows.slice(iH+2).forEach(r=>{
         if(!r || r.every(x=>x==null||x==='')) return;
         const nome = r[0] ? String(r[0]).trim() : '';
-        if(/PAGAMENTOS QUE SAO FIXOS/.test(recNorm(nome))){ grupo = 'fixo'; return; }
+        if(/PAGAMENTOS QUE SAO FIXOS/.test(recNorm(nome))) return;
         if(/^TOTAL$/.test(recNorm(r[7]||'')) || /TOTAL/.test(recNorm(r[7]||''))) return;
         if(!nome){ if(itens.length && (r[2]||r[4]||r[5])) itens[itens.length-1].extra.push([r[2],r[4],r[5],r[6]].filter(x=>x!=null).join(' · ')); return; }
         itens.push({nome, cidade:r[1]||null, texto:r[2]?String(r[2]):null, vendas:num(r[3]), placas:num(r[4]), valor:num(r[5]), recorr:num(r[6]), vale:num(r[7]), receber:num(r[8]),
           obs:[r[9],r[10]].filter(x=>x!=null&&x!=='').map(x=>typeof x==='number'?money(x,true):String(x)).join(' · '), situacao:r[11]?String(r[11]):(r[10]&&/META|OK|NOTA/.test(recNorm(r[10]))?String(r[10]):null), extra:[],
-          grupo: /FIXO MENSAL/.test(recNorm(r[9]||'')) ? 'fixo' : grupo});
-        if(grupo==='fixo' && /COMISS|META|RECORR/.test(recNorm(r[2]||'')) && !/FIXO/.test(recNorm(r[9]||''))) itens[itens.length-1].grupo = 'variavel';
+          grupo: /FIXO MENSAL/.test(recNorm(r[9]||'')) ? 'fixo' : 'variavel'});
       });
       // negociações: cria/atualiza pelo nome (mantém cooperativas e regras já ajustadas)
       const exist = {}; REC.negs.forEach(n=>exist[recNorm(n.nome)]=n);
       const negUp = itens.map((it,i)=>{ const e = exist[recNorm(it.nome)]; const lr = recLerRegra(it.texto||'');
         return {empresa_id:empId, nome:it.nome, cidade:it.cidade, grupo:it.grupo, texto:it.texto, ordem:i,
           cooperativas: e&&e.cooperativas&&e.cooperativas.length ? e.cooperativas : (it.grupo==='fixo' ? [] : recSugereCoops(it.nome, coopNomes)),
-          regra: e&&e.regra&&Object.keys(e.regra).length ? e.regra : lr.regra, ambigua: e ? e.ambigua : lr.ambigua, ativa:true}; });
+          regra: e&&e.regra&&Object.keys(e.regra).length ? e.regra : lr.regra, ambigua: e ? e.ambigua : lr.ambigua, ativa:true, grupo:it.grupo}; });
       const { data:negs, error:e1 } = await sb.from('rec_negociacoes').upsert(negUp, {onConflict:'empresa_id,nome'}).select('id,nome'); if(e1) throw e1;
       const idDe = {}; negs.forEach(n=>idDe[recNorm(n.nome)]=n.id);
       const apUp = itens.map(it=>({empresa_id:empId, competencia:mes, negociacao_id:idDe[recNorm(it.nome)], vendas:it.vendas, placas:it.placas, valor_base:it.valor,
