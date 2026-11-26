@@ -7208,7 +7208,40 @@ async function renderRecNegociacoes(){
    importados das planilhas do RH. Acesso: rh_pode() no banco (admin, RH e
    leitura da diretoria). CPF, e-mail e números longos das observações
    são descartados na importação. */
-const RH = {pode:false, edita:false, emp:null, folha:[], ben:[], comp:null, f:{q:'', tipo:''}};
+const RH = {pode:false, edita:false, emp:null, folha:[], ben:[], comp:null, f:{q:'', tipo:''}, enc:null};
+/* Encargos do empregador (estimativa). FGTS é fixo em lei (8%; aprendiz 2%). INSS patronal, RAT e
+   terceiros dependem do regime tributário/enquadramento: valores editáveis pelo RH. Provisões de
+   férias (+1/3) e 13º somam FGTS e INSS sobre elas quando "provisões com encargos" estiver marcado. */
+const RH_ENC_PADRAO = {fgts:8, fgts_aprendiz:2, inss:20, rat:2, terceiros:5.8, ferias:11.11, decimo:8.33, prov_encargos:true, prolabore_inss:20, confirmado:false};
+function rhEnc(){ return Object.assign({}, RH_ENC_PADRAO, RH.enc||{}); }
+function rhEncargos(p){
+  const c = rhEnc(), b = p.base||0, r = {fgts:0, inss:0, ferias:0, decimo:0, prov:0};
+  if(p.tipo==='CLT' || p.tipo==='Aprendiz'){
+    const fg = p.tipo==='Aprendiz' ? c.fgts_aprendiz : c.fgts;
+    r.fgts = b*fg/100; r.inss = b*(c.inss+c.rat+c.terceiros)/100;
+    r.ferias = b*c.ferias/100; r.decimo = b*c.decimo/100;
+    if(c.prov_encargos) r.prov = (r.ferias+r.decimo)*(fg+c.inss+c.rat+c.terceiros)/100;
+  } else if(p.tipo==='Diretoria'){ r.inss = b*c.prolabore_inss/100; }
+  r.total = r.fgts+r.inss+r.ferias+r.decimo+r.prov;
+  return r;
+}
+function rhEncAbrir(){
+  const c = rhEnc(), f = (id,lb,v)=>fld(id,lb+' (%)',v,'number');
+  openModal('<div class="modal-head"><div class="drawer-title">Encargos sobre a folha</div><div class="drawer-sub">Percentuais usados na estimativa do custo do empregador. Confirme INSS patronal, RAT e terceiros com o contador.</div></div>'+
+    '<div class="modal-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+f('enFg','FGTS',c.fgts)+f('enFgA','FGTS aprendiz',c.fgts_aprendiz)+f('enIn','INSS patronal',c.inss)+f('enRat','RAT / SAT ajustado',c.rat)+
+    f('enTe','Terceiros (Sistema S, salário-educação)',c.terceiros)+f('enPl','INSS sobre pró-labore',c.prolabore_inss)+f('enFe','Provisão de férias + 1/3',c.ferias)+f('enDe','Provisão de 13º',c.decimo)+'</div>'+
+    '<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin:6px 0"><input type="checkbox" id="enPe"'+(c.prov_encargos?' checked':'')+'> Incidir FGTS e INSS sobre as provisões</label>'+
+    '<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin:6px 0"><input type="checkbox" id="enOk"'+(c.confirmado?' checked':'')+'> Percentuais confirmados com o contador</label>'+
+    '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:8px">Empresas do Simples Nacional (anexos I, II, III e V) não recolhem INSS patronal, RAT e terceiros na folha: nesse caso, zere esses três campos.</div></div>'+
+    '<div class="modal-foot"><button class="btn" onclick="closeModal()">Cancelar</button>'+(RH.edita?'<button class="btn primary" onclick="rhEncSalvar()">Salvar</button>':'')+'</div>');
+}
+async function rhEncSalvar(){
+  const n = k=>{ const x = $(k).value; return x===''?0:+x; };
+  const enc = {fgts:n('enFg'), fgts_aprendiz:n('enFgA'), inss:n('enIn'), rat:n('enRat'), terceiros:n('enTe'), prolabore_inss:n('enPl'), ferias:n('enFe'), decimo:n('enDe'), prov_encargos:$('enPe').checked, confirmado:$('enOk').checked};
+  const { error } = await sb.from('rh_config').upsert({empresa_id:EMPRESA_IDS[state.empresa], encargos:enc, updated_at:new Date().toISOString(), updated_by:currentUser.id});
+  if(error){ console.error(error); toast('Não foi possível salvar'); return; }
+  RH.enc = enc; closeModal(); toast('Encargos atualizados'); render();
+}
 async function rhPapelCarregar(){
   RH.pode = RH.edita = false;
   const id = EMPRESA_IDS[state.empresa]; if(!id || !currentUser) return;
@@ -7218,11 +7251,12 @@ async function rhPapelCarregar(){
 async function rhCarregar(force){
   const emp = state.empresa, id = EMPRESA_IDS[emp];
   if(RH.emp===emp && !force) return;
-  const [f, b] = await Promise.all([
+  const [f, b, cfg] = await Promise.all([
     fetchAllRows(o=>sb.from('rh_folha').select('*', o).eq('empresa_id', id)),
-    fetchAllRows(o=>sb.from('rh_beneficios').select('*', o).eq('empresa_id', id))
+    fetchAllRows(o=>sb.from('rh_beneficios').select('*', o).eq('empresa_id', id)),
+    sb.from('rh_config').select('encargos').eq('empresa_id', id).maybeSingle()
   ]);
-  RH.folha = f||[]; RH.ben = b||[]; RH.emp = emp;
+  RH.folha = f||[]; RH.ben = b||[]; RH.enc = cfg.data ? cfg.data.encargos : null; RH.emp = emp;
 }
 const rhSan = s=>{ if(s==null) return null; const t = String(s).replace(/[\w.+-]+@[\w-]+\.[\w.]+/g,'').replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g,'').replace(/\d{8,}/g,'').replace(/\s{2,}/g,' ').trim(); return t||null; };
 function rhNum(x){ if(x==null||x==='') return null; if(typeof x==='number') return x; const t=String(x).trim(); if(!/\d/.test(t)) return null; const v=parseFloat(t.replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.')); return isNaN(v)?null:v; }
@@ -7328,41 +7362,58 @@ async function renderRhPainel(){
   if(!RH.comp){ $('content').innerHTML = h+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Nenhum dado de RH ainda</div><div class="t2">Importe a planilha da folha de pagamento e a de VT/VA.</div></div></div>'; return; }
   h += '<div class="cob-bar"><label class="cob-mes">Competência<select class="select" onchange="RH.comp=this.value;render()">'+comps.slice().reverse().map(c=>'<option value="'+c+'"'+(c===RH.comp?' selected':'')+'>'+recLb(c)+'</option>').join('')+'</select></label></div>';
   const P = rhPessoasMes(RH.comp), ant = comps[comps.indexOf(RH.comp)-1];
-  const tot = L=>L.reduce((s,p)=>s+p.base+p.ben,0);
-  const folha = P.reduce((s,p)=>s+p.base,0), ben = P.reduce((s,p)=>s+p.ben,0), custo = folha+ben, nP = P.filter(p=>!p.soBen).length;
+  P.forEach(p=>p.enc = rhEncargos(p));
+  const tot = L=>L.reduce((s,p)=>s+p.base+p.ben+rhEncargos(p).total,0);
+  const folha = P.reduce((s,p)=>s+p.base,0), ben = P.reduce((s,p)=>s+p.ben,0), enc = P.reduce((s,p)=>s+p.enc.total,0), custo = folha+ben+enc, nP = P.filter(p=>!p.soBen).length;
+  const ES = k=>P.reduce((s,p)=>s+p.enc[k],0), cfgE = rhEnc();
   const custoAnt = ant ? tot(rhPessoasMes(ant)) : null, rec = rhRecebidoMes(RH.comp);
-  const porTipo = {}; P.forEach(p=>{ const t = p.tipo||'—'; const o = porTipo[t] = porTipo[t]||{n:0,v:0}; if(!p.soBen) o.n++; o.v += p.base+p.ben; });
-  h += '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">'+
-    kpi('Custo total com pessoal', money(custo), custoAnt?pctChange(custo,custoAnt):null, 'folha + VT/VA · vs '+(ant?recLb(ant).toLowerCase():'—'))+
+  const porTipo = {}; P.forEach(p=>{ const t = p.tipo||'—'; const o = porTipo[t] = porTipo[t]||{n:0,v:0}; if(!p.soBen) o.n++; o.v += p.base+p.ben+p.enc.total; });
+  h += '<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)">'+
+    kpi('Custo total com pessoal', money(custo), custoAnt?pctChange(custo,custoAnt):null, 'folha + encargos + VT/VA · vs '+(ant?recLb(ant).toLowerCase():'—'))+
     kpi('Folha (valor base)', money(folha), null, 'líquido pago '+money(P.reduce((s,p)=>s+(p.liq||0),0)))+
+    kpi('Encargos e provisões', money(enc), null, 'FGTS '+money(ES('fgts'))+' · INSS '+money(ES('inss'))+(cfgE.confirmado?'':' · estimativa'))+
     kpi('Benefícios VT / VA', money(ben), null, 'VT '+money(P.reduce((s,p)=>s+p.vt,0))+' · VA '+money(P.reduce((s,p)=>s+p.va,0)))+
     kpi('Colaboradores', String(nP), null, Object.entries(porTipo).filter(([,o])=>o.n).sort((a,b)=>b[1].n-a[1].n).map(([t,o])=>o.n+' '+t).join(' · '))+'</div>';
   // evolução
   const evo = [...new Set(RH.folha.map(x=>x.competencia))].sort().slice(-12);
   const evF = [], evB = [], evT = [];
-  evo.forEach(c=>{ const L = rhPessoasMes(c); const f = L.reduce((s,p)=>s+p.base,0), b = L.reduce((s,p)=>s+p.ben,0); evF.push(f); evB.push(b); evT.push(f+b); });
+  const evE = [];
+  evo.forEach(c=>{ const L = rhPessoasMes(c); const f = L.reduce((s,p)=>s+p.base,0), b = L.reduce((s,p)=>s+p.ben,0), e = L.reduce((s,p)=>s+rhEncargos(p).total,0); evF.push(f); evE.push(e); evB.push(b); evT.push(f+b+e); });
   const lbs = evo.map(c=>MESES[+c.slice(5)-1]+'/'+c.slice(2,4));
   h += '<div class="grid-2" style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:16px">'+
-    chartCard({id:'rh_evo', title:'Evolução do custo com pessoal', quick:false, body:pcComboBarLine('rh_evo', lbs, [{name:'Folha', values:evF, tone:'var(--c-in)'},{name:'VT / VA', values:evB, tone:'var(--c-out)'}], {name:'Custo total', values:evT}, {h:300})+
-      legend([{color:'var(--c-in)',name:'Folha'},{color:'var(--c-out)',name:'VT / VA'},{color:'var(--navy)',name:'Custo total'}])})+
+    chartCard({id:'rh_evo', title:'Evolução do custo com pessoal', quick:false, body:pcComboBarLine('rh_evo', lbs, [{name:'Folha', values:evF, tone:'var(--c-in)'},{name:'Encargos', values:evE, tone:'#5FC1C1'},{name:'VT / VA', values:evB, tone:'var(--c-out)'}], {name:'Custo total', values:evT}, {h:300})+
+      legend([{color:'var(--c-in)',name:'Folha'},{color:'#5FC1C1',name:'Encargos'},{color:'var(--c-out)',name:'VT / VA'},{color:'var(--navy)',name:'Custo total'}])})+
     chartCard({id:'rh_tipo', title:'Por tipo de contratação', quick:false, body:pcDonut('rh_tipo', Object.entries(porTipo).sort((a,b)=>b[1].v-a[1].v).map(([t,o])=>({name:t+' ('+o.n+')', value:o.v})), {h:200})})+'</div>';
   const porCid = {}; P.forEach(p=>{ const c = (p.cid||'—').trim(); porCid[c] = (porCid[c]||0)+p.base+p.ben; });
   const porDep = {}; P.forEach(p=>{ const d = (p.dep||'—').replace(/\(.*?\)/g,'').split(' - ')[0].trim(); porDep[d] = (porDep[d]||0)+p.base+p.ben; });
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'+
     chartCard({id:'rh_cid', title:'Por unidade', quick:false, body:pcHBars(Object.entries(porCid).sort((a,b)=>b[1]-a[1]).map(([n,v])=>({name:n, value:v})))})+
     chartCard({id:'rh_dep', title:'Por departamento', quick:false, body:pcHBars(Object.entries(porDep).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([n,v])=>({name:n, value:v})))})+'</div>';
+  const clt = P.filter(p=>p.tipo==='CLT'||p.tipo==='Aprendiz'), baseClt = clt.reduce((s,p)=>s+p.base,0);
+  const er = (lb, pc, v)=>'<tr><td>'+lb+'</td><td class="num" style="color:var(--text2)">'+pc+'</td><td class="num">'+money(v,true)+'</td></tr>';
+  h += '<div class="card" style="margin-bottom:16px"><div class="pc-head"><div style="flex:1"><div class="pc-title">Encargos sobre a folha · '+recLb(RH.comp).toLowerCase()+'</div><div class="card-sub" style="font-size:12px;margin-top:3px">Base CLT/aprendiz '+money(baseClt,true)+' ('+clt.length+' pessoas)'+(cfgE.confirmado?' · percentuais confirmados':' · <b style="color:var(--warn)">estimativa: confirmar percentuais com o contador</b>')+'</div></div>'+
+    '<div class="pc-actions"><button class="btn sm" onclick="rhEncAbrir()">'+icon('settings',13)+' Percentuais</button></div></div><div class="card-body"><table class="tbl"><thead><tr><th>Encargo</th><th class="num">Alíquota</th><th class="num">Valor no mês</th></tr></thead><tbody>'+
+    er('FGTS', cfgE.fgts+'% (aprendiz '+cfgE.fgts_aprendiz+'%)', ES('fgts'))+
+    er('INSS patronal + RAT + terceiros', (cfgE.inss+cfgE.rat+cfgE.terceiros).toLocaleString('pt-BR')+'%', P.filter(p=>p.tipo!=='Diretoria').reduce((s,p)=>s+p.enc.inss,0))+
+    er('INSS sobre pró-labore (diretoria)', cfgE.prolabore_inss+'%', P.filter(p=>p.tipo==='Diretoria').reduce((s,p)=>s+p.enc.inss,0))+
+    er('Provisão de férias + 1/3', cfgE.ferias.toLocaleString('pt-BR')+'%', ES('ferias'))+
+    er('Provisão de 13º salário', cfgE.decimo.toLocaleString('pt-BR')+'%', ES('decimo'))+
+    (cfgE.prov_encargos?er('FGTS e INSS sobre as provisões', '—', ES('prov')):'')+
+    '</tbody><tfoot><tr><td><b>Total de encargos e provisões</b></td><td class="num">'+(folha?pct(enc/folha*100,1)+' da folha':'')+'</td><td class="num"><b>'+money(enc,true)+'</b></td></tr></tfoot></table>'+
+    '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">PJ e contratos não geram encargos trabalhistas. INSS e IRRF descontados do colaborador já estão na coluna de descontos.</div></div></div>';
   if(rec>0) h += '<div class="card cob-meta" style="padding-bottom:16px"><div class="cob-meta-lb"><span>Custo com pessoal sobre os recebimentos de '+recLb(RH.comp).toLowerCase()+' ('+money(rec)+')</span><b>'+pct(custo/rec*100,1)+'</b></div><div class="cob-meta-bar"><i class="cob-ok" style="width:'+Math.min(100,custo/rec*100)+'%"></i></div></div>';
   // tabela
   const q = recNorm(RH.f.q), tipos = Object.keys(porTipo);
   h += '<div class="tit-bar"><input class="tit-busca" type="text" placeholder="Buscar colaborador, setor ou cidade…" value="'+esc(RH.f.q)+'" oninput="RH.f.q=this.value;clearTimeout(window._rhb);window._rhb=setTimeout(()=>{render();const i=document.querySelector(\'.tit-busca\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">'+
     '<div class="seg">'+[''].concat(tipos).map(t=>'<button class="'+(RH.f.tipo===t?'on':'')+'" onclick="RH.f.tipo=\''+t+'\';render()">'+(t||'Todos')+'</button>').join('')+'</div></div>';
-  const L = P.filter(p=>(!q || recNorm(p.nome+' '+(p.dep||'')+' '+(p.cid||'')).includes(q)) && (!RH.f.tipo || p.tipo===RH.f.tipo)).sort((a,b)=>(b.base+b.ben)-(a.base+a.ben));
-  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl"><thead><tr><th>Colaborador</th><th>Contratação</th><th>Unidade</th><th class="num">Valor base</th><th class="num">Descontos</th><th class="num">Líquido</th><th class="num">VT</th><th class="num">VA</th><th class="num">Custo total</th></tr></thead><tbody>'+
+  const L = P.filter(p=>(!q || recNorm(p.nome+' '+(p.dep||'')+' '+(p.cid||'')).includes(q)) && (!RH.f.tipo || p.tipo===RH.f.tipo)).sort((a,b)=>(b.base+b.ben+b.enc.total)-(a.base+a.ben+a.enc.total));
+  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl"><thead><tr><th>Colaborador</th><th>Contratação</th><th>Unidade</th><th class="num">Valor base</th><th class="num">Descontos</th><th class="num">Líquido</th><th class="num">Encargos</th><th class="num">VT</th><th class="num">VA</th><th class="num">Custo total</th></tr></thead><tbody>'+
     L.map(p=>'<tr'+(p.obs?tip(tipRows(esc(p.nome),[['var(--text2)','Obs.',esc(p.obs)]])):'')+'><td><div class="tit-f">'+esc(p.nome)+'</div><div style="font-size:11.5px;color:var(--text2)">'+esc(p.dep||'')+(p.adm?' · desde '+p.adm.split('-').reverse().join('/'):'')+'</div></td>'+
       '<td><span class="status-badge st-neutro"><i style="display:inline-block;width:7px;height:7px;border-radius:2px;background:'+(RH_TIPO_COR[p.tipo]||'#93A3AE')+';margin-right:5px"></i>'+esc(p.tipo||'—')+'</span></td><td class="tit-s">'+esc(p.cid||'')+'</td>'+
       '<td class="num">'+(p.base?money(p.base,true):'—')+'</td><td class="num" style="color:var(--neg)">'+(p.desc?'−'+money(p.desc,true):'—')+'</td><td class="num">'+(p.liq!=null?money(p.liq,true):'—')+'</td>'+
-      '<td class="num">'+(p.vt?money(p.vt,true):'—')+'</td><td class="num">'+(p.va?money(p.va,true):'—')+'</td><td class="num" style="font-weight:600">'+money(p.base+p.ben,true)+'</td></tr>').join('')+
-    '</tbody><tfoot><tr><td colspan="3"><b>Total ('+L.length+')</b></td><td class="num"><b>'+money(L.reduce((s,p)=>s+p.base,0),true)+'</b></td><td class="num">'+money(L.reduce((s,p)=>s+p.desc,0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+(p.liq||0),0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+p.vt,0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+p.va,0),true)+'</td><td class="num"><b>'+money(L.reduce((s,p)=>s+p.base+p.ben,0),true)+'</b></td></tr></tfoot></table></div></div>';
+      '<td class="num"'+(p.enc.total?tip(tipRows('Encargos',[['#5FC1C1','FGTS',money(p.enc.fgts,true)],['#5FC1C1','INSS',money(p.enc.inss,true)],['#5FC1C1','Férias + 13º',money(p.enc.ferias+p.enc.decimo+p.enc.prov,true)]])):'')+'>'+(p.enc.total?money(p.enc.total,true):'—')+'</td>'+
+      '<td class="num">'+(p.vt?money(p.vt,true):'—')+'</td><td class="num">'+(p.va?money(p.va,true):'—')+'</td><td class="num" style="font-weight:600">'+money(p.base+p.ben+p.enc.total,true)+'</td></tr>').join('')+
+    '</tbody><tfoot><tr><td colspan="3"><b>Total ('+L.length+')</b></td><td class="num"><b>'+money(L.reduce((s,p)=>s+p.base,0),true)+'</b></td><td class="num">'+money(L.reduce((s,p)=>s+p.desc,0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+(p.liq||0),0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+p.enc.total,0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+p.vt,0),true)+'</td><td class="num">'+money(L.reduce((s,p)=>s+p.va,0),true)+'</td><td class="num"><b>'+money(L.reduce((s,p)=>s+p.base+p.ben+p.enc.total,0),true)+'</b></td></tr></tfoot></table></div></div>';
   $('content').innerHTML = h;
 }
 
