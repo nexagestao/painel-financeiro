@@ -940,9 +940,9 @@ const USUARIOS = [
 const MODULOS_PERM = ['Dashboard','Fluxo de Caixa','DRE','Indicadores','Contas a Pagar','Borderô de Pagamentos','Contas a Receber','Administração'];
 const ACOES_PERM = ['visualizar','exportar','importar','configurar','operar'];
 const PERFIS = {
-  'Administrador': {mods:['dashboard','reports','cob_painel','cob_carteiras','cob_inad','cob_coop','cob_acomp','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
-  'Financeiro':    {mods:['dashboard','reports','cob_painel','cob_carteiras','cob_inad','cob_coop','cob_acomp','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber'], importar:true, configurar:false, exportar:true},
-  'Diretoria':     {mods:['dashboard','reports','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
+  'Administrador': {mods:['dashboard','reports','cob_painel','cob_carteiras','cob_inad','cob_coop','cob_acomp','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','dividas','admin'], importar:true, configurar:true, exportar:true},
+  'Financeiro':    {mods:['dashboard','reports','cob_painel','cob_carteiras','cob_inad','cob_coop','cob_acomp','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','dividas'], importar:true, configurar:false, exportar:true},
+  'Diretoria':     {mods:['dashboard','reports','fluxo','dre','cooperativas','dividas'], importar:false, configurar:false, exportar:true},
   'Cliente':       {mods:['dashboard','dre','cooperativas','indicadores'], importar:false, configurar:false, exportar:true},
   'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false},
   'Recorrência':   {mods:['rec_apuracao','rec_conferencia','rec_negociacoes'], importar:false, configurar:false, exportar:true},
@@ -1214,7 +1214,8 @@ const NAV = [
   {sec:'Financeiro', items:[
     {id:'pagar', n:'Contas a Pagar', ic:'payUp'},
     {id:'bordero', n:'Borderô de Pagamentos', ic:'bordero'},
-    {id:'receber', n:'Contas a Receber', ic:'payDown'}]},
+    {id:'receber', n:'Contas a Receber', ic:'payDown'},
+    {id:'dividas', n:'Dívidas', ic:'layers'}]},
   {sec:'Cobrança', items:[
     {id:'cob_painel', n:'Painel de Cobrança', ic:'gauge'},
     {id:'cob_inad', n:'Inadimplentes', ic:'alert'},
@@ -3719,7 +3720,7 @@ async function fmSave(){
 }
 
 /* =========================== PERFIS E PERMISSÕES =========================== */
-const MODMAP={'Dashboard':'dashboard','Reports':'reports','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Borderô de Pagamentos':'bordero','Contas a Receber':'receber','Administração':'admin'};
+const MODMAP={'Dashboard':'dashboard','Reports':'reports','Fluxo de Caixa':'fluxo','DRE':'dre','Indicadores':'indicadores','Contas a Pagar':'pagar','Borderô de Pagamentos':'bordero','Contas a Receber':'receber','Dívidas':'dividas','Administração':'admin'};
 function renderPermissoes(){
   let rows='';
   MODULOS_PERM.forEach(mod=>{
@@ -7416,6 +7417,89 @@ async function renderRhPainel(){
   $('content').innerHTML = h;
 }
 
+/* =========================== DÍVIDAS =========================== */
+/* Empréstimos e valores a devolver da empresa (tabelas dividas e
+   dividas_parcelas). Tela só de acompanhamento: as parcelas NÃO entram no
+   Contas a Pagar nem no Fluxo de Caixa (decisão de 26/11/2026). Origem
+   inicial: aba "Dividas" da planilha Fluxo de Caixa v10 (Agibens). */
+const DIV = {emp:null, lista:[], parc:[], ano:'12m'};
+const DIV_COR = ['var(--c-in)','#5FC1C1','var(--c-out)','#9AA8B4','#2E6F8E'];
+async function divCarregar(){
+  const id = EMPRESA_IDS[state.empresa]; DIV.lista=[]; DIV.parc=[];
+  if(id){
+    const [a,b] = await Promise.all([
+      sb.from('dividas').select('*').eq('empresa_id', id).eq('ativa', true).order('ordem'),
+      sb.from('dividas_parcelas').select('*').eq('empresa_id', id).order('competencia').range(0, 4999)
+    ]);
+    DIV.lista = (a && a.data) || []; DIV.parc = (b && b.data) || [];
+  }
+  DIV.emp = state.empresa;
+}
+function divMesLb(c){ return MESES[+c.slice(5,7)-1]+'/'+c.slice(2,4); }
+function divSaldoAte(D, semPrazo, m){
+  let s = semPrazo.reduce((t,d)=>t+(+d.saldo_atual||0),0);
+  D.filter(d=>!semPrazo.includes(d)).forEach(d=>{
+    const L = DIV.parc.filter(p=>p.divida_id===d.id && p.competencia.slice(0,7)<=m);
+    s += L.length ? (+L[L.length-1].saldo_apos||0) : (+d.saldo_atual||0);
+  });
+  return s;
+}
+async function renderDividas(){
+  const titulo = 'Dívidas';
+  if(DIV.emp!==state.empresa){ $('content').innerHTML = pageHead(titulo,'')+'<div class="card" style="padding:28px;text-align:center;color:var(--text2)">Carregando…</div>'; await divCarregar(); if(state.view!=='dividas') return; }
+  let h = pageHead(titulo,'');
+  const D = DIV.lista;
+  if(!D.length){ $('content').innerHTML = h+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Nenhuma dívida cadastrada para esta empresa</div></div></div>'; return; }
+  const cor = {}; D.forEach((d,i)=>cor[d.id]=DIV_COR[i%DIV_COR.length]);
+  const hoje = new Date(), mesAtual = hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0');
+  const soma = L=>L.reduce((s,p)=>s+(+p.valor||0),0), mk = p=>p.competencia.slice(0,7);
+  const abertas = DIV.parc.filter(p=>!p.pago);
+  const futuras = abertas.filter(p=>mk(p)>=mesAtual);
+  const saldoTot = D.reduce((s,d)=>s+(+d.saldo_atual||0),0);
+  const m12 = [...new Set(futuras.map(mk))].sort().slice(0,12);
+  const v12 = soma(futuras.filter(p=>m12.includes(mk(p))));
+  const pm = m12[0] || null, doMes = pm ? futuras.filter(p=>mk(p)===pm) : [];
+  const jurosRest = abertas.reduce((s,p)=>s+(+p.juros||0),0);
+  const semPrazo = D.filter(d=>!DIV.parc.some(p=>p.divida_id===d.id));
+  const comParc = D.filter(d=>!semPrazo.includes(d));
+  h += '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">'+
+    kpi('Saldo devedor total', money(saldoTot), null, D.length+' credores · '+money(jurosRest)+' de juros a pagar')+
+    kpi('Parcelas do próximo mês', money(soma(doMes)), null, pm?divMesLb(pm)+' · '+doMes.length+' parcela(s)':'—')+
+    kpi('Próximos 12 meses', money(v12), null, m12.length?divMesLb(m12[0])+' a '+divMesLb(m12[m12.length-1]):'—')+
+    kpi('Sem prazo definido', money(semPrazo.reduce((s,d)=>s+(+d.saldo_atual||0),0)), null, semPrazo.map(d=>esc(d.credor)).join(', ')||'nenhum')+'</div>';
+  // gráfico: parcelas por credor + saldo devedor (próximos 12 meses)
+  const bars = comParc.map(d=>({name:d.credor, tone:cor[d.id], values:m12.map(m=>soma(abertas.filter(p=>p.divida_id===d.id && mk(p)===m)))}));
+  const saldoLinha = m12.map(m=>divSaldoAte(D, semPrazo, m));
+  h += '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:16px">'+
+    chartCard({id:'div_evo', title:'Parcelas e saldo devedor · próximos 12 meses', quick:false, body:(m12.length?pcComboBarLine('div_evo', m12.map(divMesLb), bars, {name:'Saldo devedor', values:saldoLinha}, {h:300}):'<div class="empty" style="padding:30px">Sem parcelas futuras</div>')+
+      legend(bars.map(b=>({color:b.tone, name:b.name})).concat([{color:'var(--navy)', name:'Saldo devedor'}]))})+
+    chartCard({id:'div_cred', title:'Saldo devedor por credor', quick:false, body:pcDonut('div_cred', D.map(d=>({name:d.credor, value:+d.saldo_atual||0, color:cor[d.id]})), {h:200})})+'</div>';
+  // credores
+  h += '<div class="card" style="margin-bottom:16px"><div class="pc-head"><div style="flex:1"><div class="pc-title">Credores</div></div></div><div class="card-body"><table class="tbl"><thead><tr><th>Credor</th><th>Tipo</th><th class="num">Taxa</th><th class="num">Saldo devedor</th><th class="num">Parcelas restantes</th><th class="num">Total a pagar</th><th class="num">Juros a pagar</th><th>Término</th></tr></thead><tbody>'+
+    D.map(d=>{ const L = abertas.filter(p=>p.divida_id===d.id);
+      return '<tr><td><div class="tit-f"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+cor[d.id]+';margin-right:7px"></i>'+esc(d.credor)+'</div>'+(d.observacao?'<div style="font-size:11.5px;color:var(--text2);max-width:440px;white-space:normal">'+esc(d.observacao)+'</div>':'')+'</td>'+
+        '<td class="tit-s">'+esc(d.tipo||'')+'</td><td class="num">'+(d.taxa_mensal!=null?pct(d.taxa_mensal*100,2)+' a.m.':'—')+'</td>'+
+        '<td class="num" style="font-weight:600">'+money(+d.saldo_atual||0,true)+'</td><td class="num">'+(L.length||'—')+'</td>'+
+        '<td class="num">'+(L.length?money(soma(L),true):'—')+'</td><td class="num">'+(L.length?money(L.reduce((s,p)=>s+(+p.juros||0),0),true):'—')+'</td>'+
+        '<td>'+(L.length?divMesLb(L[L.length-1].competencia):'<span class="status-badge st-pend">A definir</span>')+'</td></tr>'; }).join('')+
+    '</tbody><tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>'+money(saldoTot,true)+'</b></td><td class="num">'+abertas.length+'</td><td class="num"><b>'+money(soma(abertas),true)+'</b></td><td class="num">'+money(jurosRest,true)+'</td><td></td></tr></tfoot></table></div></div>';
+  // cronograma
+  const anos = [...new Set(abertas.map(p=>p.competencia.slice(0,4)))].sort();
+  if(DIV.ano!=='12m' && DIV.ano!=='tudo' && !anos.includes(DIV.ano)) DIV.ano='12m';
+  const filtroM = DIV.ano==='12m' ? (m=>m12.includes(m)) : DIV.ano==='tudo' ? (()=>true) : (m=>m.startsWith(DIV.ano));
+  const mesesT = [...new Set(DIV.parc.map(mk))].sort().filter(filtroM);
+  h += '<div class="tit-bar"><div class="pc-title" style="flex:1">Cronograma de pagamentos</div><div class="seg">'+[['12m','12 meses']].concat(anos.map(a=>[a,a])).concat([['tudo','Tudo']]).map(([k,n])=>'<button class="'+(DIV.ano===k?'on':'')+'" onclick="DIV.ano=\''+k+'\';render()">'+n+'</button>').join('')+'</div></div>';
+  const cel = v=>v?money(v,true):'—', dt = s=>s?s.split('-').reverse().join('/'):'—';
+  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl"><thead><tr><th>Mês</th>'+comParc.map(d=>'<th class="num">'+esc(d.credor)+'</th>').join('')+'<th class="num">Total do mês</th><th class="num">Saldo devedor</th></tr></thead><tbody>'+
+    mesesT.map(m=>{ const vals = comParc.map(d=>DIV.parc.filter(p=>p.divida_id===d.id && mk(p)===m));
+      return '<tr><td>'+divMesLb(m)+'</td>'+vals.map((L,i)=>{ const p = L[0];
+        const rows = p ? [['var(--text2)','Vencimento',dt(p.vencimento)],['var(--text2)','Juros',money(+p.juros||0,true)],['var(--text2)','Amortização',money(+p.amortizacao||0,true)]].concat(+p.outros?[['var(--text2)',esc(p.outros_desc||'Outros'),money(+p.outros,true)]]:[]) : [];
+        return '<td class="num"'+(p?tip(tipRows(esc(comParc[i].credor)+' · '+divMesLb(m),rows)):'')+'>'+cel(soma(L))+'</td>'; }).join('')+
+        '<td class="num" style="font-weight:600">'+cel(vals.reduce((s,L)=>s+soma(L),0))+'</td><td class="num" style="color:var(--text2)">'+money(divSaldoAte(D, semPrazo, m),true)+'</td></tr>'; }).join('')+
+    '</tbody><tfoot><tr><td><b>Total</b></td>'+comParc.map(d=>'<td class="num">'+money(soma(DIV.parc.filter(p=>p.divida_id===d.id && filtroM(mk(p)))),true)+'</td>').join('')+'<td class="num"><b>'+money(soma(DIV.parc.filter(p=>filtroM(mk(p)))),true)+'</b></td><td></td></tr></tfoot></table></div>'+
+    (semPrazo.length?'<div style="font-size:11.5px;color:var(--text3);padding:10px 4px 2px">'+semPrazo.map(d=>esc(d.credor)+' ('+money(+d.saldo_atual||0)+')').join(', ')+': sem cronograma definido, entra só no saldo devedor.</div>':'')+'</div>';
+  $('content').innerHTML = h;
+}
 function render(){
   if(currentUser && !empresaAutorizada(state.empresa)){
     const primeira = (currentUser.empresas||[])[0];
@@ -7427,6 +7511,7 @@ function render(){
   if(COB.emp && COB.emp!==state.empresa){ COB.emp=null; COB.boletos=[]; }
   if(REC.emp && REC.emp!==state.empresa){ REC.emp=null; REC.papel=null; recPapelCarregar().then(render); }
   if(RH.emp && RH.emp!==state.empresa){ RH.emp=null; RH.pode=false; rhPapelCarregar().then(render); }
+  if(DIV.emp && DIV.emp!==state.empresa){ DIV.emp=null; }
   applyBrand(); applyChrome();
   renderSidebar(); renderTopbar();
   if(CARREGANDO[state.empresa] && !HYDRATED[state.empresa]){
@@ -7437,7 +7522,7 @@ function render(){
   }
   const views={rh_painel:renderRhPainel, rec_apuracao:renderRecApuracao, rec_conferencia:renderRecConferencia, rec_negociacoes:renderRecNegociacoes, dashboard:renderDashboard, reports:renderReports, cob_painel:renderCobPainel, cob_carteiras:renderCobCarteiras, cob_inad:renderCobInad, cob_coop:renderCobCoop, cob_acomp:renderCobAcomp, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
-    receber:()=>renderTitulos('receber'), bordero:renderBordero, admin:renderAdmin};
+    receber:()=>renderTitulos('receber'), bordero:renderBordero, dividas:renderDividas, admin:renderAdmin};
   (views[state.view]||renderDashboard)();
 }
 </script>
