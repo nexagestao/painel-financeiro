@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -23,8 +23,8 @@
   --r:12px; --r-sm:10px; --shadow:0 1px 2px rgba(16,24,40,.05);
   --shadow-lg:0 8px 24px rgba(16,24,40,.10);
   --side-w:240px; --pad:24px; --row-h:38px;
-  --font-display:'Space Grotesk','Inter',sans-serif;
-  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+  --font-display:'Plus Jakarta Sans',system-ui,sans-serif;
+  --font-mono:'Plus Jakarta Sans',system-ui,sans-serif;
 }
 body.dark{
   --bg:#0D1117; --surface:#161B22; --text:#E6EAF2; --text2:#8B95A7; --border:#262D38;
@@ -379,6 +379,7 @@ tr.bd-on td{background:var(--accent-soft)}
 @media(max-width:900px){.bd-charts{grid-template-columns:1fr}.bd-fin-row{grid-template-columns:1fr 1fr}.bd-fin-conta{grid-column:1/-1}}
 @media(max-width:520px){.bd-fin-row{grid-template-columns:1fr}.bd-fgrid{grid-template-columns:1fr 1fr}}
 body.dark .st-bdagu{color:#FBBF24;background:#33260A}
+
 </style>
 </head>
 <body>
@@ -2796,7 +2797,7 @@ function renderBordero(){
     if(bSel) acoes += '<button class="btn sm" onclick="bdAbrirPicker(\''+bSel.id+'\')">'+icon('plus',14)+' Adicionar títulos</button>';
   }
   if(PERFIS[state.role].exportar && L.length)
-    acoes += '<button class="btn sm ghost" onclick="bdExportar(\'xlsx\')">'+icon('download',14)+' Excel</button><button class="btn sm ghost" onclick="bdExportar(\'csv\')">'+icon('download',14)+' CSV</button>';
+    acoes += '<button class="btn sm ghost" onclick="bdPDF()">'+icon('download',14)+' PDF</button><button class="btn sm ghost" onclick="bdExportar(\'xlsx\')">'+icon('download',14)+' Excel</button><button class="btn sm ghost" onclick="bdExportar(\'csv\')">'+icon('download',14)+' CSV</button>';
   let h = pageHead('Borderô de Pagamentos'+(bSel?' nº '+bSel.numero:''), '', acoes);
 
   // ---------- filtros ----------
@@ -3127,6 +3128,106 @@ async function bdSalvarPicker(){
   state.bd.num = String(numero); state.bd.sel = {};
   toast(P.borderoId ? uids.length+' título(s) incluído(s) no borderô nº '+numero : 'Borderô nº '+numero+' criado com '+uids.length+' título(s)');
   render();
+}
+/* Borderô em PDF no formato do documento de aprovação: cabeçalho (nº, período
+   de vencimentos, conta pagadora, data), resumo (liberado x aguardando, saldo
+   da conta e saldo após o borderô), tabela dos pagamentos e assinaturas.
+   Usa as linhas filtradas na tela (normalmente um borderô selecionado). */
+async function bdPDF(){
+  const emp = state.empresa, f = state.bd;
+  const L = bdFiltrar(bdLinhas(emp)).sort((a,b)=>((a.venc||0)-(b.venc||0))*(f.dir==='asc'?1:-1));
+  if(!L.length){ toast('Nenhum pagamento para exportar'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const W = doc.internal.pageSize.getWidth(), M = 40;
+  const nums = [...new Set(L.map(r=>r.numero))].sort((a,b)=>a-b);
+  const contas = [...new Set(L.map(r=>r.contaNome))];
+  const datas = [...new Set(L.map(r=>r.b.data_bordero))].sort();
+  const vencs = L.map(r=>r.venc).filter(Boolean).sort((a,b)=>a-b);
+  const pend = L.filter(r=>r.status!=='Pago');
+  const soma = a=>a.reduce((t,r)=>t+r.valor,0);
+  const total = soma(L), lib = soma(pend.filter(r=>r.status==='Liberado')), agu = soma(pend.filter(r=>r.status==='Aguardando')), pago = L.filter(r=>r.status==='Pago').reduce((t,r)=>t+(r.vpago||r.valor),0);
+  const ano = datas.length ? datas[0].slice(0,4) : String(ANO);
+  const nTxt = nums.map(n=>String(n).padStart(3,'0')+'/'+ano).join(', ');
+  // saldo da conta pagadora (só faz sentido com uma conta)
+  const s = contas.length===1 ? bdUltimoSaldo(emp, L[0].contaId) : null;
+  const apos = s ? s.valor - soma(pend) : null;
+  // cabeçalho
+  const logo = BRAND[emp].logoUrl; let xT = M;
+  if(logo){ try{
+    // reduz o logo antes de embutir (o original deixava o PDF com ~3 MB)
+    const im = new Image(); im.src = await imgUrlToDataURL(logo); await im.decode();
+    const k = Math.min(1, 160/Math.max(im.width, im.height)), cv = document.createElement('canvas');
+    cv.width = Math.round(im.width*k); cv.height = Math.round(im.height*k);
+    cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+    doc.addImage(cv.toDataURL('image/png'),'PNG',M,30,34,34); xT = M+46; }catch(e){ console.error(e); } }
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(16,24,40);
+  doc.text('Borderô de Pagamento', xT, 46);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(102,112,133);
+  doc.text(EMPRESAS[emp].nome+'  ·  Emitido em '+new Date().toLocaleString('pt-BR'), xT, 61);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(14,92,110);
+  doc.text('Nº '+nTxt, W-M, 46, {align:'right'});
+  doc.setDrawColor(228,231,236); doc.line(M, 78, W-M, 78);
+  // blocos de informação
+  const info = [
+    ['Vencimentos', vencs.length ? fdate(vencs[0])+(+vencs[0]===+vencs[vencs.length-1]?'':' a '+fdate(vencs[vencs.length-1])) : '—'],
+    ['Conta pagadora', contas.map(c=>c.split(' — ')[0]).join(', ')],
+    ['Data do borderô', datas.map(d=>fdate(parseYMD(d))).join(', ')],
+    ['Qtde de pagamentos', String(L.length)]];
+  const res = [
+    ['Total do borderô', money(total,true)],
+    ['Liberado p/ pagamento', money(lib,true)],
+    ['Aguardando liberação', money(agu,true)]].concat(pago ? [['Já pago', money(pago,true)]] : []).concat(s ? [
+    ['Saldo da conta ('+fdate(s.data)+')', money(s.valor,true)],
+    ['Saldo após o borderô', money(apos,true)]] : []);
+  const bloco = (x, w, linhas, y0)=>{
+    let y = y0;
+    linhas.forEach(([k,v])=>{
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(102,112,133); doc.text(k, x, y);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(16,24,40);
+      if(k==='Saldo após o borderô' && apos<0) doc.setTextColor(220,38,38);
+      doc.text(doc.splitTextToSize(v, w-95)[0], x+w, y, {align:'right'});
+      y += 16;
+    });
+    return y;
+  };
+  const colW = (W-2*M-30)/2;
+  const yI = bloco(M, colW, info, 98), yR = bloco(M+colW+30, colW, res, 98);
+  let y = Math.max(yI, yR) + 6;
+  if(apos!=null){
+    const ok = apos>=0;
+    doc.setFillColor(...(ok?[240,253,244]:[254,242,242])); doc.roundedRect(M, y, W-2*M, 22, 4, 4, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...(ok?[22,163,74]:[220,38,38]));
+    doc.text(ok ? 'Situação: OK — saldo suficiente na conta pagadora' : 'Situação: saldo insuficiente na conta pagadora', M+10, y+14.5);
+    y += 34;
+  }
+  // tabela
+  doc.autoTable({ startY:y, margin:{left:M,right:M},
+    head:[['Nº','Vencimento','Fornecedor / Favorecido','Categoria','Status','Valor a pagar']],
+    body:L.map((r,i)=>[i+1, fdate(r.venc), r.forn, r.cat, r.status==='Liberado'?'Liberado p/ pagamento':r.status==='Aguardando'?'Aguardando liberação':'Pago'+(r.pgto?' em '+fdate(r.pgto):''), money(r.valor,true)]),
+    foot:[['','','','','Total', money(total,true)]],
+    styles:{font:'helvetica', fontSize:8.5, cellPadding:{top:5,bottom:5,left:5,right:5}, textColor:[52,64,84], lineColor:[228,231,236], lineWidth:{bottom:.5}},
+    headStyles:{fillColor:[14,92,110], textColor:255, fontStyle:'bold', fontSize:8},
+    footStyles:{fillColor:[232,242,243], textColor:[16,24,40], fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[249,250,251]},
+    columnStyles:{0:{cellWidth:24, halign:'center'}, 1:{cellWidth:62}, 3:{cellWidth:118}, 4:{cellWidth:96}, 5:{cellWidth:78, halign:'right'}},
+    didParseCell:d=>{ if(d.section!=='body' && d.column.index===5) d.cell.styles.halign='right'; } });
+  y = doc.lastAutoTable.finalY + 60;
+  if(y > doc.internal.pageSize.getHeight()-60){ doc.addPage(); y = 90; }
+  // assinaturas
+  const sw = (W-2*M-40)/3;
+  ['Elaborado por','Aprovado por','Data'].forEach((t,i)=>{
+    const x = M + i*(sw+20);
+    doc.setDrawColor(152,162,179); doc.line(x, y, x+sw, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(102,112,133);
+    doc.text(t, x+sw/2, y+13, {align:'center'});
+  });
+  // rodapé com página
+  const n = doc.internal.getNumberOfPages();
+  for(let p=1;p<=n;p++){ doc.setPage(p); doc.setFontSize(7.5); doc.setTextColor(152,162,179);
+    doc.text('Nexa Gestão · Borderô de Pagamento · página '+p+' de '+n, W/2, doc.internal.pageSize.getHeight()-20, {align:'center'}); }
+  doc.save('Bordero_'+EMPRESAS[emp].curto+(nums.length===1?'_'+String(nums[0]).padStart(3,'0'):'')+'_'+isoDate(hojeReal())+'.pdf');
+  bdLog('Exportação', 'Borderô de Pagamentos — '+L.length+' lançamento(s) (pdf)');
 }
 function bdExportar(fmt){
   const emp = state.empresa, f = state.bd;
@@ -4099,6 +4200,19 @@ body.dark .card:hover{border-color:#2D3644}
 .admin-card:hover{box-shadow:0 8px 24px -10px rgba(16,24,40,.16)}
 .drawer-head,.modal-head{background:var(--bg)}
 .aging-bar,.tm-cell{box-shadow:inset 0 0 0 1px rgba(16,24,40,.03)}
+/* Tipografia refinada: uma família só (Plus Jakarta Sans), números tabulares
+   em vez de fonte monoespaçada e pesos mais leves nos títulos e valores. */
+body{font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;font-feature-settings:'tnum' 1}
+.page-title{font-weight:600;font-size:22px;letter-spacing:-.015em}
+.card-title{font-weight:600;font-size:14px;letter-spacing:-.005em}
+.kpi .vl{font-weight:600;font-size:24px;letter-spacing:-.02em}
+.kpi .lb{font-weight:600;letter-spacing:.06em}
+.tbl th{font-weight:600;letter-spacing:.04em}
+.num,.money,.delta{font-variant-numeric:tabular-nums}
+.brand-name,.hdr-company-name,.drawer-title{font-weight:600}
+tr.row-result.final td{font-weight:700}
+td.total-highlight{font-weight:600 !important}
+.axis-lbl{font-family:'Plus Jakarta Sans',sans-serif}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
