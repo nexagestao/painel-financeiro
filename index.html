@@ -4981,7 +4981,7 @@ function defaultDash(perfil){
   return {cols:cards.length>=6?6:cards.length, cards, charts, filtros, versoes:[], atualizado:null, por:null, v:DASH_VER};
 }
 let DASH_STORE={};
-const DASH_VER=3; // muda quando o layout padrão muda: descarta caches locais antigos
+const DASH_VER=4; // muda quando o layout padrão muda: descarta caches locais antigos
 function dashKey(emp,perfil){ return (emp||state.empresa)+'|'+(perfil||state.role); }
 function dashCfg(emp,perfil){
   const k=dashKey(emp,perfil);
@@ -5068,8 +5068,8 @@ function dashCtx(){
     totPagar:somaT(abertoP), nPagar:abertoP.length,
     totReceber:somaT(abertoR), nReceber:abertoR.length,
     vencidas:vencP+somaT(vencRl),
-    prox7:somaT(abertoP.filter(t=>t.venc>=HOJE&&(t.venc-HOJE)/86400000<=7)),
-    nProx7:abertoP.filter(t=>t.venc>=HOJE&&(t.venc-HOJE)/86400000<=7).length
+    prox7:somaT(abertoP.filter(t=>{ const h=hojeReal(); return t.venc>=h&&(t.venc-h)/86400000<=7; })),
+    nProx7:abertoP.filter(t=>{ const h=hojeReal(); return t.venc>=h&&(t.venc-h)/86400000<=7; }).length
   };
 }
 function fmtCard(val, fmt){
