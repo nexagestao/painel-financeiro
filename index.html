@@ -4403,7 +4403,7 @@ body.dark .rp-ia{background:#0F2026;border-color:#1D3B42}
   #sidebar,#topbar,.page-head,.no-print,.chips,#ctip{display:none !important}
   #app,#main,#content{display:block !important;height:auto !important;overflow:visible !important;padding:0 !important}
   .rp-doc{border:none;box-shadow:none;max-width:none;padding:0}
-  .rp-sec,.rp-kpis,.rp-ia{break-inside:avoid}
+  .rp-kpis,.rp-ia{break-inside:avoid}
   .tbl th{position:static}
 }
 
@@ -4478,6 +4478,10 @@ body.dark .rp-tbl tfoot td{background:#0F1720}
   .rp-foot{margin-top:16px}
   .rp-ia-h span{display:none}
 }
+
+.rp-tbl td{height:auto;white-space:normal}
+.rp-tbl td.num,.rp-tbl th.num{white-space:nowrap}
+@media print{ .rp-doc::before{display:none} .rp-tbl td{padding:4px 10px} .rp-tbl thead th{padding:6px 10px} }
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -5615,7 +5619,7 @@ function rpDadosMensal(){
   const prev = saldos('proj')[m]||{ger:0};
   const fx = fluxoMes(m,'real'), fxp = fluxoMes(m,'proj');
   const em = (PAGAR[state.empresa]||[]).filter(t=>t.status!=='Pago' && t.uid && t.venc && t.venc>=rpCorte() && t.venc<rpDia(hojeReal()));
-  return {mes:MESES_LONG[m]+'/'+ANO, empresa:EMPRESAS[state.empresa].nome,
+  return {mes:MESES_LONG[m].replace(/^./,c=>c.toUpperCase())+'/'+ANO, empresa:EMPRESAS[state.empresa].nome,
     receita_bruta:rec.mes, resultado_liquido:res.mes, margem_liquida:rec.mes?res.mes/rec.mes*100:null,
     caixa:{saldo_inicial:s.ini, entradas:fx.ent, saidas:fx.sai, saldo_final:s.fim},
     previsto_x_realizado:{entradas_prev:fxp.ent, entradas_real:fx.ent, saidas_prev:fxp.sai, saidas_real:fx.sai},
@@ -5634,10 +5638,8 @@ function rpHtmlMensal(D){
     ['Saldo inicial', rpM(L.s.ini)], ['Saldo final', rpM(L.s.fim), '', L.s.fim<0?'neg':'']]);
   h += rpSec('Demonstrativo de resultado', rpTabela(['Linha','Mês','Mês anterior','Variação','Acumulado no ano'],
     L.linhas.map(l=>({cls:l.tipo==='Resultado'?'rp-res':'', cells:[esc(l.nome), rpM(l.mes), l.anterior==null?'—':rpM(l.anterior), l.anterior==null?'—':pc(l.mes,l.anterior), rpM(l.acumulado)]})), {num:[1,2,3,4]}));
-  h += rpSec('Caixa do mês — previsto x realizado', rpTabela(['','Previsto','Realizado','Diferença'], [
-    ['Entradas', rpM(L.fxp.ent), rpM(L.fx.ent), rpM(L.fx.ent-L.fxp.ent)],
-    ['Saídas', rpM(L.fxp.sai), rpM(L.fx.sai), rpM(L.fx.sai-L.fxp.sai)],
-    ['Geração de caixa', rpM(L.fxp.ent-L.fxp.sai), rpM(L.fx.ent-L.fx.sai), rpM((L.fx.ent-L.fx.sai)-(L.fxp.ent-L.fxp.sai))]], {num:[1,2,3]}));
+  h += rpSec('Caixa do mês', rpTabela(['Saldo inicial','Entradas','Saídas','Geração de caixa','Saldo final'],
+    [[rpM(L.s.ini), rpM(L.fx.ent), rpM(L.fx.sai), rpM(L.fx.ent-L.fx.sai), rpM(L.s.fim)]], {num:[0,1,2,3,4]}));
   h += rpSec('Maiores despesas do mês', rpTabela(['Conta','Mês','Mês anterior','Variação'],
     L.desp.map(x=>[esc(x.conta+' '+x.nome), rpM(x.valor), rpM(x.anterior), pc(x.valor,x.anterior)]), {num:[1,2,3]}));
   if(D.pendencias.contas_vencidas) h += rpSec('Pendências', '<p class="rp-p">'+D.pendencias.contas_vencidas+' conta(s) a pagar vencida(s) em aberto, somando '+rpM(D.pendencias.valor)+'.</p>');
