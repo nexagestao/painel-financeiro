@@ -1203,7 +1203,7 @@ function legend(items){
 /* =========================== SHELL: SIDEBAR / TOPBAR =========================== */
 const NAV = [
   {sec:'Visão Geral', items:[{id:'dashboard', n:'Dashboard', ic:'home'},{id:'reports', n:'Reports', ic:'report'}]},
-  {sec:'Análises', items:[
+  {sec:'Análises gerenciais', items:[
     {id:'fluxo', n:'Fluxo de Caixa', ic:'flow'},
     {id:'dre', n:'DRE', ic:'file'},
     {id:'cooperativas', n:'Resultado por Cooperativa', ic:'users'}
@@ -3408,11 +3408,22 @@ function adminShell(title, sub, inner){
 function renderAdmin(){
   if(state.adminPage) return renderAdminPage(state.adminPage);
   let h='<div class="page-head"><div><span class="page-title">Administração</span><div class="page-sub">Configuração completa da plataforma, sem alteração de código</div></div></div>';
-  h+='<div class="admin-grid">';
-  ADMIN_CARDS.forEach(c=>{
-    h+='<div class="admin-card" onclick="goAdmin(\''+c.id+'\')"><div class="ic">'+icon(c.ic,18)+'</div><div class="t">'+c.t+'</div><div class="d">'+c.d+'</div></div>';
+  const CATS=[['Estrutura financeira',['empresas','plano','dre','centros','bancos','conciliacao']],
+              ['Dados e importação',['importacoes','historico','backup']],
+              ['Painéis e aparência',['dashboard','indicadores','aparencia']],
+              ['Acesso e segurança',['usuarios','perfis','logs']]];
+  const usados=new Set(CATS.flatMap(c=>c[1]));
+  const resto=ADMIN_CARDS.filter(c=>!usados.has(c.id)).map(c=>c.id);
+  if(resto.length) CATS.push(['Outros',resto]);
+  CATS.forEach(([cat,ids])=>{
+    const cards=ids.map(id=>ADMIN_CARDS.find(c=>c.id===id)).filter(Boolean);
+    if(!cards.length) return;
+    h+='<div class="admin-cat">'+cat+'</div><div class="admin-grid">';
+    cards.forEach(c=>{
+      h+='<button class="admin-card" onclick="goAdmin(\''+c.id+'\')"><div class="ic">'+icon(c.ic,18)+'</div><div><div class="t">'+c.t+'</div><div class="d">'+c.d+'</div></div></button>';
+    });
+    h+='</div>';
   });
-  h+='</div>';
   $('content').innerHTML=h;
 }
 function tbl(head, rows){
@@ -4573,6 +4584,170 @@ body.dark .rp-tbl tfoot td{background:#0F1720}
 .dash-grid > .dz > .card{flex:1;height:400px;display:flex;flex-direction:column;min-width:0}
 .dash-grid > .dz > .card > .card-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;justify-content:center}
 .dash-grid > .dz > .card > .card-body .tbl th{position:sticky;top:0}
+
+/* =====================================================================
+   NEXA DESIGN SYSTEM v2 — camada final (só visual; não altera lógica)
+   Paleta: petróleo #102A38 · azul profundo #126477 · turquesa #20A6A5 ·
+   fundo #F3F6F9 · branco
+   ===================================================================== */
+:root{
+  --petroleo:#102A38; --azul:#126477; --turquesa:#20A6A5;
+  --bg:#F3F6F9; --surface:#FFFFFF; --text:#102A38; --text2:#5F7181; --text3:#8A9AA8; --border:#E3E9EF; --line:#EDF1F5;
+  --accent:#126477; --accent-2:#20A6A5; --accent-soft:#E7F3F5; --accent-ring:rgba(32,166,165,.18);
+  --navy:#102A38; --c-in:#126477; --c-out:#C5CFD9; --c-neg:#E39A9A;
+  --pos:#178A5B; --pos-soft:#E8F6EF; --neg:#C8404A; --neg-soft:#FCEDEE; --warn:#B86E00; --warn-soft:#FFF4E2;
+  --r:14px; --r-sm:10px;
+  --shadow:0 1px 2px rgba(16,42,56,.04),0 2px 8px -2px rgba(16,42,56,.05);
+  --shadow-lg:0 20px 50px -12px rgba(16,42,56,.25);
+  --side-bg:#102A38; --side-bg2:#0C2230; --side-text:#A3B6C3; --side-hover:rgba(255,255,255,.06);
+  --side-w:248px; --pad:28px;
+}
+body.dark{
+  --bg:#0B151C; --surface:#11202A; --text:#E4EEF3; --text2:#93A6B4; --text3:#6F8494; --border:#1E313D; --line:#1A2B36;
+  --accent:#3FB6B5; --accent-soft:#12323A; --navy:#7FD1D0; --c-in:#2E9AA8; --c-out:#3A4D5B;
+  --side-bg:#08131A; --side-bg2:#0A1820;
+}
+body{background:var(--bg);color:var(--text)}
+
+/* ---------- sidebar ---------- */
+#sidebar{background:linear-gradient(180deg,var(--side-bg) 0%,var(--side-bg2) 100%)}
+.side-head{padding:20px 16px 16px}
+.brand-name{font-size:13.5px;letter-spacing:-.01em}
+.nav-sec{color:rgba(163,182,195,.55);font-size:10px;font-weight:500;letter-spacing:.12em;padding:20px 12px 8px}
+.side-nav{padding:6px 12px 16px}
+.side-link{gap:12px;padding:9px 12px;border-radius:10px;font-size:13.5px;color:var(--side-text);margin-bottom:3px}
+.side-link svg{opacity:.85}
+.side-link:hover{background:var(--side-hover);color:#fff}
+.side-link.active{background:rgba(32,166,165,.16);color:#fff;font-weight:500;box-shadow:none}
+.side-link.active::before{left:-12px;top:9px;bottom:9px;width:3px;background:var(--turquesa)}
+.side-link.active svg{color:#6FD6D4;opacity:1}
+#app.collapsed .side-link{justify-content:center;padding:10px 0}
+#app.collapsed .side-link.active::before{left:-12px}
+#app.collapsed .side-nav{padding:6px 8px}
+.company-pill{border-radius:10px;padding:9px 11px}
+.avatar{background:linear-gradient(135deg,var(--turquesa),var(--azul))}
+@media(max-width:900px){
+  #sidebar{width:68px;min-width:68px}
+  #sidebar .brand-name,#sidebar .brand-sub,#sidebar .side-link span,#sidebar .company-pill span,#sidebar .company-pill svg,#sidebar .user-meta,#sidebar .role-sel{display:none}
+  #sidebar .nav-sec{visibility:hidden;height:10px;padding:6px 0}
+  #sidebar .side-link{justify-content:center;padding:10px 0}
+  #sidebar .side-foot .btn{padding:7px 0;font-size:0}
+  :root{--pad:16px}
+}
+
+/* ---------- topo e cabeçalho de página ---------- */
+#topbar{height:64px;min-height:64px;background:rgba(255,255,255,.86);border-bottom:1px solid var(--border)}
+body.dark #topbar{background:rgba(17,32,42,.86)}
+#content{padding:26px var(--pad) 40px}
+.page-head{margin-bottom:20px;align-items:center}
+.page-title{font-size:24px;font-weight:500;letter-spacing:-.03em;color:var(--text)}
+.page-sub{color:var(--text2)}
+.icon-btn{border-radius:10px}
+.icon-btn:hover{background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- cartões ---------- */
+.card{border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+.card-head{padding:18px 20px 8px}
+.card-title,.pc-title{font-size:14.5px;font-weight:500;color:var(--text);letter-spacing:-.01em}
+.card-sub{color:var(--text2)}
+.pc-head{padding:18px 20px 6px}
+
+/* ---------- KPIs ---------- */
+.kpi-grid{gap:14px;margin-bottom:22px}
+.kpi{border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:18px 20px 16px;background:var(--surface)}
+.kpi:hover{transform:none;box-shadow:0 8px 22px -12px rgba(16,42,56,.25)}
+.kpi .lb{font-size:11px;font-weight:500;letter-spacing:.08em;color:var(--text2)}
+.kpi .vl{font-size:27px;font-weight:500;letter-spacing:-.035em;margin:10px 0 4px;color:var(--text)}
+.kpi .vl.neg{color:var(--neg)} .kpi .vl.pos{color:var(--pos)}
+.kpi-leg{color:var(--text3)}
+
+/* ---------- Dashboard: seções ---------- */
+.dash-sec{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--text2);margin:6px 2px 12px}
+.dash-sec::after{content:'';flex:1;height:1px;background:var(--border)}
+.dash-grid{margin-bottom:22px}
+.dash-grid > .dz > .card{height:380px}
+
+/* ---------- abas / segmentos ---------- */
+.seg{background:#EAF0F4;border:1px solid transparent;border-radius:11px;padding:3px;gap:2px}
+body.dark .seg{background:#0D1A22}
+.seg button{padding:6px 13px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--text2)}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--surface);color:var(--azul);box-shadow:0 1px 3px rgba(16,42,56,.12)}
+body.dark .seg button.on{color:var(--accent)}
+.rp-tabs{background:#EAF0F4;border-color:transparent}
+.rp-tabs button.on{background:var(--surface);color:var(--azul);box-shadow:0 1px 3px rgba(16,42,56,.12)}
+
+/* ---------- botões ---------- */
+.btn{height:36px;padding:0 14px;border-radius:10px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(16,42,56,.04)}
+.btn:hover{border-color:#C9D4DE;background:#F8FAFC}
+.btn.sm{height:32px;padding:0 12px;font-size:12.5px;border-radius:9px}
+.btn.primary{background:var(--azul);border-color:var(--azul);color:#fff;box-shadow:0 4px 12px -6px rgba(18,100,119,.6)}
+.btn.primary:hover{background:#0F5566;border-color:#0F5566;filter:none}
+.btn.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--text2)}
+.btn.ghost:hover{background:var(--accent-soft);color:var(--azul)}
+.btn:disabled{opacity:.55;cursor:default}
+body.dark .btn:hover{background:#152733;border-color:#2A4150}
+
+/* ---------- campos ---------- */
+input[type=text],input[type=email],input[type=password],input[type=date],input[type=number],select,textarea,.select,.tit-busca{
+  border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font-size:13px}
+.select,.tit-busca,.field input,.field select{min-height:36px}
+.field label{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--turquesa) !important;box-shadow:0 0 0 3px var(--accent-ring)}
+
+/* ---------- tabelas ---------- */
+.tbl th{font-size:10.5px;font-weight:500;letter-spacing:.07em;color:var(--text3);background:#F7F9FB;border-bottom:1px solid var(--border);padding:11px 14px}
+body.dark .tbl th{background:#0E1B24}
+.tbl td{padding:10px 14px;border-bottom:1px solid var(--line);color:var(--text)}
+.tbl tbody tr:hover td{background:#F4F9FA}
+body.dark .tbl tbody tr:hover td{background:#142632}
+.tbl tr.hoverable{cursor:pointer}
+.tbl-wrap{border-radius:0 0 var(--r) var(--r)}
+
+/* ---------- status ---------- */
+.status-badge{gap:6px;font-size:11px;font-weight:500;padding:3px 10px 3px 8px;border-radius:999px}
+.status-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.85}
+.st-pago,.st-recebido,.st-ok{color:var(--pos);background:var(--pos-soft)}
+.st-aberto,.st-avencer{color:var(--azul);background:var(--accent-soft)}
+.st-vencido,.st-atraso,.st-erro{color:var(--neg);background:var(--neg-soft)}
+.st-pend,.st-parcial,.st-bdagu{color:var(--warn);background:var(--warn-soft)}
+.st-neutro{color:var(--text2);background:#EEF2F6}
+
+/* ---------- chips / vazio ---------- */
+.chip{background:var(--accent-soft);color:var(--azul);font-weight:500}
+.empty .t1{font-weight:500;color:var(--text)}
+.empty .t2{color:var(--text2)}
+
+/* ---------- gaveta e modal ---------- */
+#drawer{border-left:none;border-radius:18px 0 0 18px;box-shadow:var(--shadow-lg)}
+.drawer-head{padding:20px 24px 16px;border-bottom:1px solid var(--border)}
+.drawer-title{font-size:16px;font-weight:500;letter-spacing:-.015em}
+.drawer-body{padding:20px 24px}
+.drawer-foot{padding:14px 24px;border-top:1px solid var(--border);background:var(--surface)}
+.modal-card{border-radius:18px;box-shadow:var(--shadow-lg)}
+#overlay{background:rgba(16,42,56,.38);backdrop-filter:blur(2px)}
+
+/* ---------- Administração ---------- */
+.admin-cat{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--text2);margin:22px 2px 12px}
+.admin-cat:first-of-type{margin-top:4px}
+.admin-cat::after{content:'';flex:1;height:1px;background:var(--border)}
+.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.admin-card{display:flex;align-items:flex-start;gap:14px;text-align:left;width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.admin-card:hover{border-color:#BFDCDF;box-shadow:0 8px 22px -14px rgba(16,42,56,.35)}
+.admin-card .ic{width:38px;height:38px;border-radius:11px;background:var(--accent-soft);color:var(--azul);display:flex;align-items:center;justify-content:center;flex:none;margin:0}
+.admin-card .t{font-size:14px;font-weight:500;color:var(--text);margin:1px 0 3px}
+.admin-card .d{font-size:12.5px;line-height:1.45;color:var(--text2)}
+
+/* ---------- login na paleta ---------- */
+.login-visual{background:linear-gradient(160deg,#102A38 0%,#0F3343 55%,#0C2230 100%)}
+.login-pillar svg{stroke:#6FD6D4}
+#loginGate .btn.primary{background:var(--azul);height:44px;box-shadow:0 8px 18px -8px rgba(18,100,119,.6)}
+#loginGate .btn.primary:hover{background:#0F5566}
+.login-field input:focus{border-color:var(--turquesa);box-shadow:0 0 0 3px var(--accent-ring)}
+.login-link,.login-error.ok{color:var(--azul)}
+
+/* ---------- foco acessível ---------- */
+button:focus-visible,a:focus-visible,.side-link:focus-visible,.admin-card:focus-visible{outline:2px solid var(--turquesa);outline-offset:2px}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -4626,7 +4801,7 @@ function initTip(){
 function pctChange(cur, prev){ if(prev==null||prev===0) return null; return (cur-prev)/Math.abs(prev)*100; }
 
 /* =========================== PRIMITIVAS DE GRÁFICO =========================== */
-const NEUT1='#7DBFC4', NEUT2='#C8E3E5', NEUTS=['#0E6B7E','#3F9AA3','#7DBFC4','#B3DADD','#DCEEEF'];
+const NEUT1='#6FC3C2', NEUT2='#C9E8E7', NEUTS=['#126477','#20A6A5','#6FC3C2','#A9DCDB','#D6EFEE'];
 function smoothPath(pts){
   if(pts.length<3) return pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
   let d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);
@@ -5214,11 +5389,11 @@ function defaultDash(perfil){
   else if(perfil==='Visualização'){ cards=['saldo_atual','saldo_proj'].map(c=>card(c)); charts=[chart('evolucao',6)]; }
   else if(perfil==='Financeiro'){ cards=['total_pagar','total_receber','vencidas','prox_venc','saldo_atual','geracao'].map(c=>card(c)); charts=[chart('pxr',3),chart('fluxo_es',3),chart('saldo_bancos',3),chart('aging',3),chart('vencimentos',3),chart('alertas',3)]; }
   else { cards=['saldo_atual','menor_saldo','res_real','prox_venc'].map(c=>card(c));
-    charts=[chart('evolucao',3),chart('resultado_mensal',3),chart('desp_categoria',3),chart('vencimentos',3)]; }
+    charts=[chart('evolucao',4),chart('desp_categoria',2),chart('resultado_mensal',6),chart('vencimentos',3),chart('alertas',3)]; }
   return {cols:cards.length>=6?6:cards.length, cards, charts, filtros, versoes:[], atualizado:null, por:null, v:DASH_VER};
 }
 let DASH_STORE={};
-const DASH_VER=4; // muda quando o layout padrão muda: descarta caches locais antigos
+const DASH_VER=5; // muda quando o layout padrão muda: descarta caches locais antigos
 function dashKey(emp,perfil){ return (emp||state.empresa)+'|'+(perfil||state.role); }
 function dashCfg(emp,perfil){
   const k=dashKey(emp,perfil);
@@ -5362,8 +5537,14 @@ function renderDashboardInto(cfg, editor){
   });
   h+='</div>';
   const chartsOn=cfg.charts.filter(c=>c.on);
+  // Visão estratégica x operação (só na visualização; o editor mantém uma grade única para arrastar)
+  const OPER = ['vencimentos','alertas','aging'];
+  const blocos = editor ? [[null, chartsOn]] :
+    [['Visão estratégica', chartsOn.filter(c=>!OPER.includes(c.id))], ['Operação', chartsOn.filter(c=>OPER.includes(c.id))]].filter(x=>x[1].length);
+  blocos.forEach(([titulo, lista])=>{
+  if(titulo) h+='<div class="dash-sec">'+titulo+'</div>';
   h+='<div class="dash-grid">';
-  chartsOn.forEach((c,i)=>{
+  lista.forEach(c=>{ const i=chartsOn.indexOf(c);
     const def=CHART_DEFS[c.id]; if(!def)return;
     const ui=chartUI(c.id); if(c.tipo)ui.tipo=c.tipo;
     let r; try{ r=def.render(ui); }catch(e){ r={body:'<div class="empty"><div class="t2">Erro ao renderizar</div></div>',trend:null}; }
@@ -5374,6 +5555,7 @@ function renderDashboardInto(cfg, editor){
        chartCard({id:c.id, title:esc(c.titulo||def.t), desc:def.d, trend:c.comp?r.trend:null, body:r.body, quick:!editor})+'</div>';
   });
   h+='</div>';
+  });
   return h;
 }
 function renderDashboard(){
