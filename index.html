@@ -940,11 +940,12 @@ const USUARIOS = [
 const MODULOS_PERM = ['Dashboard','Fluxo de Caixa','DRE','Indicadores','Contas a Pagar','Borderô de Pagamentos','Contas a Receber','Administração'];
 const ACOES_PERM = ['visualizar','exportar','importar','configurar','operar'];
 const PERFIS = {
-  'Administrador': {mods:['dashboard','reports','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
+  'Administrador': {mods:['dashboard','reports','cob_painel','cob_carteiras','cob_inad','cob_coop','cob_acomp','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber','admin'], importar:true, configurar:true, exportar:true},
   'Financeiro':    {mods:['dashboard','reports','fluxo','dre','cooperativas','indicadores','pagar','bordero','receber'], importar:true, configurar:false, exportar:true},
   'Diretoria':     {mods:['dashboard','reports','fluxo','dre','cooperativas'], importar:false, configurar:false, exportar:true},
   'Cliente':       {mods:['dashboard','dre','cooperativas','indicadores'], importar:false, configurar:false, exportar:true},
-  'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false}
+  'Visualização':  {mods:['dashboard'], importar:false, configurar:false, exportar:false},
+  'Cobrança':      {mods:['cob_painel','cob_carteiras','cob_inad','cob_coop','cob_acomp'], importar:false, configurar:false, exportar:true}
 };
 const LOGS = [
   {data:'31/07/2026 18:40', usuario:'Gabriela Lima', acao:'Importação concluída', detalhe:'Plano de Contas - Agibens.xlsx — 130 novos, 5 rejeitados, 4 pendências'},
@@ -1213,6 +1214,12 @@ const NAV = [
     {id:'pagar', n:'Contas a Pagar', ic:'payUp'},
     {id:'bordero', n:'Borderô de Pagamentos', ic:'bordero'},
     {id:'receber', n:'Contas a Receber', ic:'payDown'}]},
+  {sec:'Cobrança', items:[
+    {id:'cob_painel', n:'Painel de Cobrança', ic:'gauge'},
+    {id:'cob_inad', n:'Inadimplentes', ic:'alert'},
+    {id:'cob_carteiras', n:'Carteiras', ic:'wallet'},
+    {id:'cob_coop', n:'Cooperativas', ic:'users'},
+    {id:'cob_acomp', n:'Acompanhamento', ic:'check'}]},
   {sec:'Administração', items:[{id:'admin', n:'Administração', ic:'settings'}]}
 ];
 function podeVer(id){ return PERFIS[state.role].mods.includes(id); }
@@ -4841,6 +4848,36 @@ body.dark .ra-tbl tr.ra-demais td{background:#0E1B24}
 /* gráficos: padrão único (azul profundo, turquesa claro, linha petróleo) */
 :root{--c-in:#126477;--c-out:#8FD1D0;--navy:#102A38}
 body.dark{--c-out:#2F6F78}
+
+/* ---------- Cobrança ---------- */
+.cob-bar{display:flex;gap:12px;margin:-6px 0 16px}
+.cob-mes{display:flex;flex-direction:column;gap:5px;font-size:11.5px;font-weight:500;color:var(--text2);min-width:200px}
+.cob-quem{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--azul);background:var(--accent-soft);border-radius:999px;padding:5px 12px}
+.cob-kpis{grid-template-columns:repeat(5,1fr)}
+@media(max-width:1200px){.cob-kpis{grid-template-columns:repeat(3,1fr)}}
+.cob-meta{padding:16px 20px;margin-bottom:16px}
+.cob-meta-lb{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text2);margin-bottom:10px}
+.cob-meta-lb b{font-size:15px;font-weight:600}
+.cob-meta-bar{position:relative;height:10px;border-radius:6px;background:#EEF2F6}
+.cob-meta-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:6px}
+.cob-meta-bar s{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--petroleo);text-decoration:none}
+.cob-meta-bar s em{position:absolute;top:20px;left:50%;transform:translateX(-50%);font-style:normal;font-size:11px;color:var(--text2);white-space:nowrap}
+.cob-meta{padding-bottom:30px}
+i.cob-ok,.cob-meta-bar i.cob-ok{background:var(--turquesa)} i.cob-atn{background:#E6B8A2} i.cob-ruim{background:#D7747C}
+b.cob-ok{color:var(--pos)} b.cob-atn{color:var(--warn)} b.cob-ruim{color:var(--neg)}
+.cob-pct{display:inline-block;min-width:52px;text-align:right;font-weight:500;padding:2px 8px;border-radius:8px}
+.cob-pct.cob-ok{background:var(--pos-soft);color:var(--pos)} .cob-pct.cob-atn{background:var(--warn-soft);color:var(--warn)} .cob-pct.cob-ruim{background:var(--neg-soft);color:var(--neg)}
+.cob-li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.cob-li span{color:var(--text2)} .cob-li b{font-weight:500;text-align:right}
+.cob-obs{margin:12px 0;padding:10px 12px;background:#F7F9FB;border-radius:10px;font-size:13px}
+.cob-obs span{display:block;font-size:11px;color:var(--text2);margin-bottom:3px}
+.cob-form{margin-top:16px;padding:16px;border:1px solid var(--border);border-radius:14px}
+.cob-form textarea{width:100%;padding:8px 12px}
+.cob-hist{display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+.cob-acao{border-left:2px solid var(--turquesa);padding:4px 0 4px 10px}
+.cob-acao span{display:block;color:var(--text2);font-size:11.5px}
+.cob-acao p{margin:4px 0 0;color:var(--text)}
+body.dark .cob-obs{background:#0E1B24} body.dark .cob-meta-bar{background:#0E1B24}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -6318,6 +6355,297 @@ function renderAnalise(tipo){
   $('content').innerHTML = h;
 }
 
+/* =========================== COBRANÇA ===========================
+   Seção própria (acesso separado): painel, carteiras, inadimplentes,
+   cooperativas e acompanhamento. Dados em cobranca_boletos / cobranca_acoes
+   (Supabase do Nexa). Regras de cálculo idênticas às do Painel Cobrança Dunorte:
+   faturado = ABERTO + BAIXADO (cancelados fora); % inadimplência = em aberto /
+   faturado; vencido = ABERTO com dias de atraso > 0; meta 5%.
+   O que cada usuário vê é decidido no banco (RLS): administrador e gestores
+   veem tudo; atendentes, só a própria carteira. */
+const COB = {emp:null, carregando:false, boletos:[], equipe:[], eu:null, mes:null, meta:5,
+  f:{at:'', co:'', st:'', q:'', sit:'aberto'}, acoesRecentes:null};
+const COB_STATUS = ['Não acionado','Contato realizado','Sem retorno','Boleto enviado','Promessa de pagamento','Negociação','Pago','Cancelamento em andamento'];
+const COB_FAIXAS = ['05','10','15','20','25','30'];
+const COB_COLS = 'id,nosso_numero,associado,placa,cooperativa,atendente,valor,valor_pago,vencimento,pagamento,situacao,status_cobranca,dias_atraso,ultimo_contato,promessa,observacao,responsavel';
+function cobMap(r){
+  return {id:r.id, nn:r.nosso_numero, n:r.associado||'—', pl:r.placa||'', co:r.cooperativa||'Sem cooperativa', at:r.atendente||'Não atribuído',
+    v:Number(r.valor)||0, vp:Number(r.valor_pago)||0, dv:r.vencimento, dp:r.pagamento, s:r.situacao, st:r.status_cobranca||'Não acionado',
+    da:r.dias_atraso||0, uc:r.ultimo_contato, pc:r.promessa, ob:r.observacao||'', rp:r.responsavel||'', mr:(r.vencimento||'').slice(0,7)};
+}
+async function cobCarregar(force){
+  const emp = state.empresa, id = EMPRESA_IDS[emp];
+  if(!id || (COB.emp===emp && !force) || COB.carregando) return;
+  COB.carregando = true;
+  try{
+    const [rows, eq] = await Promise.all([
+      fetchAllRows(o=>sb.from('cobranca_boletos').select(COB_COLS, o).eq('empresa_id', id).order('id')),
+      sb.from('cobranca_equipe').select('usuario_id,nome_atendente,papel,ativo').eq('empresa_id', id)
+    ]);
+    COB.boletos = rows.map(cobMap);
+    COB.equipe = (eq.data||[]).filter(e=>e.ativo);
+    COB.eu = COB.equipe.find(e=>currentUser && e.usuario_id===currentUser.id) || null;
+    COB.emp = emp; COB.acoesRecentes = null;
+  }catch(e){ console.error('Falha ao carregar cobrança:', e); toast('Não foi possível carregar a cobrança'); }
+  COB.carregando = false;
+}
+function cobGestor(){ return (currentUser && currentUser.perfil==='Administrador') || (COB.eu && COB.eu.papel==='gestor'); }
+function cobMeses(){ return [...new Set(COB.boletos.map(b=>b.mr).filter(Boolean))].sort().filter(m=>COB.boletos.filter(b=>b.mr===m).length>=20); }
+function cobMesPadrao(){
+  const ms = cobMeses(); if(!ms.length) return null;
+  const atual = isoDate(hojeReal()).slice(0,7);
+  return ms.includes(atual) ? atual : ms[ms.length-1];
+}
+function cobDoMes(){ if(!COB.mes || !cobMeses().includes(COB.mes)) COB.mes = cobMesPadrao(); return COB.boletos.filter(b=>b.mr===COB.mes); }
+function cobBloco(list){
+  let fat=0, rec=0, ab=0, venc=0, aVenc=0, qAb=0, qVenc=0, can=0, qCan=0; const assoc = {};
+  list.forEach(b=>{
+    if(b.s==='CANCELADO'){ can+=b.v; qCan++; return; }
+    fat += b.v;
+    if(b.s==='BAIXADO') rec += b.vp;
+    else if(b.s==='ABERTO'){ ab += b.v; qAb++; assoc[b.n]=1; if(b.da>0){ venc+=b.v; qVenc++; } else aVenc+=b.v; }
+  });
+  const p = fat>0 ? ab/fat*100 : 0, lim = fat*COB.meta/100;
+  return {fat, rec, ab, venc, aVenc, qAb, qVenc, can, qCan, qTot:list.length, assoc:Object.keys(assoc).length, p, lim, recuperar:Math.max(ab-lim,0)};
+}
+const cobLbMes = m=>{ if(!m) return '—'; const [y,mm]=m.split('-'); return MESES_LONG[+mm-1].replace(/^./,c=>c.toUpperCase())+'/'+y; };
+function cobPctCls(p){ return p<=COB.meta ? 'cob-ok' : p<=COB.meta*2 ? 'cob-atn' : 'cob-ruim'; }
+function cobPctTag(p){ return '<span class="cob-pct '+cobPctCls(p)+'">'+pct(p)+'</span>'; }
+function cobHead(titulo, extra){
+  const ms = cobMeses();
+  const sel = ms.length ? '<label class="cob-mes">Mês de vencimento<select class="select" onchange="COB.mes=this.value;render()">'+ms.slice().reverse().map(m=>'<option value="'+m+'"'+(m===COB.mes?' selected':'')+'>'+cobLbMes(m)+'</option>').join('')+'</select></label>' : '';
+  const quem = COB.eu ? '<span class="cob-quem">'+icon('users',13)+' '+esc(COB.eu.nome_atendente)+' · '+(COB.eu.papel==='gestor'?'gestão':'carteira própria')+'</span>' : '';
+  return pageHead(titulo, '', quem+(extra||'')) + (sel?'<div class="cob-bar">'+sel+'</div>':'');
+}
+async function cobPronto(titulo){
+  if(COB.emp!==state.empresa){
+    $('content').innerHTML = pageHead(titulo,'')+'<div class="card" style="padding:28px;text-align:center;color:var(--text2)">Carregando a carteira de cobrança…</div>';
+    await cobCarregar(); if(!String(state.view).startsWith('cob_')) return false;
+  }
+  if(!COB.boletos.length){
+    $('content').innerHTML = pageHead(titulo,'', cobGestor()&&currentUser.perfil==='Administrador'?'<button class="btn sm primary" onclick="cobImportarAbrir()">'+icon('upload',14)+' Importar boletos</button>':'')+
+      '<div class="card"><div class="empty" style="padding:40px"><div class="t1">Nenhum boleto de cobrança para '+esc(EMPRESAS[state.empresa].curto)+'</div><div class="t2">'+
+      (currentUser.perfil==='Administrador'?'Importe o relatório de boletos (arquivo do Painel Cobrança ou JSON) para começar.':'A carteira ainda não foi carregada pela gestão.')+'</div></div></div>';
+    return false;
+  }
+  cobDoMes();
+  return true;
+}
+
+/* ---------- painel ---------- */
+async function renderCobPainel(){
+  if(!await cobPronto('Cobrança')) return;
+  const L = cobDoMes(), B = cobBloco(L);
+  const extra = currentUser.perfil==='Administrador' ? '<button class="btn sm" onclick="cobImportarAbrir()">'+icon('upload',14)+' Importar boletos</button>' : '';
+  let h = cobHead('Cobrança · '+cobLbMes(COB.mes), extra);
+  const k = (lb, vl, leg, cls, tp)=>'<div class="kpi"'+(tp?tip(tp):'')+'><div class="lb">'+lb+'</div><div class="vl '+(cls||'')+'">'+vl+'</div><div class="dl"><span class="kpi-leg">'+leg+'</span></div></div>';
+  h += '<div class="kpi-grid cob-kpis">'+
+    k('Faturado', money(B.fat), B.qTot.toLocaleString('pt-BR')+' boletos · cancelados fora', '', 'Boletos em aberto + baixados com vencimento no mês. Cancelados não entram.')+
+    k('Recebido', money(B.rec), pct(B.fat?B.rec/B.fat*100:0)+' do faturado', '', 'Valor pago dos boletos baixados.')+
+    k('Em aberto', money(B.ab), B.qAb.toLocaleString('pt-BR')+' boletos · '+B.assoc.toLocaleString('pt-BR')+' associados', '', 'Boletos ainda em aberto, vencidos ou a vencer.')+
+    k('Inadimplência', pct(B.p), 'meta: até '+pct(COB.meta), B.p>COB.meta?'neg':'pos', 'Em aberto ÷ faturado (regra do painel de cobrança).')+
+    k('A recuperar p/ meta', money(B.recuperar), 'vencido: '+money(B.venc), B.recuperar>0?'neg':'', 'Quanto precisa ser recebido para a inadimplência ficar dentro da meta.')+
+    '</div>';
+  // termômetro da meta
+  const esc100 = Math.max(B.p, COB.meta*2, 10);
+  h += '<div class="card cob-meta"><div class="cob-meta-lb"><span>Inadimplência do mês</span><b class="'+cobPctCls(B.p)+'">'+pct(B.p)+'</b></div><div class="cob-meta-bar"><i style="width:'+Math.min(100,B.p/esc100*100)+'%" class="'+cobPctCls(B.p)+'"></i><s style="left:'+(COB.meta/esc100*100)+'%"><em>meta '+pct(COB.meta)+'</em></s></div></div>';
+
+  // evolução diária do % em aberto + faixas de vencimento
+  const [y,m] = COB.mes.split('-').map(Number), atual = COB.mes===isoDate(hojeReal()).slice(0,7);
+  const ult = atual ? hojeReal().getDate() : new Date(y,m,0).getDate();
+  const fatM = L.filter(b=>b.s!=='CANCELADO').reduce((t,b)=>t+b.v,0), dias=[], serie=[];
+  for(let d=1; d<=ult; d++){ const dISO = COB.mes+'-'+String(d).padStart(2,'0'); const rec = L.filter(b=>b.s==='BAIXADO' && b.dp && b.dp<=dISO).reduce((t,b)=>t+b.vp,0); dias.push(String(d).padStart(2,'0')); serie.push(fatM?(fatM-rec)/fatM*100:0); }
+  const evo = pcLineArea('cobevo', dias, [{name:'% em aberto', values:serie, kind:'main'}], {h:260, fmt:'pct'});
+  const fx = COB_FAIXAS.map(f=>({f, B:cobBloco(L.filter(b=>(b.dv||'').slice(8,10)===f))})); const out = L.filter(b=>!COB_FAIXAS.includes((b.dv||'').slice(8,10)));
+  if(out.length) fx.push({f:'outros', B:cobBloco(out)});
+  let tf = '<div class="tbl-wrap"><table class="tbl ra-tbl"><thead><tr><th>Vencimento</th><th class="num">Boletos</th><th class="num">Faturado</th><th class="num">Recebido</th><th class="num">Em aberto</th><th class="num">% inad.</th><th style="width:110px"></th></tr></thead><tbody>';
+  fx.filter(x=>x.B.qTot).forEach(x=>{ tf += '<tr class="hoverable" onclick="COB.f.q=\'\';COB.f.dia=\''+x.f+'\';go(\'cob_inad\')"><td>'+(x.f==='outros'?'Outros dias':'Dia '+x.f)+'</td><td class="num">'+x.B.qTot+'</td><td class="num">'+money(x.B.fat)+'</td><td class="num">'+money(x.B.rec)+'</td><td class="num">'+money(x.B.ab)+'</td><td class="num">'+cobPctTag(x.B.p)+'</td><td><div class="ra-bar"><i style="width:'+(x.B.fat?x.B.rec/x.B.fat*100:0)+'%;background:var(--azul)"></i><i style="width:'+x.B.p+'%;background:#D7747C"></i></div></td></tr>'; });
+  tf += '</tbody><tfoot><tr><td>Total</td><td class="num">'+B.qTot+'</td><td class="num">'+money(B.fat)+'</td><td class="num">'+money(B.rec)+'</td><td class="num">'+money(B.ab)+'</td><td class="num">'+cobPctTag(B.p)+'</td><td></td></tr></tfoot></table></div>';
+  h += '<div class="fx-grid">'+
+    '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Evolução do % em aberto</div><div class="fx-sub">dia a dia no mês · cai conforme os boletos são pagos</div></div></div><div class="card-body" style="padding-top:4px">'+evo+'</div></div>'+
+    '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Por dia de vencimento</div><div class="fx-sub">clique numa faixa para ver os boletos em aberto</div></div></div>'+tf+'</div></div>';
+
+  // status de cobrança dos boletos em aberto + histórico
+  const ab = L.filter(b=>b.s==='ABERTO'), porSt = {};
+  ab.forEach(b=>{ const o=porSt[b.st]=porSt[b.st]||{n:0,v:0}; o.n++; o.v+=b.v; });
+  const sts = Object.entries(porSt).sort((a,b)=>b[1].v-a[1].v), totAb = ab.reduce((t,b)=>t+b.v,0)||1;
+  let ts = '<div class="tbl-wrap"><table class="tbl ra-tbl"><thead><tr><th>Status de cobrança</th><th class="num">Boletos</th><th class="num">Valor</th><th style="width:40%">Participação</th></tr></thead><tbody>'+
+    sts.map(([st,o])=>'<tr class="hoverable" onclick="COB.f.st=\''+esc(st).replace(/'/g,'')+'\';go(\'cob_inad\')"><td>'+esc(st)+'</td><td class="num">'+o.n+'</td><td class="num">'+money(o.v)+'</td><td><div class="ra-hbar" style="height:14px"><i style="width:'+(o.v/totAb*100)+'%"></i></div></td></tr>').join('')+'</tbody></table></div>';
+  const hist = cobMeses().slice(-9).map(mm=>({mm, B:cobBloco(COB.boletos.filter(b=>b.mr===mm))}));
+  let th = '<div class="tbl-wrap"><table class="tbl ra-tbl"><thead><tr><th>Mês</th><th class="num">Faturado</th><th class="num">Recebido</th><th class="num">Em aberto</th><th class="num">% inad.</th></tr></thead><tbody>'+
+    hist.map(x=>'<tr class="hoverable'+(x.mm===COB.mes?' ra-sel':'')+'" onclick="COB.mes=\''+x.mm+'\';render()"><td>'+cobLbMes(x.mm)+'</td><td class="num">'+money(x.B.fat)+'</td><td class="num">'+money(x.B.rec)+'</td><td class="num">'+money(x.B.ab)+'</td><td class="num">'+cobPctTag(x.B.p)+'</td></tr>').join('')+'</tbody></table></div>';
+  h += '<div class="fx-grid">'+
+    '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Em aberto por status de cobrança</div><div class="fx-sub">onde está o trabalho da equipe</div></div></div>'+ts+'</div>'+
+    '<div class="card fx-card"><div class="pc-head"><div style="flex:1"><div class="pc-title">Histórico</div><div class="fx-sub">inadimplência por mês de vencimento · clique para abrir o mês</div></div></div>'+th+'</div></div>';
+  $('content').innerHTML = h;
+}
+
+/* ---------- carteiras (por atendente) ---------- */
+async function renderCobCarteiras(){
+  if(!await cobPronto('Carteiras')) return;
+  const L = cobDoMes(), map = {};
+  L.forEach(b=>{ const o=map[b.at]=map[b.at]||{nome:b.at, list:[], coops:{}}; o.list.push(b); o.coops[b.co]=1; });
+  const rows = Object.values(map).map(o=>Object.assign(cobBloco(o.list), {nome:o.nome, nc:Object.keys(o.coops).length})).sort((a,b)=>b.p-a.p);
+  const T = cobBloco(L);
+  let h = cobHead('Carteiras');
+  h += '<div class="card"><div class="tbl-wrap"><table class="tbl ra-tbl"><thead><tr><th>Atendente</th><th class="num">Cooperativas</th><th class="num">Boletos</th><th class="num">Faturado</th><th class="num">Recebido</th><th class="num">Em aberto</th><th class="num">Vencido</th><th class="num">% inad.</th><th class="num">A recuperar</th></tr></thead><tbody>'+
+    rows.map(r=>'<tr class="hoverable" onclick="COB.f.at=\''+esc(r.nome).replace(/'/g,'')+'\';go(\'cob_inad\')"><td style="font-weight:500">'+esc(r.nome)+'</td><td class="num">'+r.nc+'</td><td class="num">'+r.qTot+'</td><td class="num">'+money(r.fat)+'</td><td class="num">'+money(r.rec)+'</td><td class="num">'+money(r.ab)+'</td><td class="num">'+money(r.venc)+'</td><td class="num">'+cobPctTag(r.p)+'</td><td class="num">'+money(r.recuperar)+'</td></tr>').join('')+
+    '</tbody><tfoot><tr><td>Total</td><td></td><td class="num">'+T.qTot+'</td><td class="num">'+money(T.fat)+'</td><td class="num">'+money(T.rec)+'</td><td class="num">'+money(T.ab)+'</td><td class="num">'+money(T.venc)+'</td><td class="num">'+cobPctTag(T.p)+'</td><td class="num">'+money(T.recuperar)+'</td></tr></tfoot></table></div></div>';
+  $('content').innerHTML = h;
+}
+
+/* ---------- cooperativas ---------- */
+async function renderCobCoop(){
+  if(!await cobPronto('Cooperativas')) return;
+  const L = cobDoMes(), map = {};
+  L.forEach(b=>{ const o=map[b.co]=map[b.co]||{nome:b.co, list:[], at:{}}; o.list.push(b); o.at[b.at]=1; });
+  const rows = Object.values(map).map(o=>Object.assign(cobBloco(o.list), {nome:o.nome, ats:Object.keys(o.at).join(', ')})).sort((a,b)=>b.ab-a.ab);
+  const maxAb = Math.max(...rows.map(r=>r.ab),1);
+  let h = cobHead('Cooperativas');
+  h += '<div class="card"><div class="tbl-wrap ra-wrap" style="max-height:calc(100vh - 230px)"><table class="tbl ra-tbl"><thead><tr><th>Cooperativa</th><th>Atendente</th><th class="num">Boletos</th><th class="num">Faturado</th><th class="num">Em aberto</th><th style="width:16%"></th><th class="num">% inad.</th></tr></thead><tbody>'+
+    rows.map(r=>'<tr class="hoverable" onclick="COB.f.co=\''+esc(r.nome).replace(/'/g,'')+'\';go(\'cob_inad\')"><td style="font-weight:500">'+esc(r.nome)+'</td><td style="color:var(--text2)">'+esc(r.ats)+'</td><td class="num">'+r.qTot+'</td><td class="num">'+money(r.fat)+'</td><td class="num">'+money(r.ab)+'</td><td><div class="ra-hbar" style="height:12px"><i style="width:'+(r.ab/maxAb*100)+'%"></i></div></td><td class="num">'+cobPctTag(r.p)+'</td></tr>').join('')+
+    '</tbody></table></div></div>';
+  $('content').innerHTML = h;
+}
+
+/* ---------- inadimplentes (lista de trabalho) ---------- */
+async function renderCobInad(){
+  if(!await cobPronto('Inadimplentes')) return;
+  const F = COB.f, L = cobDoMes(), q = (F.q||'').trim().toLowerCase();
+  const sitOk = b=> F.sit==='aberto' ? b.s==='ABERTO' : F.sit==='vencido' ? (b.s==='ABERTO'&&b.da>0) : F.sit==='cancel' ? (b.s==='CANCELADO'||b.st==='Cancelamento em andamento') : true;
+  const lista = L.filter(b=>sitOk(b) && (!F.at||b.at===F.at) && (!F.co||b.co===F.co) && (!F.st||b.st===F.st) && (!F.dia||(F.dia==='outros'?!COB_FAIXAS.includes((b.dv||'').slice(8,10)):(b.dv||'').slice(8,10)===F.dia)) &&
+    (!q || (b.n+' '+b.pl+' '+b.nn+' '+b.co).toLowerCase().includes(q))).sort((a,b)=>b.da-a.da || b.v-a.v);
+  const opt = (arr, cur, todos)=>'<option value="">'+todos+'</option>'+arr.map(x=>'<option'+(x===cur?' selected':'')+' value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+  const ats = [...new Set(L.map(b=>b.at))].sort(), cos = [...new Set(L.map(b=>b.co))].sort();
+  let h = cobHead('Inadimplentes');
+  h += '<div class="tit-bar">'+
+    '<div class="seg">'+[['aberto','Em aberto'],['vencido','Vencidos'],['cancel','Cancelamentos'],['todos','Todos']].map(s=>'<button class="'+(F.sit===s[0]?'on':'')+'" onclick="COB.f.sit=\''+s[0]+'\';render()">'+s[1]+'</button>').join('')+'</div>'+
+    '<input class="tit-busca" type="text" placeholder="Buscar associado, placa ou nosso número…" value="'+esc(F.q||'')+'" oninput="COB.f.q=this.value;clearTimeout(window._cb);window._cb=setTimeout(()=>{render();const i=document.querySelector(\'.tit-busca\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">'+
+    (cobGestor()?'<select class="select" onchange="COB.f.at=this.value;render()">'+opt(ats,F.at,'Todos os atendentes')+'</select>':'')+
+    '<select class="select" onchange="COB.f.co=this.value;render()">'+opt(cos,F.co,'Todas as cooperativas')+'</select>'+
+    '<select class="select" onchange="COB.f.st=this.value;render()">'+opt(COB_STATUS,F.st,'Todos os status')+'</select>'+
+    ((F.at||F.co||F.st||F.q||F.dia)?'<button class="btn sm ghost" onclick="COB.f={at:\'\',co:\'\',st:\'\',q:\'\',sit:COB.f.sit};render()">'+icon('x',12)+' Limpar'+(F.dia?' (dia '+F.dia+')':'')+'</button>':'')+
+    '</div>';
+  const tot = lista.reduce((t,b)=>t+b.v,0), LIM = 500;
+  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl"><thead><tr><th>Associado</th><th>Placa</th><th>Cooperativa</th>'+(cobGestor()?'<th>Atendente</th>':'')+'<th>Vencimento</th><th class="num">Atraso</th><th class="num">Valor</th><th>Status</th><th>Promessa</th></tr></thead><tbody>';
+  if(!lista.length) h += '<tr><td colspan="9"><div class="empty" style="padding:26px"><div class="t1">Nada por aqui</div><div class="t2">Nenhum boleto com esse filtro.</div></div></td></tr>';
+  lista.slice(0,LIM).forEach(b=>{
+    const prom = b.pc ? (b.pc < isoDate(hojeReal()) ? '<span class="status-badge st-vencido">'+fdate(parseYMD(b.pc))+'</span>' : '<span class="status-badge st-aberto">'+fdate(parseYMD(b.pc))+'</span>') : '—';
+    h += '<tr class="hoverable" onclick="cobDetalhe(\''+b.id+'\')"><td class="tit-f">'+esc(b.n)+'</td><td class="tit-s">'+esc(b.pl)+'</td><td class="tit-s">'+esc(b.co)+'</td>'+(cobGestor()?'<td class="tit-s">'+esc(b.at)+'</td>':'')+
+      '<td class="tit-d">'+fdate(parseYMD(b.dv))+'</td><td class="num" style="color:'+(b.da>0?'var(--neg)':'var(--text2)')+'">'+(b.s==='ABERTO'?(b.da>0?b.da+' d':'a vencer'):'—')+'</td><td class="num">'+money(b.v,true)+'</td>'+
+      '<td><span class="status-badge '+cobStCls(b)+'">'+esc(b.s==='CANCELADO'?'Cancelado':b.s==='BAIXADO'?'Pago':b.st)+'</span></td><td>'+prom+'</td></tr>';
+  });
+  h += '</tbody></table></div><div class="tit-mais">'+lista.length.toLocaleString('pt-BR')+' boleto(s) · '+money(tot,true)+(lista.length>LIM?' · mostrando os '+LIM+' com mais atraso — use os filtros':'')+'</div></div>';
+  $('content').innerHTML = h;
+}
+function cobStCls(b){
+  if(b.s==='BAIXADO' || b.st==='Pago') return 'st-pago';
+  if(b.s==='CANCELADO' || b.st==='Cancelamento em andamento') return 'st-neutro';
+  if(b.st==='Promessa de pagamento' || b.st==='Negociação' || b.st==='Boleto enviado') return 'st-aberto';
+  if(b.st==='Não acionado') return 'st-vencido';
+  return 'st-pend';
+}
+async function cobDetalhe(id){
+  const b = COB.boletos.find(x=>x.id===id); if(!b) return;
+  const li = (k,v)=>'<div class="cob-li"><span>'+k+'</span><b>'+v+'</b></div>';
+  let h = drawerHead(esc(b.n), 'Boleto '+esc(b.nn)+' · '+esc(b.pl));
+  h += '<div class="drawer-body">'+
+    li('Cooperativa', esc(b.co))+li('Atendente', esc(b.at))+li('Vencimento', fdate(parseYMD(b.dv)))+
+    li('Situação', b.s==='ABERTO'?(b.da>0?'Vencido há '+b.da+' dia(s)':'A vencer'):b.s==='BAIXADO'?'Pago em '+fdate(parseYMD(b.dp)):'Cancelado')+
+    li('Valor', money(b.v,true))+(b.vp?li('Valor pago', money(b.vp,true)):'')+li('Status de cobrança', '<span class="status-badge '+cobStCls(b)+'">'+esc(b.st)+'</span>')+
+    (b.pc?li('Promessa de pagamento', fdate(parseYMD(b.pc))):'')+(b.uc?li('Último contato', fdate(parseYMD(b.uc))):'')+
+    (b.ob?'<div class="cob-obs"><span>Observação</span>'+esc(b.ob)+'</div>':'');
+  if(b.s!=='CANCELADO'){
+    h += '<div class="cob-form"><div class="pc-title" style="margin-bottom:10px">Registrar ação</div>'+
+      '<div class="field"><label>Status</label><select id="cobSt">'+COB_STATUS.map(s=>'<option'+(s===b.st?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
+      '<div class="field"><label>Promessa de pagamento</label><input type="date" id="cobPc" value="'+(b.pc||'')+'"></div>'+
+      '<div class="field"><label>Observação</label><textarea id="cobOb" rows="3" placeholder="O que foi combinado com o associado"></textarea></div>'+
+      '<button class="btn primary" style="width:100%;justify-content:center" id="cobSalvarBtn" onclick="cobSalvarAcao(\''+b.id+'\')">Salvar ação</button></div>';
+  }
+  h += '<div class="pc-title" style="margin:18px 0 8px">Histórico de ações</div><div id="cobHist" class="cob-hist">Carregando…</div></div>';
+  openDrawer(h);
+  const { data, error } = await sb.from('cobranca_acoes').select('status,observacao,promessa,created_at,usuario_id').eq('boleto_id', id).order('created_at',{ascending:false});
+  const nome = uid=>{ const e=COB.equipe.find(x=>x.usuario_id===uid); return e?e.nome_atendente:(currentUser&&uid===currentUser.id?currentUser.nome:'—'); };
+  const el = $('cobHist'); if(!el) return;
+  el.innerHTML = error ? 'Não foi possível carregar o histórico.' : (!data.length ? '<span style="color:var(--text2)">Nenhuma ação registrada no Nexa ainda.</span>' :
+    data.map(a=>'<div class="cob-acao"><div><b>'+esc(a.status||'—')+'</b>'+(a.promessa?' · promessa '+fdate(parseYMD(a.promessa)):'')+'<span>'+new Date(a.created_at).toLocaleString('pt-BR')+' · '+esc(nome(a.usuario_id))+'</span></div>'+(a.observacao?'<p>'+esc(a.observacao)+'</p>':'')+'</div>').join(''));
+}
+async function cobSalvarAcao(id){
+  const b = COB.boletos.find(x=>x.id===id); if(!b) return;
+  const st = $('cobSt').value, pc = $('cobPc').value||null, ob = $('cobOb').value.trim();
+  const btn = $('cobSalvarBtn'); btn.disabled = true; btn.textContent = 'Salvando…';
+  const hoje = isoDate(hojeReal());
+  const patch = {status_cobranca:st, promessa:pc, ultimo_contato:hoje}; if(ob) patch.observacao = ob;
+  const r1 = await sb.from('cobranca_boletos').update(patch).eq('id', id);
+  const r2 = r1.error ? r1 : await sb.from('cobranca_acoes').insert({empresa_id:EMPRESA_IDS[state.empresa], boleto_id:id, usuario_id:currentUser.id, status:st, observacao:ob||null, promessa:pc});
+  if(r1.error || r2.error){ console.error(r1.error||r2.error); toast('Não foi possível salvar a ação'); btn.disabled=false; btn.textContent='Salvar ação'; return; }
+  b.st = st; b.pc = pc; b.uc = hoje; if(ob) b.ob = ob; COB.acoesRecentes = null;
+  toast('Ação registrada'); render(); cobDetalhe(id);
+}
+
+/* ---------- acompanhamento ---------- */
+async function renderCobAcomp(){
+  if(!await cobPronto('Acompanhamento')) return;
+  if(!COB.acoesRecentes){
+    const { data } = await sb.from('cobranca_acoes').select('boleto_id,status,observacao,promessa,created_at,usuario_id').eq('empresa_id', EMPRESA_IDS[state.empresa]).order('created_at',{ascending:false}).limit(200);
+    COB.acoesRecentes = data||[];
+    if(state.view!=='cob_acomp') return;
+  }
+  const hoje = isoDate(hojeReal()), ab = COB.boletos.filter(b=>b.s==='ABERTO' && b.pc);
+  const venc = ab.filter(b=>b.pc<hoje).sort((a,b)=>a.pc.localeCompare(b.pc)), hj = ab.filter(b=>b.pc===hoje), prox = ab.filter(b=>b.pc>hoje).sort((a,b)=>a.pc.localeCompare(b.pc)).slice(0,100);
+  const semContato = COB.boletos.filter(b=>b.s==='ABERTO' && b.da>0 && b.st==='Não acionado');
+  const lst = (arr, vazio)=> arr.length ? '<table class="tbl"><tbody>'+arr.slice(0,60).map(b=>'<tr class="hoverable" onclick="cobDetalhe(\''+b.id+'\')"><td class="tit-f">'+esc(b.n)+'<div class="tit-s" style="font-size:11.5px;color:var(--text2)">'+esc(b.co)+' · '+esc(b.at)+'</div></td><td class="tit-d">'+(b.pc?fdate(parseYMD(b.pc)):b.da+' d')+'</td><td class="num">'+money(b.v,true)+'</td></tr>').join('')+'</tbody></table>'+(arr.length>60?'<div class="tit-mais">+ '+(arr.length-60)+' boleto(s)</div>':'') : '<div class="empty" style="padding:22px"><div class="t2">'+vazio+'</div></div>';
+  const nome = uid=>{ const e=COB.equipe.find(x=>x.usuario_id===uid); return e?e.nome_atendente:'—'; };
+  let h = cobHead('Acompanhamento');
+  h += '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">'+
+    kpi('Promessas vencidas', String(venc.length), null, money(venc.reduce((t,b)=>t+b.v,0),true), venc.length?'neg':'')+
+    kpi('Promessas para hoje', String(hj.length), null, money(hj.reduce((t,b)=>t+b.v,0),true))+
+    kpi('Próximas promessas', String(prox.length), null, 'a partir de amanhã')+
+    kpi('Vencidos sem contato', String(semContato.length), null, money(semContato.reduce((t,b)=>t+b.v,0),true), semContato.length?'neg':'')+'</div>';
+  h += '<div class="fx-grid">'+
+    '<div class="card fx-card"><div class="pc-head"><div class="pc-title">Promessas vencidas e de hoje</div></div>'+lst(venc.concat(hj),'Nenhuma promessa vencida.')+'</div>'+
+    '<div class="card fx-card"><div class="pc-head"><div class="pc-title">Vencidos sem nenhum contato</div></div>'+lst(semContato.sort((a,b)=>b.da-a.da),'Todos os vencidos já tiveram contato.')+'</div></div>';
+  h += '<div class="card"><div class="pc-head"><div class="pc-title">Ações registradas no Nexa</div></div>'+(COB.acoesRecentes.length?
+    '<table class="tbl"><thead><tr><th>Quando</th><th>Quem</th><th>Associado</th><th>Status</th><th>Observação</th></tr></thead><tbody>'+COB.acoesRecentes.map(a=>{ const b=COB.boletos.find(x=>x.id===a.boleto_id)||{n:'—'};
+      return '<tr class="hoverable" onclick="cobDetalhe(\''+a.boleto_id+'\')"><td class="tit-d">'+new Date(a.created_at).toLocaleString('pt-BR')+'</td><td>'+esc(nome(a.usuario_id))+'</td><td class="tit-f">'+esc(b.n)+'</td><td>'+esc(a.status||'')+'</td><td class="tit-s">'+esc(a.observacao||'')+'</td></tr>'; }).join('')+'</tbody></table>'
+    : '<div class="empty" style="padding:22px"><div class="t2">Nenhuma ação registrada no Nexa ainda. As ações salvas nos boletos aparecem aqui.</div></div>')+'</div>';
+  $('content').innerHTML = h;
+}
+
+/* ---------- importação (administrador) ---------- */
+function cobImportarAbrir(){
+  openModal('<div class="modal-head"><div class="drawer-title">Importar boletos de cobrança</div><div class="drawer-sub">'+esc(EMPRESAS[state.empresa].nome)+'</div></div>'+
+    '<div class="modal-body"><p style="font-size:13px;color:var(--text2);margin-bottom:14px">Aceita o arquivo HTML do Painel Cobrança (com os boletos embutidos) ou um JSON com a lista de boletos. Boletos já existentes (mesmo nosso número) são atualizados; o histórico de ações é mantido.</p>'+
+    '<input type="file" id="cobArq" accept=".html,.htm,.json"><div id="cobImpMsg" style="margin-top:14px;font-size:13px"></div></div>'+
+    '<div class="modal-foot"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" id="cobImpBtn" onclick="cobImportar()">Importar</button></div>');
+}
+async function cobImportar(){
+  const f = $('cobArq').files[0], msg = $('cobImpMsg'), btn = $('cobImpBtn');
+  if(!f){ msg.textContent = 'Escolha o arquivo.'; return; }
+  btn.disabled = true; msg.textContent = 'Lendo o arquivo…';
+  let lista;
+  try{
+    const txt = await f.text();
+    if(/\.json$/i.test(f.name)){ const j = JSON.parse(txt); lista = Array.isArray(j) ? j : j.boletos; }
+    else { const i = txt.indexOf('window.APP_DATA = '); if(i<0) throw new Error('não encontrei os boletos no arquivo'); const j = txt.indexOf('<'+'/script>', i); lista = JSON.parse(txt.slice(i+18, j).trim().replace(/;\s*$/,'')).boletos; }
+    if(!Array.isArray(lista) || !lista.length) throw new Error('lista de boletos vazia');
+  }catch(e){ msg.textContent = 'Arquivo inválido: '+e.message; btn.disabled=false; return; }
+  const empId = EMPRESA_IDS[state.empresa], agora = new Date().toISOString();
+  const rows = lista.filter(b=>b.nn && b.s).map(b=>({empresa_id:empId, nosso_numero:String(b.nn), associado:b.n||null, placa:b.pl||null, cooperativa:b.co||null,
+    atendente:b.at||null, valor:Number(b.v)||0, valor_pago:Number(b.vp)||0, vencimento:b.dv||null, pagamento:b.dp||null, situacao:b.s,
+    status_cobranca:b.st||null, dias_atraso:Number(b.da)||0, ultimo_contato:b.uc||null, promessa:b.pc||null, observacao:b.ob||null,
+    responsavel:b.rp||null, origem:f.name, importado_em:agora}));
+  const LOTE = 1000; let feitos = 0;
+  for(let i=0; i<rows.length; i+=LOTE){
+    const { error } = await sb.from('cobranca_boletos').upsert(rows.slice(i,i+LOTE), {onConflict:'empresa_id,nosso_numero'});
+    if(error){ console.error(error); msg.textContent = 'Erro no lote '+(i/LOTE+1)+': '+error.message+' — '+feitos+' boletos já gravados.'; btn.disabled=false; return; }
+    feitos += Math.min(LOTE, rows.length-i); msg.textContent = 'Gravando… '+feitos.toLocaleString('pt-BR')+' de '+rows.length.toLocaleString('pt-BR');
+  }
+  await sb.from('logs').insert({empresa_id:empId, acao:'Cobrança — importação de boletos', detalhe:f.name+': '+rows.length+' boletos', usuario_id:currentUser.id});
+  msg.textContent = rows.length.toLocaleString('pt-BR')+' boletos importados.'; btn.disabled=false;
+  await cobCarregar(true); render();
+}
+
 function render(){
   if(currentUser && !empresaAutorizada(state.empresa)){
     const primeira = (currentUser.empresas||[])[0];
@@ -6325,6 +6653,8 @@ function render(){
     toast('Acesso negado: empresa não autorizada para o seu usuário');
     state.empresa = primeira;
   }
+  if(currentUser && !podeVer(state.view)){ state.view = PERFIS[state.role].mods[0]; state.adminPage = null; }
+  if(COB.emp && COB.emp!==state.empresa){ COB.emp=null; COB.boletos=[]; }
   applyBrand(); applyChrome();
   renderSidebar(); renderTopbar();
   if(CARREGANDO[state.empresa] && !HYDRATED[state.empresa]){
@@ -6333,7 +6663,7 @@ function render(){
       '<div class="t2">Buscando os títulos a pagar e a receber no banco de dados.</div></div>';
     return;
   }
-  const views={dashboard:renderDashboard, reports:renderReports, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
+  const views={dashboard:renderDashboard, reports:renderReports, cob_painel:renderCobPainel, cob_carteiras:renderCobCarteiras, cob_inad:renderCobInad, cob_coop:renderCobCoop, cob_acomp:renderCobAcomp, fluxo:renderFluxo, dre:renderDre, cooperativas:renderCooperativas,
     indicadores:renderIndicadores, pagar:()=>renderTitulos('pagar'),
     receber:()=>renderTitulos('receber'), bordero:renderBordero, admin:renderAdmin};
   (views[state.view]||renderDashboard)();
