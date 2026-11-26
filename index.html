@@ -4969,6 +4969,13 @@ body.dark .card{border-color:var(--border)}
 #ctip .tr i{width:8px;height:8px;border-radius:2px;flex:none}
 #ctip .tr b{margin-left:auto;padding-left:14px;color:#fff;font-weight:600}
 #ctip .tr-sub{color:#7F98A4;font-size:11px;margin:1px 0 0 16px}
+
+.rec-calc{border:1px solid var(--border);border-radius:12px;margin:10px 0 12px;overflow:hidden}
+.rec-calc>div{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;font-size:12.5px;border-bottom:1px solid var(--line)}
+.rec-calc>div b{font-weight:500;white-space:nowrap}
+.rec-calc>div.off{color:var(--text3)}
+.rec-calc>div.tot{background:var(--accent-soft);font-weight:600;font-size:13.5px;border-bottom:none}
+.rec-calc>div.tot b{font-weight:700}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -6789,20 +6796,86 @@ function recBase(mesRef){
   REC_BASE = {key, map};
   return map;
 }
+/* Calcula o valor a pagar pela negociação estruturada (regra):
+   fixo · ajuda {valor, meta, de, ate, encerra_placas} · rec [{pct, vendas, placas}] (maior faixa atingida)
+   · venda [{min, valor}] (R$ por venda) · bonus [{vendas|placas, valor}] · ate (fim da negociação).
+   Base: boletos de associados recebidos no mês de referência nas cooperativas do representante;
+   sem cooperativa vinculada, usa vendas/placas/valor informados na apuração. */
 function recCalc(neg, ap){
-  const mesRef = recMesAnt(ap.competencia), base = recBase(mesRef);
-  const coops = (neg.cooperativas||[]).map(recNorm);
-  let n=0, v=0; coops.forEach(c=>{ if(base[c]){ n+=base[c].n; v+=base[c].v; } });
-  let vendas = null;
-  if(coops.length){ const vs = REC.vendas.filter(x=>x.mes_ref===mesRef && coops.includes(recNorm(x.cooperativa))); if(vs.length) vendas = vs.reduce((t,x)=>t+x.quantidade,0); }
-  const r = neg.regra||{}; let calc = null, como = '';
-  if(r.fixo && !r.pct){ calc = r.fixo; como = 'fixo mensal'; }
-  else if(r.pct && coops.length){
-    const meta = r.meta||0, vd = vendas!=null ? vendas : (ap.vendas||0);
-    calc = (meta && vd < meta) ? (r.fixo||0) : v*r.pct/100 + (r.fixo||0);
-    como = (meta && vd<meta ? 'não bateu a meta de '+meta+' (vendas '+vd+')' : r.pct+'% × '+money(v,true)) + (r.fixo?' + fixo '+money(r.fixo):'');
+  const comp = ap.competencia, mesRef = recMesAnt(comp), base = recBase(mesRef);
+  const coops = (neg.cooperativas||[]).map(recNorm), r = neg.regra||{};
+  let placas = null, valor = null, vendas = null, fonte = 'informado';
+  if(coops.length){
+    placas = 0; valor = 0; coops.forEach(c=>{ if(base[c]){ placas += base[c].n; valor += base[c].v; } });
+    const vs = REC.vendas.filter(x=>x.mes_ref===mesRef && coops.includes(recNorm(x.cooperativa)));
+    vendas = vs.length ? vs.reduce((t,x)=>t+x.quantidade,0) : (ap.vendas!=null ? +ap.vendas : null);
+    fonte = 'base';
+  } else { placas = ap.placas!=null ? +ap.placas : null; valor = ap.valor_base!=null ? +ap.valor_base : null; vendas = ap.vendas!=null ? +ap.vendas : null; }
+  const V = vendas||0, Pl = placas||0, L = [];
+  let falhou = false, recVal = 0;
+  const vigente = !r.ate || comp <= r.ate;
+  if(!vigente) L.push({d:'Negociação encerrada em '+recLb(r.ate).toLowerCase(), v:0, off:true});
+  if(vigente){
+    if(r.fixo) L.push({d:'Remuneração fixa mensal', v:+r.fixo});
+    if(r.ajuda && r.ajuda.valor){
+      const a = r.ajuda, dentro = (!a.ate || comp<=a.ate) && (!a.de || comp>=a.de);
+      if(!dentro) L.push({d:'Ajuda de custo / aporte (vigência encerrada)', v:0, off:true});
+      else if(a.encerra_placas && Pl>=a.encerra_placas) L.push({d:'Ajuda de custo encerrada ('+Pl+' placas ativas ≥ '+a.encerra_placas+')', v:0, off:true});
+      else if(a.meta && V<a.meta){ L.push({d:'Ajuda de custo / aporte — meta de '+a.meta+' vendas não atingida ('+V+')', v:0, off:true}); falhou = true; }
+      else L.push({d:'Ajuda de custo / aporte'+(a.meta?' (meta '+a.meta+' atingida)':'')+(a.ate?' · até '+recLb(a.ate).toLowerCase():''), v:+a.valor});
+    }
+    if(r.rec && r.rec.length){
+      const ok = r.rec.filter(f=>V>=(f.vendas||0) && Pl>=(f.placas||0)).sort((a,b)=>b.pct-a.pct)[0];
+      if(ok && valor!=null){ recVal = Math.round(valor*ok.pct)/100; L.push({d:'Recorrência '+String(ok.pct).replace('.',',')+'% sobre '+money(valor,true)+' recebidos', v:recVal}); }
+      else if(ok) L.push({d:'Recorrência '+ok.pct+'% — sem base de recebimentos', v:0, off:true});
+      else { const m = r.rec.slice().sort((a,b)=>(a.vendas||0)-(b.vendas||0))[0]; L.push({d:'Recorrência — mínimo não atingido ('+[m.vendas?m.vendas+' vendas':'', m.placas?m.placas+' placas ativas':''].filter(Boolean).join(' e ')+'; teve '+V+' vendas'+(placas!=null?' e '+Pl+' placas':'')+')', v:0, off:true}); falhou = true; }
+    }
+    if(r.venda && r.venda.length && V>0){
+      const f = r.venda.filter(x=>V>=(x.min||0)).sort((a,b)=>(b.min||0)-(a.min||0))[0];
+      if(f) L.push({d:V+' vendas × '+money(f.valor,true), v:V*f.valor}); else { L.push({d:'Bonificação por venda — mínimo de '+Math.min(...r.venda.map(x=>x.min||0))+' vendas não atingido', v:0, off:true}); falhou = true; }
+    }
+    if(r.bonus && r.bonus.length){
+      const f = r.bonus.filter(x=>(x.vendas==null||V>=x.vendas) && (x.placas==null||Pl>=x.placas)).sort((a,b)=>b.valor-a.valor)[0];
+      if(f) L.push({d:'Bônus por meta ('+(f.vendas!=null?f.vendas+' vendas':f.placas+' placas')+')', v:+f.valor});
+    }
   }
-  return {placas: coops.length?n:null, valor: coops.length?v:null, vendas, calc, como};
+  const subtotal = L.reduce((t,x)=>t+x.v,0), desc = +ap.desconto||0, aj = +ap.ajuste||0;
+  const total = Math.round((subtotal + aj - desc)*100)/100;
+  return {placas, valor, vendas, fonte, linhas:L, subtotal, recVal, total, situacao: subtotal>0 ? 'OK' : (falhou ? 'NÃO BATEU META' : (L.length?'SEM VALOR':'SEM REGRA'))};
+}
+/* gera / recalcula a apuração de uma competência para todas as negociações ativas */
+async function recCalcularMes(comp, silencioso){
+  if(!recPode('editar')) return;
+  const empId = EMPRESA_IDS[state.empresa], ativos = REC.negs.filter(n=>n.ativa!==false);
+  const exist = {}; REC.apu.filter(a=>a.competencia===comp).forEach(a=>exist[a.negociacao_id]=a);
+  const up = [];
+  ativos.forEach(n=>{
+    const a = exist[n.id] || {competencia:comp};
+    if(a.conferencia==='liberado') return;           // aprovado não muda sozinho
+    const c = recCalc(n, a);
+    up.push({empresa_id:empId, competencia:comp, negociacao_id:n.id, vendas:c.vendas, placas:c.placas, valor_base:c.valor!=null?Math.round(c.valor*100)/100:null,
+      valor_recorrencia:c.recVal||null, valor_calculado:Math.round(c.subtotal*100)/100, valor_receber:c.total, situacao:c.situacao,
+      calculo:{linhas:c.linhas, fonte:c.fonte, em:new Date().toISOString()}, origem:a.origem||'calculado no Nexa'});
+  });
+  for(let i=0;i<up.length;i+=200){ const { error } = await sb.from('rec_apuracoes').upsert(up.slice(i,i+200), {onConflict:'empresa_id,competencia,negociacao_id'}); if(error){ console.error(error); toast('Erro ao calcular: '+error.message); return; } }
+  await recCarregar(true); REC.comp = comp;
+  if(!silencioso){ toast(up.length+' representantes calculados para '+recLb(comp)); render(); }
+}
+function recProxComp(){
+  const comps = [...new Set(REC.apu.map(a=>a.competencia))].sort(), h = hojeReal();
+  const atual = h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0');
+  const ult = comps[comps.length-1];
+  if(!ult) return atual;
+  const [y,m] = ult.split('-').map(Number), d = new Date(y, m, 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function recCalcularAbrir(){
+  const comps = [...new Set(REC.apu.map(a=>a.competencia))].sort().reverse(), prox = recProxComp();
+  const ops = [prox].concat(comps.filter(c=>c!==prox));
+  openModal('<div class="modal-head"><div class="drawer-title">Calcular recorrência</div><div class="drawer-sub">Lê os boletos recebidos e as vendas do mês de referência e aplica a negociação de cada representante</div></div>'+
+    '<div class="modal-body"><div class="field"><label>Pagamento de</label><select id="recCompCalc">'+ops.map(c=>'<option value="'+c+'">'+recLb(c)+' · resultado de '+recLb(recMesAnt(c)).toLowerCase()+'</option>').join('')+'</select></div>'+
+    '<div style="font-size:12.5px;color:var(--text2);line-height:1.5">Itens já <b>liberados</b> pelo conferente não são recalculados. Descontos e ajustes lançados são mantidos.</div></div>'+
+    '<div class="modal-foot"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="const c=$(\'recCompCalc\').value;closeModal();recCalcularMes(c)">Calcular</button></div>');
 }
 /* leitura heurística da negociação (texto) → regra simples; contratos com várias faixas ficam marcados para conferência */
 function recLerRegra(txt){
@@ -6888,10 +6961,11 @@ async function recImportar(){
       const { data:negs, error:e1 } = await sb.from('rec_negociacoes').upsert(negUp, {onConflict:'empresa_id,nome'}).select('id,nome'); if(e1) throw e1;
       const idDe = {}; negs.forEach(n=>idDe[recNorm(n.nome)]=n.id);
       const apUp = itens.map(it=>({empresa_id:empId, competencia:mes, negociacao_id:idDe[recNorm(it.nome)], vendas:it.vendas, placas:it.placas, valor_base:it.valor,
-        valor_recorrencia:it.recorr, desconto:it.vale, valor_receber:it.receber, observacao:[it.obs].concat(it.extra).filter(Boolean).join(' · ')||null, situacao:it.situacao, origem:'planilha: '+aba}));
+        valor_recorrencia:it.recorr, desconto:it.vale, valor_receber:it.receber, valor_planilha:it.receber, observacao:[it.obs].concat(it.extra).filter(Boolean).join(' · ')||null, situacao:it.situacao, origem:'planilha: '+aba}));
       const { error:e2 } = await sb.from('rec_apuracoes').upsert(apUp, {onConflict:'empresa_id,competencia,negociacao_id'}); if(e2) throw e2;
       msg.textContent = itens.length+' representantes importados para '+recLb(mes)+' (total a receber '+money(itens.reduce((t,x)=>t+(x.receber||0),0),true)+').';
       REC.comp = mes;
+      await recCarregar(true); await recCalcularMes(mes, true);
     }
     await sb.from('logs').insert({empresa_id:empId, acao:'Recorrência — importação', detalhe:aba+' ('+tipo+')', usuario_id:currentUser.id});
     await recCarregar(true); render();
@@ -6909,7 +6983,7 @@ async function recPronto(titulo){
 }
 function recHead(titulo){
   const comps = [...new Set(REC.apu.map(a=>a.competencia))].sort().reverse();
-  const acoes = (recPode('editar')?'<button class="btn sm" onclick="recImportarAbrir()">'+icon('upload',14)+' Importar planilha</button>':'');
+  const acoes = (recPode('editar')?'<button class="btn sm" onclick="recImportarAbrir()">'+icon('upload',14)+' Importar planilha</button><button class="btn sm primary" onclick="recCalcularAbrir()">Calcular mês</button>':'');
   return pageHead(titulo,'', '<span class="cob-quem">'+icon('users',13)+' '+({admin:'administrador',apurador:'apuração',conferente:'conferência',leitor:'somente leitura'}[REC.papel])+'</span>'+acoes)+
     (comps.length?'<div class="cob-bar"><label class="cob-mes">Pagamento de<select class="select" onchange="REC.comp=this.value;render()">'+comps.map(c=>'<option value="'+c+'"'+(c===REC.comp?' selected':'')+'>'+recLb(c)+' · resultado de '+recLb(recMesAnt(c)).toLowerCase()+'</option>').join('')+'</select></label></div>':'');
 }
@@ -6918,37 +6992,40 @@ function recLinhas(){
   return REC.apu.filter(a=>a.competencia===REC.comp && negMap[a.negociacao_id]).map(a=>({a, n:negMap[a.negociacao_id], c:recCalc(negMap[a.negociacao_id], a)}))
     .sort((x,y)=>(x.n.grupo===y.n.grupo?0:x.n.grupo==='fixo'?-1:1) || x.n.ordem-y.n.ordem);
 }
-const REC_CF = {aguardando:['Aguardando','st-pend'], liberado:['Liberado','st-pago'], revisar:['Revisar','st-vencido']};
+const REC_CF = {aguardando:['Aguardando','st-pend'], liberado:['Aprovado','st-pago'], revisar:['Revisar','st-vencido']};
 function recSitCls(s){ const t = recNorm(s); return /NAO BATEU/.test(t)?'st-vencido':/FALTA NOTA/.test(t)?'st-pend':/OK/.test(t)?'st-pago':'st-neutro'; }
 async function renderRecApuracao(){
   if(!await recPronto('Recorrência')) return;
   let h = recHead('Recorrência · apuração');
-  if(!REC.comp){ $('content').innerHTML = h+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Nenhuma apuração ainda</div><div class="t2">Importe a planilha de recorrência (aba do mês) para começar.</div></div></div>'; return; }
+  if(!REC.comp){ $('content').innerHTML = h+'<div class="card"><div class="empty" style="padding:40px"><div class="t1">Nenhuma apuração ainda</div><div class="t2">Clique em <b>Calcular mês</b> para gerar a apuração pela negociação de cada representante.</div></div></div>'; return; }
   const L = recLinhas(), q = recNorm(REC.f.q);
   const tot = L.reduce((t,x)=>t+(+x.a.valor_receber||0),0), lib = L.filter(x=>x.a.conferencia==='liberado'), rev = L.filter(x=>x.a.conferencia==='revisar');
-  const nb = L.filter(x=>/NAO BATEU/.test(recNorm(x.a.situacao))).length;
+  const nb = L.filter(x=>x.a.situacao==='NÃO BATEU META').length, temPl = L.some(x=>x.a.valor_planilha!=null);
+  const totPl = L.reduce((t,x)=>t+(+x.a.valor_planilha||0),0);
   h += '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">'+
-    kpi('Total a pagar', money(tot,true), null, L.length+' representantes')+
-    kpi('Liberado', money(lib.reduce((t,x)=>t+(+x.a.valor_receber||0),0),true), null, lib.length+' de '+L.length+' conferidos', lib.length===L.length?'pos':'')+
+    kpi('Total a pagar', money(tot,true), null, L.length+' representantes'+(temPl?' · planilha '+money(totPl,true):''))+
+    kpi('Aprovado', money(lib.reduce((t,x)=>t+(+x.a.valor_receber||0),0),true), null, lib.length+' de '+L.length+' liberados', lib.length===L.length?'pos':'')+
     kpi('Para revisar', String(rev.length), null, 'apontados na conferência', rev.length?'neg':'')+
-    kpi('Não bateram a meta', String(nb), null, 'segundo a apuração')+'</div>';
+    kpi('Não bateram a meta', String(nb), null, 'pela regra da negociação')+'</div>';
   h += '<div class="tit-bar"><input class="tit-busca" type="text" placeholder="Buscar representante ou cidade…" value="'+esc(REC.f.q)+'" oninput="REC.f.q=this.value;clearTimeout(window._rb);window._rb=setTimeout(()=>{render();const i=document.querySelector(\'.tit-busca\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">'+
-    '<div class="seg">'+[['','Todos'],['aguardando','Aguardando'],['liberado','Liberados'],['revisar','Revisar']].map(s=>'<button class="'+(REC.f.st===s[0]?'on':'')+'" onclick="REC.f.st=\''+s[0]+'\';render()">'+s[1]+'</button>').join('')+'</div></div>';
-  const linhas = L.filter(x=>(!q || recNorm(x.n.nome+' '+(x.n.cidade||'')).includes(q)) && (!REC.f.st || x.a.conferencia===REC.f.st));
+    '<div class="seg">'+[['','Todos'],['aguardando','Aguardando'],['liberado','Aprovados'],['revisar','Revisar'],['dif','Diferem da planilha']].map(s=>'<button class="'+(REC.f.st===s[0]?'on':'')+'" onclick="REC.f.st=\''+s[0]+'\';render()">'+s[1]+'</button>').join('')+'</div></div>';
+  const difPl = x=>x.a.valor_planilha!=null && Math.abs((+x.a.valor_planilha)-(+x.a.valor_receber||0))>=1;
+  const linhas = L.filter(x=>(!q || recNorm(x.n.nome+' '+(x.n.cidade||'')).includes(q)) && (!REC.f.st || (REC.f.st==='dif' ? difPl(x) : x.a.conferencia===REC.f.st)));
   let grp = null;
-  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl rec-tbl"><thead><tr><th>Representante</th><th class="num">Vendas</th><th class="num">Placas adimpl.</th><th class="num">Valor adimplente</th><th class="num">Recorrência</th><th class="num">Desconto</th><th class="num">A receber</th><th>Situação</th><th>Conferência</th></tr></thead><tbody>';
+  h += '<div class="card"><div class="tbl-wrap tit-wrap"><table class="tbl tit-tbl rec-tbl"><thead><tr><th>Representante</th><th class="num">Vendas</th><th class="num">Placas ativas</th><th class="num">Base recebida</th><th class="num">Pela negociação</th><th class="num">Ajuste / desc.</th><th class="num">A pagar</th>'+(temPl?'<th class="num">Planilha</th>':'')+'<th>Situação</th><th>Conferência</th></tr></thead><tbody>';
   linhas.forEach(x=>{
-    if(x.n.grupo!==grp){ grp = x.n.grupo; h += '<tr class="tit-grp"><td colspan="9">'+(grp==='fixo'?'Pagamentos fixos mensais':'Recorrência e variáveis')+'</td></tr>'; }
-    const a = x.a, c = x.c, dif = (v1,v2)=> (v1!=null && v2!=null && Math.abs(v1-v2) > Math.max(1, Math.abs(v1)*0.02));
-    const cel = (pl, nx, fmt)=> pl==null && nx==null ? '—' : '<span'+(dif(pl,nx)?' class="rec-dif"'+tip('Planilha: '+(pl==null?'—':fmt(pl))+'<br>Nexa: '+(nx==null?'—':fmt(nx))):'')+'>'+(pl!=null?fmt(pl):fmt(nx))+'</span>';
-    h += '<tr class="hoverable" onclick="recDetalhe(\''+a.id+'\')"><td><div class="tit-f">'+esc(x.n.nome)+(x.n.ambigua?' <span class="ra-tag ruim" title="regra com várias condições — conferir">regra</span>':'')+'</div><div class="tit-s" style="font-size:11.5px;color:var(--text2)">'+esc(x.n.cidade||'')+'</div></td>'+
-      '<td class="num">'+cel(a.vendas, c.vendas, v=>String(v))+'</td><td class="num">'+cel(a.placas, c.placas, v=>String(v))+'</td><td class="num">'+cel(a.valor_base!=null?+a.valor_base:null, c.valor, v=>money(v,true))+'</td>'+
-      '<td class="num">'+(a.valor_recorrencia!=null?money(+a.valor_recorrencia,true):'—')+'</td><td class="num" style="color:var(--neg)">'+(+a.desconto?'−'+money(+a.desconto,true):'—')+'</td>'+
+    if(x.n.grupo!==grp){ grp = x.n.grupo; h += '<tr class="tit-grp"><td colspan="'+(temPl?10:9)+'">'+(grp==='fixo'?'Pagamentos fixos mensais':'Recorrência e variáveis')+'</td></tr>'; }
+    const a = x.a, adj = (+a.ajuste||0) - (+a.desconto||0);
+    h += '<tr class="hoverable" onclick="recDetalhe(\''+a.id+'\')"><td><div class="tit-f">'+esc(x.n.nome)+(x.n.ambigua?' <span class="ra-tag ruim"'+(x.n.nota?tip(tipRows('Conferir',[['var(--warn)','',esc(x.n.nota)]])):'')+'>conferir</span>':'')+'</div><div class="tit-s" style="font-size:11.5px;color:var(--text2)">'+esc(x.n.cidade||'')+((x.n.cooperativas||[]).length?'':' · base informada')+'</div></td>'+
+      '<td class="num">'+(a.vendas??'—')+'</td><td class="num">'+(a.placas??'—')+'</td><td class="num">'+(a.valor_base!=null?money(+a.valor_base,true):'—')+'</td>'+
+      '<td class="num">'+(a.valor_calculado!=null?money(+a.valor_calculado,true):'—')+'</td>'+
+      '<td class="num" style="color:'+(adj<0?'var(--neg)':adj>0?'var(--pos)':'var(--text3)')+'"'+(a.ajuste_motivo?tip(tipRows('Ajuste',[['var(--text2)','',esc(a.ajuste_motivo)]])):'')+'>'+(adj?(adj>0?'+':'−')+money(Math.abs(adj),true):'—')+'</td>'+
       '<td class="num" style="font-weight:600">'+(a.valor_receber!=null?money(+a.valor_receber,true):'—')+'</td>'+
+      (temPl?'<td class="num"'+(difPl(x)?' style="color:var(--warn)"':' style="color:var(--text3)"')+'>'+(a.valor_planilha!=null?money(+a.valor_planilha,true):'—')+'</td>':'')+
       '<td>'+(a.situacao?'<span class="status-badge '+recSitCls(a.situacao)+'">'+esc(a.situacao)+'</span>':'')+'</td>'+
-      '<td><span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span></td></tr>';
+      '<td><span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span>'+(a.enviado_em?' <span title="Enviado ao representante" style="color:var(--pos)">'+icon('check',12)+'</span>':'')+'</td></tr>';
   });
-  h += '</tbody></table></div><div class="tit-mais">Valores em destaque (sublinhados) diferem do que o Nexa calcula pela base de boletos — passe o mouse para comparar.</div></div>';
+  h += '</tbody></table></div><div class="tit-mais">O valor a pagar vem da negociação aplicada sobre os boletos recebidos e as vendas do mês de referência. Diferenças contratuais entram como ajuste, sempre com motivo.</div></div>';
   $('content').innerHTML = h;
 }
 async function renderRecConferencia(){
@@ -6960,13 +7037,15 @@ async function renderRecConferencia(){
   h += '<div class="tit-bar"><div class="seg">'+[['aguardando','Aguardando'],['revisar','Revisar'],['liberado','Liberados'],['','Todos']].map(s=>'<button class="'+(REC.f.st===s[0]?'on':'')+'" onclick="REC.f.st=\''+s[0]+'\';render()">'+s[1]+'</button>').join('')+'</div></div>';
   const lst = L.filter(x=>!REC.f.st || x.a.conferencia===REC.f.st);
   h += '<div class="rec-cards">'+(lst.length ? lst.map(x=>{ const a=x.a;
-    return '<div class="card rec-card"><div class="rec-card-h"><div><div class="tit-f">'+esc(x.n.nome)+'</div><div style="font-size:11.5px;color:var(--text2)">'+esc(x.n.cidade||'')+(a.vendas!=null?' · '+a.vendas+' vendas':'')+(a.placas!=null?' · '+a.placas+' placas adimplentes':'')+'</div></div>'+
+    const cl = ((a.calculo&&a.calculo.linhas)||[]).filter(l=>!l.off).map(l=>esc(l.d)+': <b>'+money(l.v,true)+'</b>').join('<br>');
+    return '<div class="card rec-card"><div class="rec-card-h"><div><div class="tit-f">'+esc(x.n.nome)+(x.n.ambigua?' <span class="ra-tag ruim">conferir</span>':'')+'</div><div style="font-size:11.5px;color:var(--text2)">'+esc(x.n.cidade||'')+(a.vendas!=null?' · '+a.vendas+' vendas':'')+(a.placas!=null?' · '+a.placas+' placas adimplentes':'')+'</div></div>'+
       '<div class="rec-valor">'+(a.valor_receber!=null?money(+a.valor_receber,true):'—')+'</div></div>'+
       (a.situacao?'<span class="status-badge '+recSitCls(a.situacao)+'">'+esc(a.situacao)+'</span> ':'')+'<span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span>'+
+      (cl?'<div class="rec-obs">'+cl+(+a.ajuste?'<br>Ajuste'+(a.ajuste_motivo?' ('+esc(a.ajuste_motivo)+')':'')+': <b>'+money(+a.ajuste,true)+'</b>':'')+(+a.desconto?'<br>Descontos: <b>−'+money(+a.desconto,true)+'</b>':'')+'</div>':'')+
       (a.observacao?'<div class="rec-obs">'+esc(a.observacao)+'</div>':'')+
       '<details class="rec-neg"><summary>Negociação</summary><div>'+esc(x.n.texto||'—')+'</div></details>'+
       (a.conferencia_obs?'<div class="rec-obs"><b>Conferência:</b> '+esc(a.conferencia_obs)+'</div>':'')+
-      (recPode('conferir')?'<div class="rec-acoes"><button class="btn sm primary" onclick="recConferir(\''+a.id+'\',\'liberado\')">'+icon('check',13)+' Liberar</button><button class="btn sm" onclick="recConferir(\''+a.id+'\',\'revisar\')">Revisar</button><button class="btn sm ghost" onclick="recDetalhe(\''+a.id+'\')">Detalhes</button></div>':'')+'</div>'; }).join('')
+      (recPode('conferir')?'<div class="rec-acoes"><button class="btn sm primary" onclick="recConferir(\''+a.id+'\',\'liberado\')">'+icon('check',13)+' Aprovar</button><button class="btn sm" onclick="recConferir(\''+a.id+'\',\'revisar\')">Revisar</button><button class="btn sm ghost" onclick="recDetalhe(\''+a.id+'\')">Detalhes</button></div>':'')+'</div>'; }).join('')
     : '<div class="card"><div class="empty" style="padding:30px"><div class="t2">Nada neste filtro.</div></div></div>')+'</div>';
   $('content').innerHTML = h;
 }
@@ -6980,64 +7059,135 @@ async function recConferir(id, st){
   toast(st==='liberado'?'Liberado':'Marcado para revisar'); render();
 }
 function recMsgWhats(n, a){
-  const linhas = ['Olá, '+n.nome.split(' ')[0].replace(/^./,c=>c.toUpperCase()).replace(/(?<=^.)(.*)/, s=>s.toLowerCase())+'!', '', 'Segue o fechamento da sua recorrência — pagamento de '+recLb(a.competencia)+' (resultado de '+recLb(recMesAnt(a.competencia)).toLowerCase()+'):'];
+  const nome = n.nome.split(' ')[0].toLowerCase().replace(/^./,c=>c.toUpperCase());
+  const linhas = ['Olá, '+nome+'! Tudo bem?', '', '*Fechamento da recorrência — '+EMPRESAS[state.empresa].nome+'*', 'Pagamento de '+recLb(a.competencia)+' (resultado de '+recLb(recMesAnt(a.competencia)).toLowerCase()+')', ''];
   if(a.vendas!=null) linhas.push('• Vendas no mês: '+a.vendas);
-  if(a.placas!=null) linhas.push('• Placas adimplentes: '+a.placas);
-  if(a.valor_base!=null) linhas.push('• Valor total adimplente: '+money(+a.valor_base,true));
-  if(a.valor_recorrencia!=null) linhas.push('• Recorrência: '+money(+a.valor_recorrencia,true));
-  if(+a.desconto) linhas.push('• Desconto: −'+money(+a.desconto,true));
-  linhas.push('• *Valor a receber: '+money(+a.valor_receber||0,true)+'*', '', 'Por favor, emita a nota fiscal neste valor para liberarmos o pagamento.', 'Qualquer dúvida, estamos à disposição.');
+  if(a.placas!=null) linhas.push('• Placas ativas: '+a.placas);
+  if(a.valor_base!=null) linhas.push('• Base recebida: '+money(+a.valor_base,true));
+  ((a.calculo&&a.calculo.linhas)||[]).filter(l=>!l.off).forEach(l=>linhas.push('• '+l.d+': '+money(l.v,true)));
+  if(+a.ajuste) linhas.push('• Ajuste'+(a.ajuste_motivo?' ('+a.ajuste_motivo+')':'')+': '+(+a.ajuste>0?'+':'−')+money(Math.abs(+a.ajuste),true));
+  if(+a.desconto) linhas.push('• Descontos: −'+money(+a.desconto,true));
+  linhas.push('', '*Valor a receber: '+money(+a.valor_receber||0,true)+'*', '', 'Segue em anexo o demonstrativo em PDF. Por favor, emita a nota fiscal neste valor para liberarmos o pagamento.', 'Qualquer dúvida, estamos à disposição.');
   return linhas.join('\n');
+}
+function recWhatsUrl(n, a){
+  const tel = String(n.telefone||'').replace(/\D/g,''), num = tel ? (tel.length<=11 ? '55'+tel : tel) : '';
+  return 'https://wa.me/'+num+'?text='+encodeURIComponent(recMsgWhats(n,a));
+}
+async function recMarcarEnviado(id){
+  const a = REC.apu.find(x=>x.id===id); if(!a) return;
+  a.enviado_em = new Date().toISOString();
+  await sb.from('rec_apuracoes').update({enviado_em:a.enviado_em}).eq('id', id);
 }
 function recDetalhe(id){
   const a = REC.apu.find(x=>x.id===id); if(!a) return; const n = REC.negs.find(x=>x.id===a.negociacao_id); const c = recCalc(n, a);
-  const ed = recPode('editar'), li = (k,v)=>'<div class="cob-li"><span>'+k+'</span><b>'+v+'</b></div>';
-  let h = drawerHead(esc(n.nome), esc(n.cidade||'')+' · '+recLb(a.competencia));
-  h += '<div class="drawer-body">'+
-    '<div class="pc-title" style="margin-bottom:6px">Valores</div>'+
-    (ed ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
-      fld('recVd','Vendas',a.vendas??'','number')+fld('recPl','Placas adimplentes',a.placas??'','number')+fld('recVb','Valor adimplente',a.valor_base??'','number')+fld('recVr','Recorrência',a.valor_recorrencia??'','number')+
-      fld('recDs','Desconto (vale/empréstimo)',a.desconto??'','number')+fld('recRc','Valor a receber',a.valor_receber??'','number')+'</div>'+
-      '<div class="field"><label>Situação</label><input id="recSt" value="'+esc(a.situacao||'')+'" placeholder="OK, NÃO BATEU META, FALTA NOTA…"></div>'+
+  const ed = recPode('editar') && a.conferencia!=='liberado', li = (k,v)=>'<div class="cob-li"><span>'+k+'</span><b>'+v+'</b></div>';
+  const r = n.regra||{}, fx = arr=>(arr||[]).map(f=>[f.pct??f.valor??'', f.vendas??f.min??'', f.placas??''].join(' ; ').replace(/( ; )+$/,'')).join('\n');
+  let h = drawerHead(esc(n.nome), esc(n.cidade||'')+' · pagamento de '+recLb(a.competencia));
+  h += '<div class="drawer-body">';
+  if(n.ambigua && n.nota) h += '<div class="cob-obs" style="background:var(--warn-soft);color:var(--warn)"><span style="color:var(--warn)">Conferir</span>'+esc(n.nota)+'</div>';
+  h += '<div class="pc-title" style="margin-bottom:6px">Cálculo pela negociação</div>'+
+    li('Vendas ('+recLb(recMesAnt(a.competencia)).toLowerCase()+')', c.vendas??'—')+li('Placas ativas (boletos pagos)', c.placas??'—')+li('Base recebida', c.valor!=null?money(c.valor,true):'—')+
+    '<div class="rec-calc">'+(c.linhas.length?c.linhas.map(l=>'<div class="'+(l.off?'off':'')+'"><span>'+esc(l.d)+'</span><b>'+money(l.v,true)+'</b></div>').join(''):'<div class="off"><span>Sem regra cadastrada</span><b>—</b></div>')+
+    (+a.ajuste?'<div><span>Ajuste'+(a.ajuste_motivo?' — '+esc(a.ajuste_motivo):'')+'</span><b>'+(+a.ajuste>0?'+':'−')+money(Math.abs(+a.ajuste),true)+'</b></div>':'')+
+    (+a.desconto?'<div><span>Descontos (vale / empréstimo)</span><b>−'+money(+a.desconto,true)+'</b></div>':'')+
+    '<div class="tot"><span>Valor a pagar</span><b>'+money(c.total,true)+'</b></div></div>'+
+    (a.valor_planilha!=null?'<div style="font-size:12px;color:var(--text2);margin:-4px 0 12px">Na planilha: '+money(+a.valor_planilha,true)+(Math.abs(+a.valor_planilha-c.total)>=1?' · <b style="color:var(--warn)">diferença de '+money(c.total-(+a.valor_planilha),true)+'</b>':' · confere')+'</div>':'');
+  if(ed){
+    h += '<div class="pc-title" style="margin:14px 0 6px">Lançamentos do mês</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+      ((n.cooperativas||[]).length ? '' : fld('recVd','Vendas no mês',a.vendas??'','number')+fld('recPl','Placas ativas',a.placas??'','number')+fld('recVb','Base recebida (R$)',a.valor_base??'','number')+'<div></div>')+
+      fld('recDs','Descontos (vale/empréstimo)',a.desconto??'','number')+fld('recAj','Ajuste (+/−)',a.ajuste??'','number')+'</div>'+
+      '<div class="field"><label>Motivo do ajuste</label><input id="recAjM" value="'+esc(a.ajuste_motivo||'')+'" placeholder="ex.: 50% do aluguel, comissão sobre adesões…"></div>'+
       '<div class="field"><label>Observação</label><textarea id="recOb" rows="2">'+esc(a.observacao||'')+'</textarea></div>'+
-      '<button class="btn primary" style="width:100%;justify-content:center;margin-bottom:12px" onclick="recSalvar(\''+a.id+'\')">Salvar apuração</button>'
-    : li('Vendas', a.vendas??'—')+li('Placas adimplentes', a.placas??'—')+li('Valor adimplente', a.valor_base!=null?money(+a.valor_base,true):'—')+li('Recorrência', a.valor_recorrencia!=null?money(+a.valor_recorrencia,true):'—')+li('Desconto', +a.desconto?money(+a.desconto,true):'—')+li('A receber', a.valor_receber!=null?money(+a.valor_receber,true):'—')+(a.observacao?'<div class="cob-obs"><span>Observação</span>'+esc(a.observacao)+'</div>':''))+
-    '<div class="cob-obs" style="background:var(--accent-soft)"><span>Conferência automática (base de boletos do Nexa · '+recLb(recMesAnt(a.competencia)).toLowerCase()+')</span>'+
-      (c.valor!=null ? 'Placas adimplentes: <b>'+c.placas+'</b> · valor: <b>'+money(c.valor,true)+'</b>'+(c.vendas!=null?' · vendas: <b>'+c.vendas+'</b>':'')+(c.calc!=null?'<br>Cálculo pela regra: <b>'+money(c.calc,true)+'</b> ('+esc(c.como)+')':'') : 'Sem cooperativa vinculada a este representante.')+'</div>'+
-    '<div class="pc-title" style="margin:16px 0 6px">Negociação</div><div class="cob-obs" style="white-space:pre-wrap">'+esc(n.texto||'—')+'</div>'+
-    (ed ? '<div class="field"><label>Cooperativas da base (uma por linha)</label><textarea id="recCo" rows="3">'+esc((n.cooperativas||[]).join('\n'))+'</textarea></div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'+fld('recRp','% recorrência',(n.regra||{}).pct??'','number')+fld('recRm','Meta (vendas)',(n.regra||{}).meta??'','number')+fld('recRf','Fixo mensal',(n.regra||{}).fixo??'','number')+'</div>'+
-      '<button class="btn" style="width:100%;justify-content:center" onclick="recSalvarNeg(\''+n.id+'\',\''+a.id+'\')">Salvar negociação</button>' : li('Cooperativas', esc((n.cooperativas||[]).join(', ')||'—')))+
-    '<div class="pc-title" style="margin:18px 0 6px">Conferência</div>'+li('Status', '<span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span>')+(a.conferencia_obs?'<div class="cob-obs">'+esc(a.conferencia_obs)+'</div>':'')+
-    (recPode('conferir')?'<div class="rec-acoes"><button class="btn sm primary" onclick="recConferir(\''+a.id+'\',\'liberado\');closeDrawer()">Liberar</button><button class="btn sm" onclick="recConferir(\''+a.id+'\',\'revisar\');closeDrawer()">Revisar</button></div>':'')+
-    (a.conferencia==='liberado' ? '<div class="pc-title" style="margin:18px 0 6px">Envio ao representante</div><div class="rec-acoes"><a class="btn sm primary" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(recMsgWhats(n,a))+'">WhatsApp com a mensagem pronta</a><button class="btn sm" onclick="recPdf(\''+a.id+'\')">'+icon('download',13)+' PDF</button></div>' : '')+
-    '</div>';
+      '<button class="btn primary" style="width:100%;justify-content:center;margin-bottom:12px" onclick="recSalvar(\''+a.id+'\')">Salvar e recalcular</button>';
+  } else if(a.observacao) h += '<div class="cob-obs"><span>Observação</span>'+esc(a.observacao)+'</div>';
+  h += '<div class="pc-title" style="margin:16px 0 6px">Negociação</div><details class="rec-neg" open><summary>Texto do contrato</summary><div>'+esc(n.texto||'—')+'</div></details>';
+  if(recPode('editar')){
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">'+fld('rgFixo','Fixo mensal (R$)',r.fixo??'','number')+fld('rgTel','WhatsApp do representante',n.telefone||'','text')+
+      fld('rgAjV','Ajuda / aporte (R$)',r.ajuda?.valor??'','number')+fld('rgAjM','Meta da ajuda (vendas)',r.ajuda?.meta??'','number')+
+      fld('rgAjA','Ajuda até (AAAA-MM)',r.ajuda?.ate??'','text')+fld('rgAjE','Encerra com placas ativas',r.ajuda?.encerra_placas??'','number')+'</div>'+
+      '<div class="field"><label>Faixas de recorrência — uma por linha: % ; vendas mín. ; placas mín.</label><textarea id="rgRec" rows="3" placeholder="10 ; 20">'+esc(fx(r.rec))+'</textarea></div>'+
+      '<div class="field"><label>Valor por venda — uma por linha: R$ ; a partir de N vendas</label><textarea id="rgVen" rows="2" placeholder="100 ; 10">'+esc(fx(r.venda))+'</textarea></div>'+
+      '<div class="field"><label>Bônus por meta — uma por linha: R$ ; vendas mín. ; placas mín.</label><textarea id="rgBon" rows="2" placeholder="1000 ; 25">'+esc(fx(r.bonus))+'</textarea></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+fld('rgAte','Negociação válida até (AAAA-MM)',r.ate??'','text')+'<div></div></div>'+
+      '<div class="field"><label>Cooperativas da base (uma por linha)</label><textarea id="recCo" rows="3">'+esc((n.cooperativas||[]).join('\n'))+'</textarea></div>'+
+      '<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin:6px 0 10px"><input type="checkbox" id="rgAmb"'+(n.ambigua?' checked':'')+'> Marcar para conferir</label>'+
+      '<button class="btn" style="width:100%;justify-content:center" onclick="recSalvarNeg(\''+n.id+'\',\''+a.id+'\')">Salvar negociação e recalcular</button>';
+  } else h += li('Cooperativas', esc((n.cooperativas||[]).join(', ')||'—'));
+  h += '<div class="pc-title" style="margin:18px 0 6px">Aprovação</div>'+li('Status', '<span class="status-badge '+REC_CF[a.conferencia][1]+'">'+REC_CF[a.conferencia][0]+'</span>')+(a.conferencia_obs?'<div class="cob-obs">'+esc(a.conferencia_obs)+'</div>':'')+
+    (recPode('conferir')?'<div class="rec-acoes"><button class="btn sm primary" onclick="recConferir(\''+a.id+'\',\'liberado\');closeDrawer()">'+icon('check',13)+' Aprovar</button><button class="btn sm" onclick="recConferir(\''+a.id+'\',\'revisar\');closeDrawer()">Devolver para revisão</button></div>':'');
+  h += '<div class="pc-title" style="margin:18px 0 6px">Envio ao representante</div>'+
+    (a.conferencia==='liberado'
+      ? '<div class="rec-acoes"><button class="btn sm" onclick="recPdf(\''+a.id+'\')">'+icon('download',13)+' Baixar PDF</button><a class="btn sm primary" target="_blank" rel="noopener" href="'+recWhatsUrl(n,a)+'" onclick="recMarcarEnviado(\''+a.id+'\')">Abrir WhatsApp com o resumo</a></div>'+
+        '<div style="font-size:11.5px;color:var(--text2);margin-top:8px">'+(n.telefone?'':'Sem número cadastrado: o WhatsApp abre para escolher o contato. ')+'Anexe o PDF baixado na conversa.'+(a.enviado_em?' · enviado em '+new Date(a.enviado_em).toLocaleString('pt-BR'):'')+'</div>'
+      : '<div style="font-size:12.5px;color:var(--text2)">Disponível depois da aprovação do conferente.</div>')+'</div>';
   openDrawer(h);
 }
 async function recSalvar(id){
-  const v = k=>{ const x=$(k).value; return x===''?null:+x; };
-  const patch = {vendas:v('recVd'), placas:v('recPl'), valor_base:v('recVb'), valor_recorrencia:v('recVr'), desconto:v('recDs'), valor_receber:v('recRc'), situacao:$('recSt').value||null, observacao:$('recOb').value||null};
+  const v = k=>{ const e=$(k); if(!e) return undefined; const x=e.value; return x===''?null:+x; };
+  const a = REC.apu.find(x=>x.id===id), n = REC.negs.find(x=>x.id===a.negociacao_id);
+  const patch = {desconto:v('recDs'), ajuste:v('recAj'), ajuste_motivo:$('recAjM').value||null, observacao:$('recOb').value||null};
+  if(+patch.ajuste && !patch.ajuste_motivo){ toast('Informe o motivo do ajuste'); return; }
+  ['vendas:recVd','placas:recPl','valor_base:recVb'].forEach(p=>{ const [k,i]=p.split(':'); const x=v(i); if(x!==undefined) patch[k]=x; });
+  const c = recCalc(n, {...a, ...patch});
+  Object.assign(patch, {vendas:c.vendas, placas:c.placas, valor_base:c.valor!=null?Math.round(c.valor*100)/100:null, valor_recorrencia:c.recVal||null, valor_calculado:Math.round(c.subtotal*100)/100, valor_receber:c.total, situacao:c.situacao, calculo:{linhas:c.linhas, fonte:c.fonte, em:new Date().toISOString()}});
   const { error } = await sb.from('rec_apuracoes').update(patch).eq('id', id);
   if(error){ console.error(error); toast('Não foi possível salvar'); return; }
-  Object.assign(REC.apu.find(x=>x.id===id), patch); toast('Apuração salva'); render(); recDetalhe(id);
+  Object.assign(a, patch); toast('Apuração salva'); render(); recDetalhe(id);
 }
 async function recSalvarNeg(nid, aid){
-  const co = $('recCo').value.split('\n').map(s=>s.trim()).filter(Boolean), num = k=>{ const x=$(k).value; return x===''?undefined:+x; };
-  const regra = {}; [['pct','recRp'],['meta','recRm'],['fixo','recRf']].forEach(([k,i])=>{ const x=num(i); if(x!=null) regra[k]=x; });
-  const { error } = await sb.from('rec_negociacoes').update({cooperativas:co, regra}).eq('id', nid);
+  const co = $('recCo').value.split('\n').map(s=>s.trim()).filter(Boolean), num = k=>{ const x=$(k).value.trim(); return x===''?undefined:+x.replace(',','.'); };
+  const faixas = (txt, ks)=>txt.split('\n').map(l=>l.split(/[;|]/).map(x=>x.trim().replace('%','').replace(',','.'))).filter(p=>p[0]!=='' && !isNaN(+p[0])).map(p=>{ const o={}; ks.forEach((k,i)=>{ if(p[i]!==undefined && p[i]!=='') o[k]=+p[i]; }); return o; });
+  const regra = {};
+  if(num('rgFixo')) regra.fixo = num('rgFixo');
+  if(num('rgAjV')){ regra.ajuda = {valor:num('rgAjV')}; if(num('rgAjM')) regra.ajuda.meta = num('rgAjM'); if($('rgAjA').value.trim()) regra.ajuda.ate = $('rgAjA').value.trim(); if(num('rgAjE')) regra.ajuda.encerra_placas = num('rgAjE'); }
+  const rec = faixas($('rgRec').value, ['pct','vendas','placas']); if(rec.length) regra.rec = rec;
+  const ven = faixas($('rgVen').value, ['valor','min']); if(ven.length) regra.venda = ven;
+  const bon = faixas($('rgBon').value, ['valor','vendas','placas']); if(bon.length) regra.bonus = bon;
+  if($('rgAte').value.trim()) regra.ate = $('rgAte').value.trim();
+  const patch = {cooperativas:co, regra, telefone:$('rgTel').value.trim()||null, ambigua:$('rgAmb').checked};
+  const { error } = await sb.from('rec_negociacoes').update(patch).eq('id', nid);
   if(error){ console.error(error); toast('Não foi possível salvar'); return; }
-  Object.assign(REC.negs.find(x=>x.id===nid), {cooperativas:co, regra}); toast('Negociação salva'); render(); recDetalhe(aid);
+  Object.assign(REC.negs.find(x=>x.id===nid), patch); toast('Negociação salva');
+  const a = REC.apu.find(x=>x.id===aid);
+  if(a && a.conferencia!=='liberado' && recPode('editar')){ await recCalcularMes(a.competencia, true); }
+  render(); const a2 = REC.apu.find(x=>x.negociacao_id===nid && x.competencia===(a||{}).competencia); if(a2) recDetalhe(a2.id);
 }
-function recPdf(id){
-  const a = REC.apu.find(x=>x.id===id), n = REC.negs.find(x=>x.id===a.negociacao_id);
-  const li = (k,v)=>'<tr><td>'+k+'</td><td style="text-align:right;font-weight:600">'+v+'</td></tr>';
-  const w = window.open('', '_blank'); if(!w){ toast('Permita pop-ups para gerar o PDF'); return; }
-  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Recorrência '+esc(n.nome)+' '+a.competencia+'</title><style>body{font-family:Arial,sans-serif;color:#102A38;padding:32px;max-width:720px;margin:auto}h1{font-size:20px;margin:0}p{color:#5F7181}table{width:100%;border-collapse:collapse;margin-top:18px}td{padding:9px 6px;border-bottom:1px solid #E3E9EF;font-size:13px}.tot td{font-size:15px;background:#E7F3F5}</sty'+'le></head><body>'+
-    '<h1>Fechamento de recorrência</h1><p>'+esc(n.nome)+' · '+esc(n.cidade||'')+'<br>Pagamento de '+recLb(a.competencia)+' · resultado de '+recLb(recMesAnt(a.competencia)).toLowerCase()+'</p><table>'+
-    (a.vendas!=null?li('Vendas no mês',a.vendas):'')+(a.placas!=null?li('Placas adimplentes',a.placas):'')+(a.valor_base!=null?li('Valor total adimplente',money(+a.valor_base,true)):'')+
-    (a.valor_recorrencia!=null?li('Recorrência',money(+a.valor_recorrencia,true)):'')+(+a.desconto?li('Desconto','−'+money(+a.desconto,true)):'')+'<tr class="tot"><td><b>Valor a receber</b></td><td style="text-align:right"><b>'+money(+a.valor_receber||0,true)+'</b></td></tr></table>'+
-    (a.observacao?'<p>'+esc(a.observacao)+'</p>':'')+'<p style="font-size:11px;margin-top:30px">Nexa Gestão · emitido em '+new Date().toLocaleString('pt-BR')+'</p><script>window.print()<'+'/script></body></html>');
-  w.document.close();
+async function recPdf(id){
+  const a = REC.apu.find(x=>x.id===id), n = REC.negs.find(x=>x.id===a.negociacao_id), emp = state.empresa;
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:'pt', format:'a4'}); const W = doc.internal.pageSize.getWidth(), M = 44;
+  const pet = [11,38,51], tq = [21,158,159], cinza = [91,110,123];
+  doc.setFillColor(...pet); doc.rect(0,0,W,96,'F');
+  doc.setFillColor(...tq); doc.rect(0,96,W,3,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.text('Demonstrativo de recorrência', M, 46);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(185,205,214);
+  doc.text(EMPRESAS[emp].nome+'  ·  pagamento de '+recLb(a.competencia)+'  ·  resultado de '+recLb(recMesAnt(a.competencia)).toLowerCase(), M, 66);
+  doc.text('Emitido em '+new Date().toLocaleString('pt-BR'), W-M, 66, {align:'right'});
+  let y = 132;
+  doc.setTextColor(...pet); doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text(n.nome, M, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...cinza); if(n.cidade) doc.text(n.cidade, M, y+16);
+  y += 40;
+  const blocos = [['Vendas no mês', a.vendas!=null?String(a.vendas):'—'], ['Placas ativas', a.placas!=null?String(a.placas):'—'], ['Base recebida', a.valor_base!=null?money(+a.valor_base,true):'—']];
+  const bw = (W-2*M-24)/3;
+  blocos.forEach((b,i)=>{ const x = M+i*(bw+12); doc.setFillColor(243,246,249); doc.roundedRect(x,y,bw,54,8,8,'F');
+    doc.setFontSize(9); doc.setTextColor(...cinza); doc.text(b[0], x+12, y+20); doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...pet); doc.text(b[1], x+12, y+40); doc.setFont('helvetica','normal'); });
+  y += 80;
+  const corpo = ((a.calculo&&a.calculo.linhas)||[]).map(l=>[l.d, l.off?'—':money(l.v,true)]);
+  if(+a.ajuste) corpo.push(['Ajuste'+(a.ajuste_motivo?' — '+a.ajuste_motivo:''), (+a.ajuste>0?'+ ':'− ')+money(Math.abs(+a.ajuste),true)]);
+  if(+a.desconto) corpo.push(['Descontos (vale / empréstimo)', '− '+money(+a.desconto,true)]);
+  doc.autoTable({startY:y, margin:{left:M,right:M}, head:[['Composição do valor','Valor']], body:corpo,
+    foot:[['Valor a receber', money(+a.valor_receber||0,true)]], theme:'plain',
+    styles:{font:'helvetica', fontSize:10, cellPadding:{top:8,bottom:8,left:10,right:10}, textColor:[11,38,51], lineColor:[232,237,242], lineWidth:{bottom:0.6}},
+    headStyles:{fillColor:[243,246,249], textColor:cinza, fontStyle:'bold', fontSize:9},
+    footStyles:{fillColor:[230,245,245], textColor:pet, fontStyle:'bold', fontSize:12},
+    columnStyles:{1:{halign:'right', cellWidth:130}}});
+  y = doc.lastAutoTable.finalY + 26;
+  if(a.observacao){ doc.setFontSize(9); doc.setTextColor(...cinza); doc.text('Observação', M, y); doc.setTextColor(...pet); doc.setFontSize(10); doc.text(doc.splitTextToSize(a.observacao, W-2*M), M, y+14); y += 40; }
+  doc.setFontSize(9.5); doc.setTextColor(...pet);
+  doc.text(doc.splitTextToSize('Para recebimento, emita a nota fiscal no valor de '+money(+a.valor_receber||0,true)+' e envie ao setor financeiro.', W-2*M), M, y);
+  doc.setFontSize(8.5); doc.setTextColor(...cinza);
+  doc.text('Aprovado'+(a.conferido_em?' em '+new Date(a.conferido_em).toLocaleDateString('pt-BR'):'')+' · documento gerado pelo Nexa Gestão', M, doc.internal.pageSize.getHeight()-30);
+  doc.save('Recorrencia_'+n.nome.split(' ').slice(0,2).join('_')+'_'+a.competencia+'.pdf');
 }
 async function renderRecNegociacoes(){
   if(!await recPronto('Negociações')) return;
