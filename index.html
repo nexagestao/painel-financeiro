@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -23,8 +23,8 @@
   --r:12px; --r-sm:10px; --shadow:0 1px 2px rgba(16,24,40,.05);
   --shadow-lg:0 8px 24px rgba(16,24,40,.10);
   --side-w:240px; --pad:24px; --row-h:38px;
-  --font-display:'Plus Jakarta Sans',system-ui,sans-serif;
-  --font-mono:'Plus Jakarta Sans',system-ui,sans-serif;
+  --font-display:'Geist',system-ui,sans-serif;
+  --font-mono:'Geist',system-ui,sans-serif;
 }
 body.dark{
   --bg:#0D1117; --surface:#161B22; --text:#E6EAF2; --text2:#8B95A7; --border:#262D38;
@@ -1328,7 +1328,9 @@ function limparFiltros(){ state.filtros=state.filtros.filter(f=>f.k==='Período'
 function setRegime(r){ state.regime=r; openFiltros(); render(); }
 function chipsHtml(){
   if(!state.filtros.length)return '';
-  return '<div class="chips">'+state.filtros.map((f,i)=>
+  const fs=state.filtros.map((f,i)=>[f,i]).filter(([f])=>f.k!=='Período');
+  if(!fs.length)return '';
+  return '<div class="chips">'+fs.map(([f,i])=>
     '<span class="chip">'+f.k+': '+esc(f.v)+(f.k==='Período'?'':'<button onclick="rmFiltro('+i+')">&times;</button>')+'</span>').join('')+'</div>';
 }
 const REGIME_LBL={proj:'Previsto',real:'Realizado',pxr:'Previsto x Realizado'};
@@ -1729,7 +1731,7 @@ function pageHead(title, sub, extra){
   const demoTag = (state.empresa==='AGIBENS'||temBaseReal()) ? '' : '<span class="demo-tag">'+icon('alert',12)+' Dados demonstrativos</span>';
   return '<div class="page-head"><div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="page-title">'+title+'</span>'+
     demoTag+'</div>'+
-    '<div class="page-sub">'+e.nome+' &middot; '+esc(state.periodoLabel)+'</div></div>'+
+    '</div>'+
     '<div class="page-actions">'+(extra||'')+'</div></div>'+chipsHtml();
 }
 function kpi(lb, val, delta, legenda, colorClass){
@@ -1850,11 +1852,11 @@ function renderFluxo(){
     id:'evolucao', title:'Fluxo de Caixa — Entradas, Saídas e Saldo',
     trend: pctChange(resLiquido, prevGer.reduce((t,x)=>t+x,0)),
     body: pcComboBarLine('flx', lbls,
-      [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--pos)'},
-       {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--neg)', neg:true}],
+      [{name:'Entradas', values:flx.map(f=>f.ent), tone:'var(--c-in)'},
+       {name:'Saídas', values:flx.map(f=>f.sai), tone:'var(--c-out)', neg:true}],
       {name:'Saldo final', values:saldosCol.map(x=>x.fim), splitAt: splitAt>=0?splitAt:null},
       {click:'fluxoChartDrill'})
-      + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]),
+      + legend([{color:'var(--c-in)',name:'Entradas'},{color:'var(--c-out)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]),
     summary: '<div class="row">Resumo do período<b style="color:var(--text2);font-weight:600;font-size:11px">'+esc(state.periodoLabel)+'</b></div>'+
       '<div class="row">Total de entradas<b style="color:var(--pos)">'+money(totalEnt,true)+'</b></div>'+
       '<div class="row">Total de saídas<b style="color:var(--neg)">-'+money(totalSai,true)+'</b></div>'+
@@ -4303,6 +4305,33 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-2
 /* ---- status ---- */
 .st-pago,.st-recebido,.st-aberto,.st-vencido,.st-parcial,.st-neutro,.st-ok{border-radius:999px;font-weight:600}
 .brand-name{white-space:normal;line-height:1.2;font-size:13.5px}
+
+/* ---- Fase 2: fonte fina, paleta única nos gráficos, menos ruído ---- */
+:root{--navy:#0B4A57; --c-in:#0E6B7E; --c-out:#C3CCD6}
+body.dark{--navy:#5FC4CB; --c-in:#2FA3AE; --c-out:#3A4756}
+body,.axis-lbl{font-family:'Geist',system-ui,-apple-system,sans-serif !important}
+body{font-weight:400;font-size:13.5px;letter-spacing:0}
+.page-title{font-weight:500;font-size:24px;letter-spacing:-.03em}
+.card-title,.pc-title{font-weight:500;font-size:14px;letter-spacing:-.01em}
+.kpi .vl{font-weight:500;font-size:26px;letter-spacing:-.035em}
+.kpi .lb{font-weight:500;font-size:11px;letter-spacing:.06em}
+.tbl th{font-weight:500}
+.side-link{font-weight:400}.side-link.active{font-weight:500}
+.btn{font-weight:500}
+.brand-name,.hdr-company-name,.drawer-title,.user-meta .nm{font-weight:500}
+tr.row-result.final td{font-weight:600}
+td.total-highlight{font-weight:500 !important}
+b,strong{font-weight:600}
+/* gráficos: eixos e grades bem discretos */
+.axis-lbl{font-size:11.5px;font-weight:400;fill:#94A3B8}
+.grid-line{stroke:#EEF1F5}
+body.dark .grid-line{stroke:#1C2633}
+/* ações do gráfico só aparecem ao passar o mouse */
+.pc-actions .icon-btn{opacity:0;transition:opacity .15s}
+.card:hover .pc-actions .icon-btn{opacity:1}
+/* sem repetição: nome da empresa já aparece no seletor do topo e da lateral */
+.hdr-company-name{display:none}
+.kpi::after{height:2px;opacity:.6}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -4356,7 +4385,7 @@ function initTip(){
 function pctChange(cur, prev){ if(prev==null||prev===0) return null; return (cur-prev)/Math.abs(prev)*100; }
 
 /* =========================== PRIMITIVAS DE GRÁFICO =========================== */
-const NEUT1='#98A2B3', NEUT2='#C7CDD8', NEUTS=['#64748B','#94A3B8','#B4BDC9','#CFD6DE','#E2E6EB'];
+const NEUT1='#7DBFC4', NEUT2='#C8E3E5', NEUTS=['#0E6B7E','#3F9AA3','#7DBFC4','#B3DADD','#DCEEEF'];
 function smoothPath(pts){
   if(pts.length<3) return pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
   let d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);
@@ -4506,7 +4535,7 @@ function pcComboBarLine(cid, labels, bars, line, opts){
     } else {
       out+='<path class="pc-line" d="'+smoothPath(idxPts.map(p=>[p.x,p.y]))+'" fill="none" stroke="var(--navy)" stroke-width="'+wMain+'" stroke-linecap="round"/>';
     }
-    idxPts.forEach(p=>out+='<circle class="pc-fade" cx="'+p.x+'" cy="'+p.y+'" r="3.4" fill="'+(p.i!=null&&line.values[p.i]<0?'var(--neg)':line.values[p.i]>0?'var(--pos)':'var(--text2)')+'" stroke="var(--surface)" stroke-width="1.5"/>');
+    idxPts.forEach(p=>out+='<circle class="pc-fade" cx="'+p.x+'" cy="'+p.y+'" r="3.4" fill="'+(p.i!=null&&line.values[p.i]<0?'var(--neg)':'var(--navy)')+'" stroke="var(--surface)" stroke-width="1.5"/>');
   }
   labels.forEach((lb,i)=>{
     // Saídas/custos/despesas exibem valor negativo no tooltip (natureza
@@ -4648,7 +4677,7 @@ function chartCard(o){
   let trend='';
   if(o.trend!=null){
     const up=o.trend>=0;
-    trend='<span class="pc-trend" style="color:'+(up?'var(--pos)':'var(--neg)')+';background:'+(up?'var(--pos-soft)':'var(--neg-soft)')+'">'+(up?'&#9650;':'&#9660;')+' '+pct(Math.abs(o.trend))+' <span style="font-weight:400;color:var(--text2)">vs per. anterior</span></span>';
+    trend='<span class="pc-trend" style="color:'+(up?'var(--pos)':'var(--neg)')+';background:'+(up?'var(--pos-soft)':'var(--neg-soft)')+'">'+(up?'&#9650;':'&#9660;')+' '+pct(Math.abs(o.trend))+'</span>';
   }
   let quick='';
   if(def&&o.quick!==false){
@@ -4656,9 +4685,8 @@ function chartCard(o){
       '<button class="'+(ui.win===q[0]?'on':'')+'" style="padding:3px 9px;font-size:11px" onclick="chartUI(\''+o.id+'\').win='+(q[0]===null?'null':q[0])+';render()">'+q[1]+'</button>').join('')+'</div>';
   }
   return '<div class="card" style="display:flex;flex-direction:column"><div class="pc-head"><div style="flex:1;min-width:150px"><div class="pc-title">'+o.title+'</div></div>'+
-    '<div class="pc-actions">'+trend+quick+
+    '<div class="pc-actions">'+trend+
     (def?'<button class="icon-btn" style="width:28px;height:28px" title="Expandir" onclick="openChartFull(\''+o.id+'\')">'+icon('chevR',13)+'</button>':'')+
-    '<button class="icon-btn" style="width:28px;height:28px" title="Exportar" onclick="toast(\'Exportação demonstrativa — '+o.title+' (PNG/CSV)\')">'+icon('download',13)+'</button>'+
     '<button class="icon-btn" style="width:28px;height:28px" title="Configurar" onclick="cfgChart(\''+o.id+'\')">'+icon('settings',13)+'</button></div></div>'+
     '<div class="card-body" style="padding-top:6px;flex:1">'+(o.summary?('<div class="pc-body">'+o.body+'<div class="pc-summary">'+o.summary+'</div></div>'):o.body)+'</div></div>';
 }
@@ -4821,20 +4849,20 @@ const CHART_DEFS={
     render(ui,o){ const wm=winMonths('evolucao'); const reg='proj'; const sal=saldos(reg);
       const splitIdx=wm.indexOf(REAL_M);
       const body=pcComboBarLine('evo', wm.map(m=>MESES[m]),
-        [{name:'Entradas',values:wm.map(m=>sal[m].ent),tone:'var(--pos)'},{name:'Saídas',values:wm.map(m=>sal[m].sai),tone:'var(--neg)',neg:true}],
+        [{name:'Entradas',values:wm.map(m=>sal[m].ent),tone:'var(--c-in)'},{name:'Saídas',values:wm.map(m=>sal[m].sai),tone:'var(--c-out)',neg:true}],
         {name:'Saldo acumulado',values:wm.map(m=>sal[m].fim),splitAt:splitIdx>=0?splitIdx:null},
         {h:o&&o.h||320, click:'dd_evolucao', splitAt:splitIdx>=0?splitIdx:null, thinPrev:true, negativeArea:true, zeroLine:true})
-        + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true,thin:true},{color:'var(--neg)',name:'Saldo negativo',area:true}]);
+        + legend([{color:'var(--c-in)',name:'Entradas'},{color:'var(--c-out)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true,thin:true},{color:'var(--neg)',name:'Saldo negativo',area:true}]);
       return { body, trend: trendFor(m=>fluxoMes(m,reg).ger, wm) }; }},
   fluxo_es:{t:'Fluxo de Caixa', d:'Entradas, saídas e saldo mensais em regime de caixa', tipos:['barras'], size:3,
     render(ui,o){ const wm=winMonths('fluxo_es'); const reg=state.regime==='pxr'?'proj':state.regime;
       const ent=wm.map(m=>fluxoMes(m,reg).ent), sai=wm.map(m=>fluxoMes(m,reg).sai);
       const sal=saldos(reg), splitIdx=wm.indexOf(REAL_M);
       const body=pcComboBarLine('fes', wm.map(m=>MESES[m]),
-        [{name:'Entradas',values:ent,tone:'var(--pos)'},{name:'Saídas',values:sai,tone:'var(--neg)',neg:true}],
+        [{name:'Entradas',values:ent,tone:'var(--c-in)'},{name:'Saídas',values:sai,tone:'var(--c-out)',neg:true}],
         {name:'Saldo final',values:wm.map(m=>sal[m].fim),splitAt:splitIdx>=0?splitIdx:null},
         {h:o&&o.h||280,click:'dd_fluxoes',splitAt:splitIdx>=0?splitIdx:null})
-        + legend([{color:'var(--pos)',name:'Entradas'},{color:'var(--neg)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]);
+        + legend([{color:'var(--c-in)',name:'Entradas'},{color:'var(--c-out)',name:'Saídas'},{color:'var(--navy)',name:'Saldo realizado'},{color:'var(--navy)',name:'Saldo previsto',dash:true}]);
       return { body, trend: trendFor(m=>fluxoMes(m,reg).ent, wm) }; }},
   rcd:{t:'Receita x Custos x Despesas', d:'Competência — base da DRE gerencial', tipos:['colunas'], size:3,
     render(ui,o){ const wm=winMonths('rcd'); const reg=state.regime==='pxr'?'proj':state.regime;
@@ -4846,7 +4874,7 @@ const CHART_DEFS={
          {name:'Despesas Operacionais',values:wm.map(m=>dreLinhaVal(lDO,m,reg)),tone:NEUT2,neg:true}],
         {name:'Resultado Líquido',values:wm.map(m=>dreLinhaVal(lRE,m,reg)),splitAt:splitIdx>=0?splitIdx:null},
         {h:o&&o.h||280, click:'dd_rcd', splitAt:splitIdx>=0?splitIdx:null})
-        + legend([{color:'var(--navy)',name:'Receita Líquida'},{color:NEUT1,name:'Custos'},{color:NEUT2,name:'Despesas Operacionais'},{color:'var(--navy)',name:'Resultado Líquido'},{color:'var(--pos)',name:'Resultado positivo',dot:true},{color:'var(--neg)',name:'Resultado negativo',dot:true}]);
+        + legend([{color:'var(--navy)',name:'Receita Líquida'},{color:NEUT1,name:'Custos'},{color:NEUT2,name:'Despesas Operacionais'},{color:'var(--navy)',name:'Resultado Líquido'}]);
       return { body, trend: trendFor(m=>dreLinhaVal(lRL,m,reg), wm) }; }},
   resultado_mensal:{t:'Resultado Mensal', d:'Formação do resultado líquido no período (waterfall)', tipos:['waterfall','colunas'], size:6,
     render(ui,o){ const wm=winMonths('resultado_mensal'); const reg=state.regime==='pxr'?'proj':state.regime;
