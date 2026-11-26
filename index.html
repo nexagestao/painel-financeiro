@@ -4334,6 +4334,8 @@ body.dark .grid-line{stroke:#1C2633}
 .kpi::after{height:2px;opacity:.6}
 :root{--c-neg:#E39A9A}
 body.dark{--c-neg:#B86464}
+.kpi-leg{font-size:11.5px;color:var(--text2);font-weight:400}
+.kpi .dl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:16px}
 </style>
 <script>
 /* =========================== IDENTIDADE POR EMPRESA =========================== */
@@ -4945,7 +4947,7 @@ const CHART_DEFS={
 const CARD_DEFS={
   saldo_atual:{t:'Saldo Atual', fmt:'m', calc:c=>({v:c.saldoA, leg:c.saldoData?'bancos em '+c.saldoData:'consolidado bancário', cor:c.saldoA<0?'neg':''})},
   ger_real:{t:'Geração de Caixa · realizado', fmt:'m', calc:c=>({v:c.entR-c.saiR, leg:'entradas '+kfmt(c.entR)+' · saídas '+kfmt(c.saiR)+(c.realLbl?' · '+c.realLbl:''), cor:c.entR-c.saiR<0?'neg':'pos'})},
-  res_real:{t:'Resultado Líquido · realizado', fmt:'m', calc:c=>({v:c.resR, leg:'DRE'+(c.realLbl?' · '+c.realLbl:''), cor:c.resR<0?'neg':'pos'})},
+  res_real:{t:'Resultado Líquido · realizado', fmt:'m', calc:c=>({v:c.resR, leg:(c.realLbl?c.realLbl+' · ':'')+'entradas '+kfmt(c.entR)+' · saídas '+kfmt(c.saiR), cor:c.resR<0?'neg':'pos'})},
   saldo_proj:{t:'Saldo Previsto', fmt:'m', calc:c=>({v:c.saldoP, leg:'projeção até Dez/2026', cor:c.saldoP<0?'neg':''})},
   entradas:{t:'Entradas', fmt:'m', calc:c=>({v:c.ent, delta:c.entD, leg:'no período'})},
   saidas:{t:'Saídas', fmt:'m', calc:c=>({v:c.sai, delta:c.saiD, leg:'no período'})},
@@ -4961,7 +4963,7 @@ const CARD_DEFS={
   total_pagar:{t:'Total a Pagar', fmt:'m', calc:c=>({v:c.totPagar, leg:c.nPagar+' título(s) em aberto'})},
   total_receber:{t:'Total a Receber', fmt:'m', calc:c=>({v:c.totReceber, leg:c.nReceber+' título(s) em aberto'})},
   vencidas:{t:'Contas Vencidas', fmt:'m', calc:c=>({v:c.vencidas, leg:'pagar + receber em atraso', cor:c.vencidas>0?'neg':''})},
-  prox_venc:{t:'Próximos Vencimentos', fmt:'m', calc:c=>({v:c.prox7, leg:'a pagar nos próximos 7 dias'})},
+  prox_venc:{t:'A Pagar · próximos 7 dias', fmt:'m', calc:c=>({v:c.prox7, leg:c.nProx7+' conta(s) em aberto'})},
   menor_saldo:{t:'Menor Saldo Previsto', fmt:'m', calc:c=>({v:c.menor.valor, leg:'fim de '+c.menor.mes+'/2026 · com títulos em aberto', cor:c.menor.valor<0?'neg':''})}
 };
 
@@ -4970,16 +4972,16 @@ function defaultDash(perfil){
   const chart=(id,size,extra)=>Object.assign({id, on:true, titulo:null, tipo:null, size:size||CHART_DEFS[id].size, legenda:true, valores:true, comp:true, drill:true},extra||{});
   const filtros=['regime','periodo','empresa','banco','categoria','conta','centro','status','resp','base'].map(id=>({id, on:['regime','periodo','empresa','banco','categoria','status'].includes(id), obrig:id==='periodo'}));
   let cards, charts;
-  if(perfil==='Diretoria'){ cards=['saldo_atual','menor_saldo','ger_real','res_real'].map(c=>card(c)); charts=[chart('rcd',3),chart('evolucao',3),chart('resultado_mensal',3)]; }
+  if(perfil==='Diretoria'){ cards=['saldo_atual','menor_saldo','res_real','prox_venc'].map(c=>card(c)); charts=[chart('rcd',3),chart('evolucao',3),chart('resultado_mensal',3)]; }
   else if(perfil==='Cliente'){ cards=['saldo_atual','menor_saldo','res_real'].map(c=>card(c)); charts=[chart('evolucao',6),chart('resultado_mensal',3),chart('desp_categoria',3)]; }
   else if(perfil==='Visualização'){ cards=['saldo_atual','saldo_proj'].map(c=>card(c)); charts=[chart('evolucao',6)]; }
   else if(perfil==='Financeiro'){ cards=['total_pagar','total_receber','vencidas','prox_venc','saldo_atual','geracao'].map(c=>card(c)); charts=[chart('pxr',3),chart('fluxo_es',3),chart('saldo_bancos',3),chart('aging',3),chart('vencimentos',3),chart('alertas',3)]; }
-  else { cards=['saldo_atual','menor_saldo','ger_real','res_real'].map(c=>card(c));
+  else { cards=['saldo_atual','menor_saldo','res_real','prox_venc'].map(c=>card(c));
     charts=[chart('evolucao',3),chart('resultado_mensal',3),chart('desp_categoria',3),chart('vencimentos',3)]; }
   return {cols:cards.length>=6?6:cards.length, cards, charts, filtros, versoes:[], atualizado:null, por:null, v:DASH_VER};
 }
 let DASH_STORE={};
-const DASH_VER=2; // muda quando o layout padrão muda: descarta caches locais antigos
+const DASH_VER=3; // muda quando o layout padrão muda: descarta caches locais antigos
 function dashKey(emp,perfil){ return (emp||state.empresa)+'|'+(perfil||state.role); }
 function dashCfg(emp,perfil){
   const k=dashKey(emp,perfil);
@@ -5066,7 +5068,8 @@ function dashCtx(){
     totPagar:somaT(abertoP), nPagar:abertoP.length,
     totReceber:somaT(abertoR), nReceber:abertoR.length,
     vencidas:vencP+somaT(vencRl),
-    prox7:somaT(abertoP.filter(t=>t.venc>HOJE&&(t.venc-HOJE)/86400000<=7))
+    prox7:somaT(abertoP.filter(t=>t.venc>=HOJE&&(t.venc-HOJE)/86400000<=7)),
+    nProx7:abertoP.filter(t=>t.venc>=HOJE&&(t.venc-HOJE)/86400000<=7).length
   };
 }
 function fmtCard(val, fmt){
@@ -5112,6 +5115,7 @@ function renderDashboardInto(cfg, editor){
       const up=r.delta>=0;
       inner+='<span class="delta '+(up?'up':'down')+'">'+(up?'&#9650;':'&#9660;')+' '+pct(Math.abs(r.delta))+'</span>';
     }
+    if(r.leg) inner+='<span class="kpi-leg">'+esc(r.leg)+'</span>';
     inner+='</div>';
     const sel=editor&&state.dsel&&state.dsel.kind==='card'&&state.dsel.id===c.id;
     h+='<div class="kpi dz'+(sel?' selected':'')+'" style="'+(dupla?'grid-column:span 2;':'')+(comp?'padding:10px 14px;':'')+'"'+
