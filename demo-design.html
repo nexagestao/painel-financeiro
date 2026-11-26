@@ -182,9 +182,9 @@ svg text{font-family:Inter;font-size:10.5px;fill:var(--ink3)}
 /* ===================== DADOS FICTÍCIOS (somente demonstração) ===================== */
 const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const ENT=[118,124,131,129,137,142,151,148,159,166,171,178].map(x=>x*1000);
-const SAI=[109,118,121,131,128,135,139,147,149,161,160,171].map(x=>x*1000);
+const SAI=[109,117,121,127,129,134,140,144,150,157,162,166].map(x=>x*1000);
 const RL=[112,118,124,123,130,135,143,141,151,158,163,169].map(x=>x*1000);
-const EBITDA=[9.8,8.1,11.4,4.2,10.9,9.6,13.1,7.4,12.8,10.2,14.6,12.1].map(x=>x*1000);
+const EBITDA=[8.6,9.1,9.8,9.4,10.6,11.2,12.4,12.0,13.3,13.9,14.8,15.6].map(x=>x*1000);
 const RES=ENT.map((e,i)=>e-SAI[i]);
 const DESP=[['Comercial',214000,'#123D4A'],['Administrativa',121000,'#159E9F'],['Pessoal',86000,'#5FC1C1'],['Sinistros',64000,'#9AD8D6'],['Financeira',18000,'#CFE9E8']];
 
@@ -221,7 +221,7 @@ document.getElementById('kpis').innerHTML=K.map(([lb,v,ser,d,isPct,icn,sub])=>{c
     '<div class="vl">'+vl+'</div><div class="sub">no ano · <b>'+sub+'</b> vs mês anterior</div>'+spark(ser,up?'#159E9F':'#E54848')+'</div>'}).join('');
 
 /* ===================== combo: barras finas + linha suave ===================== */
-(function(){const W=880,H=270,L=56,R=16,T=14,B=30,host=document.getElementById('combo');const s=svgEl(W,H);
+(function(){const W=880,H=270,L=74,R=16,T=14,B=30,host=document.getElementById('combo');const s=svgEl(W,H);
   let saldo=0;const SAL=ENT.map((e,i)=>saldo+=e-SAI[i]);
   const mx=niceMax(Math.max(...ENT,...SAI)),slot=(W-L-R)/12,X=i=>L+slot*i+slot/2,Y=v=>T+(H-T-B)*(1-v/mx);
   const mxS=niceMax(Math.max(...SAL)*1.1),YS=v=>T+(H-T-B)*(1-v/mxS);
@@ -249,7 +249,7 @@ document.getElementById('kpis').innerHTML=K.map(([lb,v,ser,d,isPct,icn,sub])=>{c
 })();
 
 /* ===================== cascata ===================== */
-(function(){const host=document.getElementById('wf'),W=1320,H=260,L=56,R=16,T=26,B=30;const s=svgEl(W,H);
+(function(){const host=document.getElementById('wf'),W=1320,H=260,L=74,R=16,T=26,B=30;const s=svgEl(W,H);
   let acc=0;const pts=RES.map((v,i)=>{const a=acc;acc+=v;return {m:MESES[i],v,a,b:acc}});pts.push({m:'Ano',v:acc,a:0,b:acc,tot:1});
   const mn=Math.min(0,...pts.map(p=>Math.min(p.a,p.b))),mx=niceMax(Math.max(...pts.map(p=>Math.max(p.a,p.b)))*1.08);
   const n=pts.length,slot=(W-L-R)/n,X=i=>L+slot*i+slot/2,Y=v=>T+(H-T-B)*(1-(v-mn)/(mx-mn));
